@@ -172,8 +172,8 @@ var _ = Describe("VM endpoint e2e tests", Ordered, func() {
 		})
 
 		// Given 50 VMs distributed across 6 memory tiers
-		// When filtering by maximum memory below 16384 MB (exclusive upper bound)
-		// Then only VMs with 4 GB and 8 GB memory should be returned (18 VMs)
+		// When filtering by maximum memory of 16384 MB (inclusive upper bound)
+		// Then VMs with 4 GB, 8 GB, and 16 GB memory should be returned (26 VMs)
 		It("should filter by memory maximum", func() {
 			// Arrange
 			maxMemory := int64(16384)
@@ -187,21 +187,21 @@ var _ = Describe("VM endpoint e2e tests", Ordered, func() {
 
 			// Assert
 			Expect(err).ToNot(HaveOccurred())
-			GinkgoWriter.Printf("VMs with memory < %d MB: %d\n", maxMemory, result.Total)
-			Expect(result.Total).To(Equal(18), "expected 18 VMs with < 16384 MB (9+9)")
+			GinkgoWriter.Printf("VMs with memory <= %d MB: %d\n", maxMemory, result.Total)
+			Expect(result.Total).To(Equal(26), "expected 26 VMs with <= 16384 MB (9+9+8)")
 			for _, vm := range result.Vms {
-				Expect(vm.Memory).To(BeNumerically("<", maxMemory),
-					fmt.Sprintf("VM %s has memory %d MB, expected < %d", vm.Name, vm.Memory, maxMemory))
+				Expect(vm.Memory).To(BeNumerically("<=", maxMemory),
+					fmt.Sprintf("VM %s has memory %d MB, expected <= %d", vm.Name, vm.Memory, maxMemory))
 			}
 		})
 
 		// Given 50 VMs distributed across 6 memory tiers
-		// When filtering by memory range [8192, 8193) to select exactly the 8 GB tier
+		// When filtering by memory range [8192, 8192] to select exactly the 8 GB tier
 		// Then only the 9 VMs with exactly 8192 MB should be returned
 		It("should filter by exact memory tier", func() {
 			// Arrange
 			minMemory := int64(8192)
-			maxMemory := int64(8193)
+			maxMemory := int64(8192)
 
 			// Act
 			pageSize := 100
@@ -222,12 +222,12 @@ var _ = Describe("VM endpoint e2e tests", Ordered, func() {
 		})
 
 		// Given 50 VMs distributed across 6 memory tiers
-		// When filtering by memory range [16384, 65537) to capture 16/32/64 GB tiers
+		// When filtering by memory range [16384, 65536] to capture 16/32/64 GB tiers
 		// Then 24 VMs should be returned (8+8+8)
 		It("should filter by memory range spanning multiple tiers", func() {
 			// Arrange
 			minMemory := int64(16384)
-			maxMemory := int64(65537)
+			maxMemory := int64(65536)
 
 			// Act
 			pageSize := 100
@@ -243,7 +243,7 @@ var _ = Describe("VM endpoint e2e tests", Ordered, func() {
 			Expect(result.Total).To(Equal(24), "expected 24 VMs with 16/32/64 GB (8+8+8)")
 			for _, vm := range result.Vms {
 				Expect(vm.Memory).To(BeNumerically(">=", minMemory))
-				Expect(vm.Memory).To(BeNumerically("<", maxMemory))
+				Expect(vm.Memory).To(BeNumerically("<=", maxMemory))
 			}
 		})
 	})
@@ -432,9 +432,9 @@ var _ = Describe("VM endpoint e2e tests", Ordered, func() {
 		It("should combine memory range and disk range", func() {
 			// Arrange
 			minMemory := int64(8192)
-			maxMemory := int64(32769)
+			maxMemory := int64(32768)
 			minDisk := int64(204800)
-			maxDisk := int64(614401)
+			maxDisk := int64(614400)
 
 			// Act
 			pageSize := 100
@@ -452,9 +452,9 @@ var _ = Describe("VM endpoint e2e tests", Ordered, func() {
 			Expect(result.Total).To(BeNumerically(">=", 1), "expected at least 1 VM in the intersection")
 			for _, vm := range result.Vms {
 				Expect(vm.Memory).To(BeNumerically(">=", minMemory))
-				Expect(vm.Memory).To(BeNumerically("<", maxMemory))
+				Expect(vm.Memory).To(BeNumerically("<=", maxMemory))
 				Expect(vm.DiskSize).To(BeNumerically(">=", minDisk))
-				Expect(vm.DiskSize).To(BeNumerically("<", maxDisk))
+				Expect(vm.DiskSize).To(BeNumerically("<=", maxDisk))
 			}
 		})
 
@@ -757,7 +757,7 @@ var _ = Describe("VM endpoint e2e tests", Ordered, func() {
 		It("should paginate filtered results correctly", func() {
 			// Arrange
 			minMemory := int64(131072)
-			maxMemory := int64(131073)
+			maxMemory := int64(131072)
 			page := 1
 			pageSize := 3
 

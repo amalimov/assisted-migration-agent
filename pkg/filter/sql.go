@@ -12,6 +12,31 @@ import (
 // error for unknown identifiers.
 type MapFunc func(name string) (string, error)
 
+var defaultMapFn MapFunc = func(name string) (string, error) {
+	switch strings.ToLower(name) {
+	case "id":
+		return `v."VM ID"`, nil
+	case "name":
+		return `v."VM"`, nil
+	case "powerstate", "status":
+		return `v."Powerstate"`, nil
+	case "cluster":
+		return `v."Cluster"`, nil
+	case "datacenter":
+		return `v."Datacenter"`, nil
+	case "memory":
+		return `v."Memory"`, nil
+	case "disk", "disksize":
+		return `COALESCE(d.total_disk, 0)`, nil
+	case "issues":
+		return `COALESCE(c.issue_count, 0)`, nil
+	case "template":
+		return `v."Template"`, nil
+	default:
+		return "", fmt.Errorf("unknown filter field: %s", name)
+	}
+}
+
 func toSql(expr Expression, mf MapFunc) (sq.Sqlizer, error) {
 	switch e := expr.(type) {
 	case *binaryExpression:

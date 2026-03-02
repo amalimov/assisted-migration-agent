@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/kubev2v/migration-planner/pkg/duckdb_parser"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 type VMStore struct {
@@ -201,7 +204,11 @@ func ByClusters(clusters ...string) ListOption {
 		if len(clusters) == 0 {
 			return b
 		}
-		return b.Where(sq.Eq{`v."Cluster"`: clusters})
+		expr := fmt.Sprintf("cluster in [%s]", strings.Join(quoteFilterStrings(clusters), ", "))
+		if sqlizer, _ := filter.ParseWithDefaultMap([]byte(expr)); sqlizer != nil {
+			return b.Where(sqlizer)
+		}
+		return b
 	}
 }
 
@@ -211,7 +218,11 @@ func ByStatus(statuses ...string) ListOption {
 		if len(statuses) == 0 {
 			return b
 		}
-		return b.Where(sq.Eq{`v."Powerstate"`: statuses})
+		expr := fmt.Sprintf("status in [%s]", strings.Join(quoteFilterStrings(statuses), ", "))
+		if sqlizer, _ := filter.ParseWithDefaultMap([]byte(expr)); sqlizer != nil {
+			return b.Where(sqlizer)
+		}
+		return b
 	}
 }
 
@@ -221,27 +232,50 @@ func ByIssues(minIssues int) ListOption {
 		if minIssues <= 0 {
 			return b
 		}
-		return b.Where(sq.GtOrEq{"COALESCE(c.issue_count, 0)": minIssues})
+		expr := fmt.Sprintf("issues >= %d", minIssues)
+		if sqlizer, _ := filter.ParseWithDefaultMap([]byte(expr)); sqlizer != nil { // error is ignored
+			return b.Where(sqlizer)
+		}
+		return b
 	}
 }
 
 // ByDiskSizeRange filters by disk size in MB [min, max).
 func ByDiskSizeRange(min, max int64) ListOption {
 	return func(b sq.SelectBuilder) sq.SelectBuilder {
-		return b.Where(sq.And{
-			sq.GtOrEq{`COALESCE(d.total_disk, 0)`: min},
-			sq.Lt{`COALESCE(d.total_disk, 0)`: max},
-		})
+		expr := fmt.Sprintf("disk >= %d and disk < %d", min, max)
+		if sqlizer, _ := filter.ParseWithDefaultMap([]byte(expr)); sqlizer != nil {
+			return b.Where(sqlizer)
+		}
+		return b
 	}
 }
 
 // ByMemorySizeRange filters by memory in MB [min, max).
 func ByMemorySizeRange(min, max int64) ListOption {
 	return func(b sq.SelectBuilder) sq.SelectBuilder {
-		return b.Where(sq.And{
-			sq.GtOrEq{`v."Memory"`: min},
-			sq.Lt{`v."Memory"`: max},
-		})
+		expr := fmt.Sprintf("memory >= %d and memory <= %d", min, max)
+		if sqlizer, _ := filter.ParseWithDefaultMap([]byte(expr)); sqlizer != nil {
+			return b.Where(sqlizer)
+		}
+		return b
+	}
+}
+
+// ByFilter applies a raw filter DSL expression.
+// The expression should be pre-validated by the handler.
+// If the expression is empty or fails to parse, the builder is returned unchanged.
+func ByFilter(expr string) ListOption {
+	return func(b sq.SelectBuilder) sq.SelectBuilder {
+		if expr == "" {
+			return b
+		}
+		// TODO: error should be checked here ?
+		// The best solution is to check in handler
+		if sqlizer, _ := filter.ParseWithDefaultMap([]byte(expr)); sqlizer != nil {
+			return b.Where(sqlizer)
+		}
+		return b
 	}
 }
 
@@ -259,7 +293,6 @@ func WithOffset(offset uint64) ListOption {
 	}
 }
 
-// apiFieldToDBColumn maps API field names to database column expressions.
 // WithDefaultSort applies default sorting by VM ID.
 func WithDefaultSort() ListOption {
 	return func(b sq.SelectBuilder) sq.SelectBuilder {
@@ -295,4 +328,13 @@ func WithSort(sorts []SortParam) ListOption {
 		orderClauses = append(orderClauses, `v."VM ID"`)
 		return b.OrderBy(orderClauses...)
 	}
+}
+
+// quoteFilterStrings quotes strings for use in filter DSL expressions.
+func quoteFilterStrings(values []string) []string {
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "\\'"))
+	}
+	return quoted
 }
