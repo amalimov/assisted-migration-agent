@@ -74,6 +74,15 @@ var _ = Describe("VMStore", func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
+	// Helper to insert VM with folder information
+	insertVMWithFolder := func(id, name, folderID, folderName string) {
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template", "Folder ID", "Folder")
+			VALUES (?, ?, 'poweredOn', 'cluster-a', 4096, false, ?, ?)
+		`, id, name, folderID, folderName)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
 	Context("List", func() {
 		BeforeEach(func() {
 			// Insert test VMs
@@ -678,6 +687,78 @@ var _ = Describe("VMStore", func() {
 					Expect(issue.Category).To(Equal("Information"))
 				}
 			}
+		})
+	})
+
+	Context("GetFolders", func() {
+		// Given VMs with different folders
+		// When we call GetFolders
+		// Then it should return distinct folders ordered by name
+		It("should return distinct folders ordered by name", func() {
+			// Arrange
+			insertVMWithFolder("vm-1", "vm1", "folder-1", "Production")
+			insertVMWithFolder("vm-2", "vm2", "folder-2", "Development")
+			insertVMWithFolder("vm-3", "vm3", "folder-1", "Production") // duplicate folder
+			insertVMWithFolder("vm-4", "vm4", "folder-3", "Testing")
+
+			// Act
+			folders, err := s.VM().GetFolders(ctx)
+
+			// Assert
+			Expect(err).NotTo(HaveOccurred())
+			Expect(folders).To(HaveLen(3))
+			Expect(folders[0].Name).To(Equal("Development"))
+			Expect(folders[0].ID).To(Equal("folder-2"))
+			Expect(folders[1].Name).To(Equal("Production"))
+			Expect(folders[1].ID).To(Equal("folder-1"))
+			Expect(folders[2].Name).To(Equal("Testing"))
+			Expect(folders[2].ID).To(Equal("folder-3"))
+		})
+
+		// Given no VMs in the database
+		// When we call GetFolders
+		// Then it should return an empty list
+		It("should return empty list when no VMs exist", func() {
+			// Act
+			folders, err := s.VM().GetFolders(ctx)
+
+			// Assert
+			Expect(err).NotTo(HaveOccurred())
+			Expect(folders).To(BeEmpty())
+		})
+
+		// Given VMs with empty folder values
+		// When we call GetFolders
+		// Then it should exclude empty folders
+		It("should exclude VMs with empty folders", func() {
+			// Arrange
+			insertVMWithFolder("vm-1", "vm1", "folder-1", "Production")
+			insertVMWithFolder("vm-2", "vm2", "", "") // empty folder
+
+			// Act
+			folders, err := s.VM().GetFolders(ctx)
+
+			// Assert
+			Expect(err).NotTo(HaveOccurred())
+			Expect(folders).To(HaveLen(1))
+			Expect(folders[0].Name).To(Equal("Production"))
+		})
+
+		// Given VMs with only Folder ID set (no Folder name)
+		// When we call GetFolders
+		// Then it should return the folder with ID and empty name
+		It("should handle VMs with only Folder ID", func() {
+			// Arrange
+			insertVMWithFolder("vm-1", "vm1", "folder-123", "")
+
+			// Act
+			folders, err := s.VM().GetFolders(ctx)
+
+			// Assert
+			Expect(err).NotTo(HaveOccurred())
+			Expect(folders).To(HaveLen(1))
+			Expect(folders[0].ID).To(Equal("folder-123"))
+			Expect(folders[0].Name).To(Equal(""))
 		})
 	})
 })

@@ -94,3 +94,9 @@ type GuestNetwork struct {
 	PrefixLength int32
 	Network      string
 }
+
+// Folder represents a VM folder in the vCenter hierarchy.
+type Folder struct {
+	ID   string
+	Name string
+}

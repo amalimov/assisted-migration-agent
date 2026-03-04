@@ -370,3 +370,38 @@ func quoteFilterStrings(values []string) []string {
 	}
 	return quoted
 }
+
+// GetFolders returns a list of distinct folders from the vinfo table.
+func (s *VMStore) GetFolders(ctx context.Context) ([]models.Folder, error) {
+	builder := sq.Select(
+		`COALESCE("Folder ID", '') AS id`,
+		`COALESCE("Folder", '') AS name`,
+	).Distinct().
+		From("vinfo").
+		Where(`COALESCE("Folder ID", "Folder", '') != ''`).
+		OrderBy("name")
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var folders []models.Folder
+	for rows.Next() {
+		var folder models.Folder
+		if err := rows.Scan(&folder.ID, &folder.Name); err != nil {
+			return nil, err
+		}
+		folders = append(folders, folder)
+	}
+
+	return folders, rows.Err()
+}
