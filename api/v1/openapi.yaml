@@ -318,7 +318,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/VersionInfo'
 
-  /vms/groups:
+  /groups:
     get:
       summary: List all groups
       operationId: listGroups
@@ -378,7 +378,7 @@ paths:
         '500':
           description: Internal server error
 
-  /vms/groups/{id}:
+  /groups/{id}:
     get:
       summary: Get group by ID with its VMs
       operationId: getGroup

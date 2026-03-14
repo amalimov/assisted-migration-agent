@@ -16,7 +16,7 @@ import (
 )
 
 // ListGroups returns groups with optional name filtering and pagination
-// (GET /vms/groups)
+// (GET /groups)
 func (h *Handler) ListGroups(c *gin.Context, params v1.ListGroupsParams) {
 	page := 1
 	if params.Page != nil && *params.Page > 0 {
@@ -64,7 +64,7 @@ func (h *Handler) ListGroups(c *gin.Context, params v1.ListGroupsParams) {
 }
 
 // CreateGroup creates a new group
-// (POST /vms/groups)
+// (POST /groups)
 func (h *Handler) CreateGroup(c *gin.Context) {
 	var req v1.CreateGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -108,7 +108,7 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 }
 
 // GetGroup returns a group by ID with its VMs
-// (GET /vms/groups/{id})
+// (GET /groups/{id})
 func (h *Handler) GetGroup(c *gin.Context, id string, params v1.GetGroupParams) {
 	groupID, err := strconv.Atoi(id)
 	if err != nil {
@@ -187,7 +187,7 @@ func (h *Handler) GetGroup(c *gin.Context, id string, params v1.GetGroupParams) 
 }
 
 // UpdateGroup partially updates an existing group
-// (PATCH /vms/groups/{id})
+// (PATCH /groups/{id})
 func (h *Handler) UpdateGroup(c *gin.Context, id string) {
 	groupID, err := strconv.Atoi(id)
 	if err != nil {
@@ -254,7 +254,7 @@ func (h *Handler) UpdateGroup(c *gin.Context, id string) {
 }
 
 // DeleteGroup deletes a group
-// (DELETE /vms/groups/{id})
+// (DELETE /groups/{id})
 func (h *Handler) DeleteGroup(c *gin.Context, id string) {
 	groupID, err := strconv.Atoi(id)
 	if err != nil {

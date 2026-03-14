@@ -32,7 +32,7 @@ var _ = Describe("Group Handlers", func() {
 		mockGroup = &MockGroupService{}
 		handler = handlers.NewHandler(config.Configuration{}).WithGroupService(mockGroup)
 		router = gin.New()
-		router.GET("/vms/groups", func(c *gin.Context) {
+		router.GET("/groups", func(c *gin.Context) {
 			var params v1.ListGroupsParams
 			if v := c.Query("page"); v != "" {
 				p, _ := strconv.Atoi(v)
@@ -47,8 +47,8 @@ var _ = Describe("Group Handlers", func() {
 			}
 			handler.ListGroups(c, params)
 		})
-		router.POST("/vms/groups", handler.CreateGroup)
-		router.GET("/vms/groups/:id", func(c *gin.Context) {
+		router.POST("/groups", handler.CreateGroup)
+		router.GET("/groups/:id", func(c *gin.Context) {
 			var params v1.GetGroupParams
 			if v := c.Query("page"); v != "" {
 				p, _ := strconv.Atoi(v)
@@ -63,10 +63,10 @@ var _ = Describe("Group Handlers", func() {
 			}
 			handler.GetGroup(c, c.Param("id"), params)
 		})
-		router.PATCH("/vms/groups/:id", func(c *gin.Context) {
+		router.PATCH("/groups/:id", func(c *gin.Context) {
 			handler.UpdateGroup(c, c.Param("id"))
 		})
-		router.DELETE("/vms/groups/:id", func(c *gin.Context) {
+		router.DELETE("/groups/:id", func(c *gin.Context) {
 			handler.DeleteGroup(c, c.Param("id"))
 		})
 	})
@@ -76,7 +76,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.ListResult = []models.Group{}
 			mockGroup.ListTotal = 0
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -98,7 +98,7 @@ var _ = Describe("Group Handlers", func() {
 			}
 			mockGroup.ListTotal = 2
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -117,7 +117,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.ListResult = []models.Group{}
 			mockGroup.ListTotal = 0
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups?page=2&pageSize=5", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups?page=2&pageSize=5", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -132,7 +132,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.ListResult = []models.Group{}
 			mockGroup.ListTotal = 0
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups?byName=production", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups?byName=production", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -141,10 +141,28 @@ var _ = Describe("Group Handlers", func() {
 			Expect(mockGroup.LastListParams.ByName).To(Equal("production"))
 		})
 
+		// Given a byName value containing a single quote
+		// When we list groups with that filter
+		// Then the handler should escape the quote to prevent injection
+		It("should escape single quotes in byName param", func() {
+			// Arrange
+			mockGroup.ListResult = []models.Group{}
+			mockGroup.ListTotal = 0
+
+			// Act
+			req := httptest.NewRequest(http.MethodGet, "/groups?byName=it's+a+test", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Assert
+			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(mockGroup.LastListParams.ByName).To(Equal(`it\'s a test`))
+		})
+
 		It("should return 500 on service error", func() {
 			mockGroup.ListError = errors.New("db error")
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -165,7 +183,7 @@ var _ = Describe("Group Handlers", func() {
 			}
 
 			body := `{"name":"mygroup","filter":"name = 'test'","description":"desc"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -179,7 +197,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when name is missing", func() {
 			body := `{"filter":"name = 'test'"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -194,7 +212,7 @@ var _ = Describe("Group Handlers", func() {
 		It("should return 400 when name exceeds 100 characters", func() {
 			longName := strings.Repeat("a", 101)
 			body := `{"name":"` + longName + `","filter":"name = 'test'"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -208,7 +226,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when filter is missing", func() {
 			body := `{"name":"mygroup"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -221,7 +239,7 @@ var _ = Describe("Group Handlers", func() {
 		})
 
 		It("should return 400 for invalid request body", func() {
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader("not json"))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader("not json"))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -237,7 +255,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.CreateError = errors.New("db error")
 
 			body := `{"name":"mygroup","filter":"name = 'test'"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -251,7 +269,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when name is only whitespace", func() {
 			body := `{"name":"   ","filter":"name = 'test'"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -265,7 +283,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when filter is invalid", func() {
 			body := `{"name":"mygroup","filter":"not a valid filter %%"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -285,7 +303,7 @@ var _ = Describe("Group Handlers", func() {
 			}
 
 			body := `{"name":"tagged","filter":"name = 'test'","tags":["prod","critical"]}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -297,7 +315,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when tag has invalid format", func() {
 			body := `{"name":"mygroup","filter":"name = 'test'","tags":["valid_tag","bad tag!"]}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -313,7 +331,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.CreateError = srvErrors.NewDuplicateResourceError("group", "name", "mygroup")
 
 			body := `{"name":"mygroup","filter":"name = 'test'"}`
-			req := httptest.NewRequest(http.MethodPost, "/vms/groups", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/groups", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -336,7 +354,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.ListVMsResult = []models.VirtualMachineSummary{}
 			mockGroup.ListVMsTotal = 0
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -351,7 +369,7 @@ var _ = Describe("Group Handlers", func() {
 		})
 
 		It("should return 400 for non-numeric id", func() {
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/abc", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/abc", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -365,7 +383,7 @@ var _ = Describe("Group Handlers", func() {
 		It("should return 404 when group not found", func() {
 			mockGroup.GetError = srvErrors.NewResourceNotFoundError("group", "999")
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/999", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/999", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -379,7 +397,7 @@ var _ = Describe("Group Handlers", func() {
 		It("should return 500 on service error", func() {
 			mockGroup.GetError = errors.New("db error")
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -396,7 +414,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.ListVMsResult = []models.VirtualMachineSummary{}
 			mockGroup.ListVMsTotal = 0
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1?page=3&pageSize=10", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1?page=3&pageSize=10", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -415,7 +433,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.ListVMsResult = []models.VirtualMachineSummary{}
 			mockGroup.ListVMsTotal = 0
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1?sort=name:asc&sort=memory:desc", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1?sort=name:asc&sort=memory:desc", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -432,7 +450,7 @@ var _ = Describe("Group Handlers", func() {
 			now := time.Now()
 			mockGroup.GetResult = &models.Group{ID: 1, Name: "g", Filter: "name = 'x'", CreatedAt: now, UpdatedAt: now}
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1?sort=invalid", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1?sort=invalid", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -447,7 +465,7 @@ var _ = Describe("Group Handlers", func() {
 			now := time.Now()
 			mockGroup.GetResult = &models.Group{ID: 1, Name: "g", Filter: "name = 'x'", CreatedAt: now, UpdatedAt: now}
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1?sort=bogus:asc", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1?sort=bogus:asc", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -462,7 +480,7 @@ var _ = Describe("Group Handlers", func() {
 			now := time.Now()
 			mockGroup.GetResult = &models.Group{ID: 1, Name: "g", Filter: "name = 'x'", CreatedAt: now, UpdatedAt: now}
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1?sort=name:up", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1?sort=name:up", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -478,7 +496,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.GetResult = &models.Group{ID: 1, Name: "g", Filter: "name = 'x'", CreatedAt: now, UpdatedAt: now}
 			mockGroup.ListVMsError = errors.New("query failed")
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -498,7 +516,7 @@ var _ = Describe("Group Handlers", func() {
 			}
 			mockGroup.ListVMsTotal = 2
 
-			req := httptest.NewRequest(http.MethodGet, "/vms/groups/1", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groups/1", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -526,7 +544,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should update name only", func() {
 			body := `{"name":"updated"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -542,7 +560,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.UpdateResult.Filter = "name = 'new'"
 
 			body := `{"filter":"name = 'new'"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -557,7 +575,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.UpdateResult.Description = "new desc"
 
 			body := `{"description":"new desc"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -569,7 +587,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when no fields provided", func() {
 			body := `{}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -583,7 +601,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when name is empty string", func() {
 			body := `{"name":""}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -597,7 +615,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when name is only whitespace", func() {
 			body := `{"name":"   "}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -611,7 +629,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when filter is invalid syntax", func() {
 			body := `{"filter":"not valid %%"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -627,7 +645,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.GetError = errors.New("db connection lost")
 
 			body := `{"name":"updated"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -643,7 +661,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.UpdateResult.Tags = []string{"staging"}
 
 			body := `{"tags":["staging"]}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -656,7 +674,7 @@ var _ = Describe("Group Handlers", func() {
 		It("should return 400 when name exceeds 100 characters", func() {
 			longName := strings.Repeat("a", 101)
 			body := `{"name":"` + longName + `"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -670,7 +688,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 when filter is empty string", func() {
 			body := `{"filter":""}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -684,7 +702,7 @@ var _ = Describe("Group Handlers", func() {
 
 		It("should return 400 for non-numeric id", func() {
 			body := `{"name":"updated"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/abc", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/abc", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -700,7 +718,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.GetError = srvErrors.NewResourceNotFoundError("group", "999")
 
 			body := `{"name":"updated"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/999", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/999", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -716,7 +734,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.UpdateError = errors.New("db error")
 
 			body := `{"name":"updated"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -732,7 +750,7 @@ var _ = Describe("Group Handlers", func() {
 			mockGroup.UpdateError = srvErrors.NewDuplicateResourceError("group", "name", "existing-name")
 
 			body := `{"name":"existing-name"}`
-			req := httptest.NewRequest(http.MethodPatch, "/vms/groups/1", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPatch, "/groups/1", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -747,7 +765,7 @@ var _ = Describe("Group Handlers", func() {
 
 	Context("DeleteGroup", func() {
 		It("should return 204 on successful delete", func() {
-			req := httptest.NewRequest(http.MethodDelete, "/vms/groups/1", nil)
+			req := httptest.NewRequest(http.MethodDelete, "/groups/1", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -759,7 +777,7 @@ var _ = Describe("Group Handlers", func() {
 		It("should return 204 when group does not exist (idempotent)", func() {
 			mockGroup.DeleteError = srvErrors.NewResourceNotFoundError("group", "999")
 
-			req := httptest.NewRequest(http.MethodDelete, "/vms/groups/999", nil)
+			req := httptest.NewRequest(http.MethodDelete, "/groups/999", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -768,7 +786,7 @@ var _ = Describe("Group Handlers", func() {
 		})
 
 		It("should return 400 for non-numeric id", func() {
-			req := httptest.NewRequest(http.MethodDelete, "/vms/groups/abc", nil)
+			req := httptest.NewRequest(http.MethodDelete, "/groups/abc", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -782,7 +800,7 @@ var _ = Describe("Group Handlers", func() {
 		It("should return 500 on service error", func() {
 			mockGroup.DeleteError = errors.New("db error")
 
-			req := httptest.NewRequest(http.MethodDelete, "/vms/groups/1", nil)
+			req := httptest.NewRequest(http.MethodDelete, "/groups/1", nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)

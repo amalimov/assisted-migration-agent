@@ -192,7 +192,7 @@ var _ = Describe("GroupService", func() {
 		// Given 3 groups exist with names alpha, beta, gamma
 		// When we list filtered by name "beta"
 		// Then it should return only the beta group
-		It("should filter by name", func() {
+		It("should filter by exact name", func() {
 			// Arrange
 			params := services.GroupListParams{ByName: "beta"}
 
@@ -206,8 +206,35 @@ var _ = Describe("GroupService", func() {
 			Expect(groups[0].Name).To(Equal("beta"))
 		})
 
+		// Given groups named "test-vm", "test-db", "prod-vm"
+		// When we list filtered by name "vm"
+		// Then it should return "test-vm" and "prod-vm" (LIKE matches substring)
+		It("should match groups containing the search term", func() {
+			// Arrange
+			for _, g := range []models.Group{
+				{Name: "test-vm", Filter: "name = 'a'"},
+				{Name: "test-db", Filter: "name = 'b'"},
+				{Name: "prod-vm", Filter: "name = 'c'"},
+			} {
+				_, err := srv.Create(ctx, g)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			params := services.GroupListParams{ByName: "vm"}
+
+			// Act
+			groups, total, err := srv.List(ctx, params)
+
+			// Assert
+			Expect(err).NotTo(HaveOccurred())
+			Expect(total).To(Equal(2))
+			Expect(groups).To(HaveLen(2))
+			names := []string{groups[0].Name, groups[1].Name}
+			Expect(names).To(ContainElements("test-vm", "prod-vm"))
+		})
+
 		// Given 3 groups exist in the database
-		// When we list filtered by a name that doesn't exist
+		// When we list filtered by a name that doesn't match any group
 		// Then it should return an empty list with total 0
 		It("should return empty for non-matching name filter", func() {
 			// Arrange

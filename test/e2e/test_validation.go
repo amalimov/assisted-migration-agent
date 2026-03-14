@@ -182,9 +182,9 @@ var _ = Describe("API validation e2e tests", Ordered, func() {
 	})
 
 	// -----------------------------------------------------------------
-	// POST /vms/groups (CreateGroup)
+	// POST /groups (CreateGroup)
 	// -----------------------------------------------------------------
-	Context("POST /vms/groups", func() {
+	Context("POST /groups", func() {
 		It("should reject invalid JSON", func() {
 			status, err := agentSvc.CreateGroupRaw([]byte("not json"))
 			Expect(err).ToNot(HaveOccurred())
@@ -253,9 +253,9 @@ var _ = Describe("API validation e2e tests", Ordered, func() {
 	})
 
 	// -----------------------------------------------------------------
-	// PATCH /vms/groups/{id} (UpdateGroup)
+	// PATCH /groups/{id} (UpdateGroup)
 	// -----------------------------------------------------------------
-	Context("PATCH /vms/groups/{id}", func() {
+	Context("PATCH /groups/{id}", func() {
 		var groupID string
 
 		BeforeEach(func() {
@@ -342,9 +342,9 @@ var _ = Describe("API validation e2e tests", Ordered, func() {
 	})
 
 	// -----------------------------------------------------------------
-	// DELETE /vms/groups/{id} (DeleteGroup)
+	// DELETE /groups/{id} (DeleteGroup)
 	// -----------------------------------------------------------------
-	Context("DELETE /vms/groups/{id}", func() {
+	Context("DELETE /groups/{id}", func() {
 		It("should return 204 for non-existent group (idempotent)", func() {
 			status, err := agentSvc.DeleteGroup("999999")
 			Expect(err).ToNot(HaveOccurred())
@@ -359,9 +359,9 @@ var _ = Describe("API validation e2e tests", Ordered, func() {
 	})
 
 	// -----------------------------------------------------------------
-	// GET /vms/groups/{id} (GetGroup)
+	// GET /groups/{id} (GetGroup)
 	// -----------------------------------------------------------------
-	Context("GET /vms/groups/{id}", func() {
+	Context("GET /groups/{id}", func() {
 		It("should return 404 for non-existent group", func() {
 			status, err := agentSvc.GetGroupStatus("999999")
 			Expect(err).ToNot(HaveOccurred())

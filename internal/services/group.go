@@ -11,6 +11,10 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
+const (
+	filterByNameExpression = "name like '%s'"
+)
+
 type GroupService struct {
 	store *store.Store
 }
@@ -34,7 +38,7 @@ type GroupListParams struct {
 func (s *GroupService) List(ctx context.Context, params GroupListParams) ([]models.Group, int, error) {
 	var filters []sq.Sqlizer
 	if params.ByName != "" {
-		expr := fmt.Sprintf("name = '%s'", params.ByName)
+		expr := fmt.Sprintf(filterByNameExpression, params.ByName)
 		f, err := filter.ParseWithGroupMap([]byte(expr))
 		if err != nil {
 			return nil, 0, fmt.Errorf("invalid name filter: %w", err)

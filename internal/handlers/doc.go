@@ -90,11 +90,11 @@
 //	┌────────┬──────────────────┬───────────────────────────────────────┐
 //	│ Method │ Endpoint         │ Description                           │
 //	├────────┼──────────────────┼───────────────────────────────────────┤
-//	│ GET    │ /vms/groups      │ List groups (filter, paginate)        │
-//	│ POST   │ /vms/groups      │ Create a new group                    │
-//	│ GET    │ /vms/groups/{id} │ Get group with filtered VMs           │
-//	│ PATCH  │ /vms/groups/{id} │ Partially update a group              │
-//	│ DELETE │ /vms/groups/{id} │ Delete a group (idempotent)           │
+//	│ GET    │ /groups      │ List groups (filter, paginate)        │
+//	│ POST   │ /groups      │ Create a new group                    │
+//	│ GET    │ /groups/{id} │ Get group with filtered VMs           │
+//	│ PATCH  │ /groups/{id} │ Partially update a group              │
+//	│ DELETE │ /groups/{id} │ Delete a group (idempotent)           │
 //	└────────┴──────────────────┴───────────────────────────────────────┘
 //
 // VDDK Endpoints (vddk.go):
@@ -230,7 +230,7 @@
 //
 // # Group Handler
 //
-// GET /vms/groups - Lists groups with optional name filtering and pagination.
+// GET /groups - Lists groups with optional name filtering and pagination.
 //
 // Query Parameters:
 //
@@ -265,7 +265,7 @@
 //	    "pageCount": 1
 //	}
 //
-// POST /vms/groups - Creates a new group.
+// POST /groups - Creates a new group.
 //
 // Request:
 //
@@ -288,7 +288,7 @@
 //
 // Response: 201 Created with the created Group (includes tags if provided).
 //
-// GET /vms/groups/{id} - Returns group details with paginated VMs.
+// GET /groups/{id} - Returns group details with paginated VMs.
 //
 // VMs are looked up from pre-computed group_matches (no filter re-evaluation).
 // Query Parameters: sort, page, pageSize (same as GET /vms).
@@ -306,7 +306,7 @@
 // Errors:
 //   - 404 Not Found: Group not found
 //
-// PATCH /vms/groups/{id} - Partially updates an existing group.
+// PATCH /groups/{id} - Partially updates an existing group.
 //
 // Request (all fields optional, at least one required):
 //
@@ -329,7 +329,7 @@
 // Errors:
 //   - 404 Not Found: Group not found
 //
-// DELETE /vms/groups/{id} - Deletes a group and its pre-computed matches.
+// DELETE /groups/{id} - Deletes a group and its pre-computed matches.
 // Idempotent (returns 204 even if the group does not exist).
 //
 // # VDDK Handler

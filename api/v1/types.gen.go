@@ -469,6 +469,30 @@ type VmInspectionStatus struct {
 // VmInspectionStatusState Current inspection state
 type VmInspectionStatusState string
 
+// ListGroupsParams defines parameters for ListGroups.
+type ListGroupsParams struct {
+	// ByName Filter groups by name (case-insensitive substring match)
+	ByName *string `form:"byName,omitempty" json:"byName,omitempty"`
+
+	// Page Page number (1-indexed)
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// PageSize Number of groups per page
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
+// GetGroupParams defines parameters for GetGroup.
+type GetGroupParams struct {
+	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues.
+	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Page Page number for pagination
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// PageSize Number of items per page
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
 // GetInventoryParams defines parameters for GetInventory.
 type GetInventoryParams struct {
 	// WithAgentId If true, include the agentId in the response (Compatible with manual inventory upload).
@@ -499,44 +523,20 @@ type GetVMsParams struct {
 	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 }
 
-// ListGroupsParams defines parameters for ListGroups.
-type ListGroupsParams struct {
-	// ByName Filter groups by name (case-insensitive substring match)
-	ByName *string `form:"byName,omitempty" json:"byName,omitempty"`
-
-	// Page Page number (1-indexed)
-	Page *int `form:"page,omitempty" json:"page,omitempty"`
-
-	// PageSize Number of groups per page
-	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
-}
-
-// GetGroupParams defines parameters for GetGroup.
-type GetGroupParams struct {
-	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues.
-	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
-
-	// Page Page number for pagination
-	Page *int `form:"page,omitempty" json:"page,omitempty"`
-
-	// PageSize Number of items per page
-	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
-}
-
 // SetAgentModeJSONRequestBody defines body for SetAgentMode for application/json ContentType.
 type SetAgentModeJSONRequestBody = AgentModeRequest
 
 // StartCollectorJSONRequestBody defines body for StartCollector for application/json ContentType.
 type StartCollectorJSONRequestBody = CollectorStartRequest
 
-// PostVddkMultipartRequestBody defines body for PostVddk for multipart/form-data ContentType.
-type PostVddkMultipartRequestBody PostVddkMultipartBody
-
 // CreateGroupJSONRequestBody defines body for CreateGroup for application/json ContentType.
 type CreateGroupJSONRequestBody = CreateGroupRequest
 
 // UpdateGroupJSONRequestBody defines body for UpdateGroup for application/json ContentType.
 type UpdateGroupJSONRequestBody = UpdateGroupRequest
+
+// PostVddkMultipartRequestBody defines body for PostVddk for multipart/form-data ContentType.
+type PostVddkMultipartRequestBody PostVddkMultipartBody
 
 // AddVMsToInspectionJSONRequestBody defines body for AddVMsToInspection for application/json ContentType.
 type AddVMsToInspectionJSONRequestBody = VMIdArray

@@ -338,7 +338,7 @@ func (a *AgentSvc) CreateGroup(name, filter, description string) (*v1.Group, err
 		return nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, a.baseURL+"/api/v1/vms/groups", bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, a.baseURL+"/api/v1/groups", bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -377,7 +377,7 @@ func (a *AgentSvc) CreateGroupWithTags(name, filter, description string, tags []
 		return nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, a.baseURL+"/api/v1/vms/groups", bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, a.baseURL+"/api/v1/groups", bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -399,9 +399,9 @@ func (a *AgentSvc) CreateGroupWithTags(name, filter, description string, tags []
 	return &group, nil
 }
 
-// CreateGroupRaw sends a raw POST to /vms/groups and returns the status code.
+// CreateGroupRaw sends a raw POST to /groups and returns the status code.
 func (a *AgentSvc) CreateGroupRaw(body []byte) (int, error) {
-	req, err := http.NewRequest(http.MethodPost, a.baseURL+"/api/v1/vms/groups", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, a.baseURL+"/api/v1/groups", bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("creating request: %w", err)
 	}
@@ -423,7 +423,7 @@ type GroupListParams struct {
 
 // ListGroups lists groups with optional filtering and pagination.
 func (a *AgentSvc) ListGroups(params ...*GroupListParams) (*v1.GroupListResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, a.baseURL+"/api/v1/vms/groups", nil)
+	req, err := http.NewRequest(http.MethodGet, a.baseURL+"/api/v1/groups", nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -461,7 +461,7 @@ func (a *AgentSvc) ListGroups(params ...*GroupListParams) (*v1.GroupListResponse
 
 // GetGroup retrieves a group by ID with its filtered VMs.
 func (a *AgentSvc) GetGroup(id string, params *GroupGetParams) (*v1.GroupResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, a.baseURL+"/api/v1/vms/groups/"+url.PathEscape(id), nil)
+	req, err := http.NewRequest(http.MethodGet, a.baseURL+"/api/v1/groups/"+url.PathEscape(id), nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -497,9 +497,9 @@ func (a *AgentSvc) GetGroup(id string, params *GroupGetParams) (*v1.GroupRespons
 	return &result, nil
 }
 
-// GetGroupStatus sends a GET to /vms/groups/{id} and returns only the status code.
+// GetGroupStatus sends a GET to /groups/{id} and returns only the status code.
 func (a *AgentSvc) GetGroupStatus(id string) (int, error) {
-	req, err := http.NewRequest(http.MethodGet, a.baseURL+"/api/v1/vms/groups/"+url.PathEscape(id), nil)
+	req, err := http.NewRequest(http.MethodGet, a.baseURL+"/api/v1/groups/"+url.PathEscape(id), nil)
 	if err != nil {
 		return 0, fmt.Errorf("creating request: %w", err)
 	}
@@ -519,7 +519,7 @@ func (a *AgentSvc) UpdateGroup(id string, body v1.UpdateGroupRequest) (*v1.Group
 		return nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPatch, a.baseURL+"/api/v1/vms/groups/"+url.PathEscape(id), bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPatch, a.baseURL+"/api/v1/groups/"+url.PathEscape(id), bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -544,9 +544,9 @@ func (a *AgentSvc) UpdateGroup(id string, body v1.UpdateGroupRequest) (*v1.Group
 	return &group, nil
 }
 
-// UpdateGroupRaw sends a raw PATCH to /vms/groups/{id} and returns the status code.
+// UpdateGroupRaw sends a raw PATCH to /groups/{id} and returns the status code.
 func (a *AgentSvc) UpdateGroupRaw(id string, body []byte) (int, error) {
-	req, err := http.NewRequest(http.MethodPatch, a.baseURL+"/api/v1/vms/groups/"+url.PathEscape(id), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPatch, a.baseURL+"/api/v1/groups/"+url.PathEscape(id), bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("creating request: %w", err)
 	}
@@ -561,7 +561,7 @@ func (a *AgentSvc) UpdateGroupRaw(id string, body []byte) (int, error) {
 
 // DeleteGroup deletes a group by ID.
 func (a *AgentSvc) DeleteGroup(id string) (int, error) {
-	req, err := http.NewRequest(http.MethodDelete, a.baseURL+"/api/v1/vms/groups/"+url.PathEscape(id), nil)
+	req, err := http.NewRequest(http.MethodDelete, a.baseURL+"/api/v1/groups/"+url.PathEscape(id), nil)
 	if err != nil {
 		return 0, fmt.Errorf("creating request: %w", err)
 	}

@@ -28,6 +28,21 @@ type ServerInterface interface {
 	// Start inventory collection
 	// (POST /collector)
 	StartCollector(c *gin.Context)
+	// List all groups
+	// (GET /groups)
+	ListGroups(c *gin.Context, params ListGroupsParams)
+	// Create a new group
+	// (POST /groups)
+	CreateGroup(c *gin.Context)
+	// Delete group
+	// (DELETE /groups/{id})
+	DeleteGroup(c *gin.Context, id string)
+	// Get group by ID with its VMs
+	// (GET /groups/{id})
+	GetGroup(c *gin.Context, id string, params GetGroupParams)
+	// Update group
+	// (PATCH /groups/{id})
+	UpdateGroup(c *gin.Context, id string)
 	// Get collected inventory
 	// (GET /inventory)
 	GetInventory(c *gin.Context, params GetInventoryParams)
@@ -40,21 +55,6 @@ type ServerInterface interface {
 	// Get list of VMs with filtering and pagination
 	// (GET /vms)
 	GetVMs(c *gin.Context, params GetVMsParams)
-	// List all groups
-	// (GET /vms/groups)
-	ListGroups(c *gin.Context, params ListGroupsParams)
-	// Create a new group
-	// (POST /vms/groups)
-	CreateGroup(c *gin.Context)
-	// Delete group
-	// (DELETE /vms/groups/{id})
-	DeleteGroup(c *gin.Context, id string)
-	// Get group by ID with its VMs
-	// (GET /vms/groups/{id})
-	GetGroup(c *gin.Context, id string, params GetGroupParams)
-	// Update group
-	// (PATCH /vms/groups/{id})
-	UpdateGroup(c *gin.Context, id string)
 	// Stop inspector entirely
 	// (DELETE /vms/inspector)
 	StopInspection(c *gin.Context)
@@ -150,116 +150,6 @@ func (siw *ServerInterfaceWrapper) StartCollector(c *gin.Context) {
 	}
 
 	siw.Handler.StartCollector(c)
-}
-
-// GetInventory operation middleware
-func (siw *ServerInterfaceWrapper) GetInventory(c *gin.Context) {
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetInventoryParams
-
-	// ------------- Optional query parameter "withAgentId" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "withAgentId", c.Request.URL.Query(), &params.WithAgentId)
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter withAgentId: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Optional query parameter "group_id" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "group_id", c.Request.URL.Query(), &params.GroupId)
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter group_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.GetInventory(c, params)
-}
-
-// PostVddk operation middleware
-func (siw *ServerInterfaceWrapper) PostVddk(c *gin.Context) {
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.PostVddk(c)
-}
-
-// GetVersion operation middleware
-func (siw *ServerInterfaceWrapper) GetVersion(c *gin.Context) {
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.GetVersion(c)
-}
-
-// GetVMs operation middleware
-func (siw *ServerInterfaceWrapper) GetVMs(c *gin.Context) {
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetVMsParams
-
-	// ------------- Optional query parameter "byExpression" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "byExpression", c.Request.URL.Query(), &params.ByExpression)
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter byExpression: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "sort", c.Request.URL.Query(), &params.Sort)
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter sort: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Optional query parameter "page" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "page", c.Request.URL.Query(), &params.Page)
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Optional query parameter "pageSize" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "pageSize", c.Request.URL.Query(), &params.PageSize)
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter pageSize: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.GetVMs(c, params)
 }
 
 // ListGroups operation middleware
@@ -414,6 +304,116 @@ func (siw *ServerInterfaceWrapper) UpdateGroup(c *gin.Context) {
 	}
 
 	siw.Handler.UpdateGroup(c, id)
+}
+
+// GetInventory operation middleware
+func (siw *ServerInterfaceWrapper) GetInventory(c *gin.Context) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetInventoryParams
+
+	// ------------- Optional query parameter "withAgentId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "withAgentId", c.Request.URL.Query(), &params.WithAgentId)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter withAgentId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "group_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "group_id", c.Request.URL.Query(), &params.GroupId)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter group_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetInventory(c, params)
+}
+
+// PostVddk operation middleware
+func (siw *ServerInterfaceWrapper) PostVddk(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostVddk(c)
+}
+
+// GetVersion operation middleware
+func (siw *ServerInterfaceWrapper) GetVersion(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetVersion(c)
+}
+
+// GetVMs operation middleware
+func (siw *ServerInterfaceWrapper) GetVMs(c *gin.Context) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetVMsParams
+
+	// ------------- Optional query parameter "byExpression" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "byExpression", c.Request.URL.Query(), &params.ByExpression)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter byExpression: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", c.Request.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter sort: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", c.Request.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "pageSize", c.Request.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter pageSize: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetVMs(c, params)
 }
 
 // StopInspection operation middleware
@@ -572,15 +572,15 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.DELETE(options.BaseURL+"/collector", wrapper.StopCollector)
 	router.GET(options.BaseURL+"/collector", wrapper.GetCollectorStatus)
 	router.POST(options.BaseURL+"/collector", wrapper.StartCollector)
+	router.GET(options.BaseURL+"/groups", wrapper.ListGroups)
+	router.POST(options.BaseURL+"/groups", wrapper.CreateGroup)
+	router.DELETE(options.BaseURL+"/groups/:id", wrapper.DeleteGroup)
+	router.GET(options.BaseURL+"/groups/:id", wrapper.GetGroup)
+	router.PATCH(options.BaseURL+"/groups/:id", wrapper.UpdateGroup)
 	router.GET(options.BaseURL+"/inventory", wrapper.GetInventory)
 	router.POST(options.BaseURL+"/vddk", wrapper.PostVddk)
 	router.GET(options.BaseURL+"/version", wrapper.GetVersion)
 	router.GET(options.BaseURL+"/vms", wrapper.GetVMs)
-	router.GET(options.BaseURL+"/vms/groups", wrapper.ListGroups)
-	router.POST(options.BaseURL+"/vms/groups", wrapper.CreateGroup)
-	router.DELETE(options.BaseURL+"/vms/groups/:id", wrapper.DeleteGroup)
-	router.GET(options.BaseURL+"/vms/groups/:id", wrapper.GetGroup)
-	router.PATCH(options.BaseURL+"/vms/groups/:id", wrapper.UpdateGroup)
 	router.DELETE(options.BaseURL+"/vms/inspector", wrapper.StopInspection)
 	router.GET(options.BaseURL+"/vms/inspector", wrapper.GetInspectorStatus)
 	router.PATCH(options.BaseURL+"/vms/inspector", wrapper.AddVMsToInspection)

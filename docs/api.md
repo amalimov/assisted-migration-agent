@@ -124,7 +124,7 @@ curl "http://localhost:8000/api/v1/vms?page=2&pageSize=10"
 
 Groups are named filter expressions (with optional tags) that dynamically match VMs. When a group is created or updated, its filter is evaluated against the VM inventory and matching VM IDs are stored in a pre-computed `group_matches` table. This avoids re-evaluating filters on every read. Tags assigned to groups are surfaced on matching VMs in the `GET /vms` response.
 
-### GET /api/v1/vms/groups
+### GET /api/v1/groups
 
 Returns a paginated list of groups with optional name filtering.
 
@@ -141,19 +141,19 @@ Returns a paginated list of groups with optional name filtering.
 List all groups:
 
 ```bash
-curl http://localhost:8000/api/v1/vms/groups
+curl http://localhost:8000/api/v1/groups
 ```
 
 Filter by name:
 
 ```bash
-curl "http://localhost:8000/api/v1/vms/groups?byName=production"
+curl "http://localhost:8000/api/v1/groups?byName=production"
 ```
 
 Paginate:
 
 ```bash
-curl "http://localhost:8000/api/v1/vms/groups?page=2&pageSize=10"
+curl "http://localhost:8000/api/v1/groups?page=2&pageSize=10"
 ```
 
 #### Response
@@ -198,7 +198,7 @@ curl "http://localhost:8000/api/v1/vms/groups?page=2&pageSize=10"
 | `createdAt` | string | ISO 8601 creation timestamp |
 | `updatedAt` | string | ISO 8601 last update timestamp |
 
-### POST /api/v1/vms/groups
+### POST /api/v1/groups
 
 Creates a new group.
 
@@ -223,7 +223,7 @@ Creates a new group.
 #### Examples
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/vms/groups \
+curl -X POST http://localhost:8000/api/v1/groups \
   -H "Content-Type: application/json" \
   -d '{"name": "Large VMs", "filter": "memory >= 32GB and total_disk_capacity >= 500GB"}'
 ```
@@ -238,7 +238,7 @@ curl -X POST http://localhost:8000/api/v1/vms/groups \
 |--------|-----------|
 | 400 | Missing or empty name/filter, name > 100 chars, description > 500 chars, invalid filter expression, invalid tag format, duplicate name |
 
-### GET /api/v1/vms/groups/{id}
+### GET /api/v1/groups/{id}
 
 Returns a group and its matching VMs with pagination and sorting. VMs are looked up from pre-computed matches (no filter re-evaluation at read time).
 
@@ -255,13 +255,13 @@ Returns a group and its matching VMs with pagination and sorting. VMs are looked
 #### Examples
 
 ```bash
-curl http://localhost:8000/api/v1/vms/groups/1
+curl http://localhost:8000/api/v1/groups/1
 ```
 
 With sorting and pagination:
 
 ```bash
-curl "http://localhost:8000/api/v1/vms/groups/1?sort=memory:desc&page=1&pageSize=10"
+curl "http://localhost:8000/api/v1/groups/1?sort=memory:desc&page=1&pageSize=10"
 ```
 
 #### Response
@@ -314,7 +314,7 @@ curl "http://localhost:8000/api/v1/vms/groups/1?sort=memory:desc&page=1&pageSize
 |--------|-----------|
 | 404 | Group not found |
 
-### PATCH /api/v1/vms/groups/{id}
+### PATCH /api/v1/groups/{id}
 
 Partially updates an existing group. At least one field must be provided.
 
@@ -343,7 +343,7 @@ All fields are optional; only provided fields are updated.
 Update only the filter:
 
 ```bash
-curl -X PATCH http://localhost:8000/api/v1/vms/groups/1 \
+curl -X PATCH http://localhost:8000/api/v1/groups/1 \
   -H "Content-Type: application/json" \
   -d '{"filter": "memory >= 32GB"}'
 ```
@@ -359,14 +359,14 @@ curl -X PATCH http://localhost:8000/api/v1/vms/groups/1 \
 | 400 | No fields provided, name > 100 chars, description > 500 chars, invalid filter expression, invalid tag format, duplicate name |
 | 404 | Group not found |
 
-### DELETE /api/v1/vms/groups/{id}
+### DELETE /api/v1/groups/{id}
 
 Deletes a group and its pre-computed matches. Idempotent — returns 204 even if the group does not exist.
 
 #### Examples
 
 ```bash
-curl -X DELETE http://localhost:8000/api/v1/vms/groups/1
+curl -X DELETE http://localhost:8000/api/v1/groups/1
 ```
 
 #### Response
