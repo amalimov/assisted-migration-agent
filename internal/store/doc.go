@@ -4,6 +4,22 @@
 // tables for agent configuration with tables created by duckdb_parser for VMware
 // inventory data.
 //
+// # Key design decisions
+//
+// All sub-stores share a single DuckDB connection (single-writer model,
+// MaxOpenConns=1). Transactions propagate implicitly: Store.WithTx attaches
+// a sql.Tx to the context, and the shared QueryInterceptor routes all
+// subsequent queries through that transaction automatically. This means
+// any store method called inside a WithTx callback participates in the
+// transaction without explicit tx passing. FORCE CHECKPOINT is suppressed
+// inside transactions because DuckDB does not support it there.
+//
+// The database uses DuckDB's WAL mode. Checkpoint() forces a WAL flush to
+// the main file. The sqlite_scanner extension is bundled and loaded at
+// connection time so Parser().IngestSqlite() can read collector output
+// directly without downloading it at runtime. This is required because the
+// agent may be deployed in air-gapped environments with no internet access.
+//
 // # Architecture Overview
 //
 //	┌─────────────────────────────────────────────────────────────────┐
@@ -255,21 +271,65 @@
 //   - QueryContext
 //   - ExecContext
 //
-// # Transactions (WithTx)
+// # Transactions (WithTx) — Inverted Transaction Control
 //
-// Store.WithTx(ctx, fn) executes fn inside a database transaction.
-// The transaction is passed via context so that sub-stores automatically
-// use it through the QueryInterceptor. On success the transaction is
-// committed; on error (or panic) it is rolled back.
+// Store uses an inverted transaction pattern: the transaction is not passed
+// explicitly to each store method. Instead, Store.WithTx attaches the sql.Tx
+// to the context, and the QueryInterceptor transparently routes all subsequent
+// queries through that transaction. Store methods don't need to know whether
+// they are running inside a transaction or not — they just use the context
+// they receive.
 //
-//	err := store.WithTx(ctx, func(txCtx context.Context) error {
-//	    group, err := store.Group().Create(txCtx, group)
+// This inversion matters because it keeps store methods simple. A method like
+// GroupStore.Create works identically whether called standalone or inside a
+// WithTx block. The caller at the service layer decides transactional scope;
+// the store layer executes queries without caring.
+//
+// How it works:
+//
+//  1. Store.WithTx(ctx, fn) calls db.BeginTx and attaches the *sql.Tx to a
+//     new context via context.WithValue using a private key (txKey).
+//  2. The fn callback receives this enriched context.
+//  3. When any store method calls QueryInterceptor.ExecContext (or
+//     QueryContext, QueryRowContext), the interceptor checks the context
+//     for an active tx. If found, it routes the query through the tx.
+//     If not, it routes through the raw *sql.DB.
+//  4. On success, WithTx commits. On error (returned from fn), it rolls back.
+//
+// Usage at the service layer:
+//
+//	// Atomic create: insert group row + compute matching VMs in one tx.
+//	err := s.store.WithTx(ctx, func(txCtx context.Context) error {
+//	    created, err := s.store.Group().Create(txCtx, group)
 //	    if err != nil { return err }
-//	    return store.Group().RefreshMatches(txCtx, group.ID)
+//	    return s.store.Group().RefreshMatches(txCtx, created.ID)
 //	})
 //
-// WithTx is re-entrant: if the context already carries a transaction, the
-// inner call reuses it (no nested BEGIN).
+//	// Atomic delete: remove matches + delete group in one tx.
+//	err := s.store.WithTx(ctx, func(txCtx context.Context) error {
+//	    if err := s.store.Group().Delete(txCtx, id); err != nil {
+//	        return err
+//	    }
+//	    return s.store.Group().DeleteMatches(txCtx, id)
+//	})
+//
+// The key rule: always pass txCtx (the context from the WithTx callback)
+// to store methods inside the block. Passing the original ctx instead
+// bypasses the transaction silently.
+//
+// Side effects inside transactions:
+//
+// The QueryInterceptor suppresses FORCE CHECKPOINT when a transaction is
+// active, because DuckDB does not support checkpointing inside a
+// transaction. Outside a transaction, ExecContext automatically runs
+// FORCE CHECKPOINT after every write to flush the WAL.
+//
+// Nesting:
+//
+// Nested WithTx calls are not supported. A second WithTx inside an
+// existing transaction will start an independent transaction on the raw
+// *sql.DB, which defeats atomicity. Services should structure their code
+// so that a single WithTx block wraps all related writes.
 //
 // # Design Patterns
 //

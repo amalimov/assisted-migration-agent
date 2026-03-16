@@ -108,36 +108,6 @@ image:
 AGENT_ID ?= `uuidgen`
 SOURCE_ID ?= `uuidgen`
 CONTAINER_NAME ?= migration-planner-agent
-run.image: image
-	@if [ -z "$(AGENT_ID)" ] || [ -z "$(SOURCE_ID)" ]; then \
-		echo "❌ Error: AGENT_ID and SOURCE_ID are required"; \
-		echo "Usage: make run.image AGENT_ID=<uuid> SOURCE_ID=<uuid>"; \
-		exit 1; \
-	fi
-	@echo "🛑 Stopping existing container if running..."
-	@$(PODMAN) stop $(CONTAINER_NAME) 2>/dev/null || true
-	@$(PODMAN) rm $(CONTAINER_NAME) 2>/dev/null || true
-	@echo "🚀 Starting container $(CONTAINER_NAME)..."
-	@echo "   Image: $(IMAGE_NAME):$(IMAGE_TAG)"
-	@echo "   Agent ID: $(AGENT_ID)"
-	@echo "   Source ID: $(SOURCE_ID)"
-	@echo "   UI available at: https://localhost:8000"
-	$(PODMAN) run -d \
-		--name $(CONTAINER_NAME) \
-		-p 8000:8000 \
-		$(IMAGE_NAME):$(IMAGE_TAG) \
-		run \
-		--agent-id $(AGENT_ID) \
-		--source-id $(SOURCE_ID) \
-		--server-mode prod \
-		--server-statics-folder /app/static \
-		--data-folder /var/lib/agent \
-		--opa-policies-folder /app/policies \
-		--console-url http://host.containers.internal:7443
-	@echo "✅ Container started. View logs with: podman logs -f $(CONTAINER_NAME)"
-
-# Run container image with persistent volume
-# Usage: make run.container AGENT_ID=<uuid> SOURCE_ID=<uuid>
 AGENT_VOLUME_NAME ?= agent-data
 container.run:
 	@if [ -z "$(AGENT_ID)" ] || [ -z "$(SOURCE_ID)" ]; then \
@@ -291,7 +261,7 @@ VCSIM_IMAGE := vmware/vcsim:latest
 # Install ginkgo if not already available
 $(GINKGO):
 	@echo "📦 Installing ginkgo..."
-	@go install -v github.com/onsi/ginkgo/v2/ginkgo@v2.22.0
+	@go install -v github.com/onsi/ginkgo/v2/ginkgo@v2.27.2
 	@echo "✅ 'ginkgo' installed successfully."
 
 FUZZ_TIME ?= 30s
