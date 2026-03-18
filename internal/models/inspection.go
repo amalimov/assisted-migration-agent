@@ -25,8 +25,8 @@ const (
 	InspectionStateCanceled InspectionState = "canceled"
 	// InspectionStateError - error during Inspection
 	InspectionStateError InspectionState = "error"
-	// InspectionStateNotFound - error during Inspection
-	InspectionStateNotFound InspectionState = "not_found"
+	// InspectionStateNotStarted - Inspection not started for this VM
+	InspectionStateNotStarted InspectionState = "not_started"
 )
 
 func (i InspectionState) Value() string {

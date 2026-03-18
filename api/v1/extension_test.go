@@ -82,7 +82,7 @@ var _ = Describe("NewVirtualMachineFromSummary", func() {
 		Expect(vm.Memory).To(Equal(int64(4096)))
 		Expect(vm.DiskSize).To(Equal(int64(102400)))
 		Expect(vm.IssueCount).To(Equal(3))
-		Expect(vm.Inspection.State).To(Equal(v1.VmInspectionStatusStateNotFound))
+		Expect(vm.Inspection.State).To(Equal(v1.VmInspectionStatusStateNotStarted))
 	})
 
 	Context("Tags", func() {

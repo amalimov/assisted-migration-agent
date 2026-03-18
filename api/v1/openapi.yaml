@@ -632,14 +632,14 @@ components:
             - completed
             - canceled
             - error
-            - not_found
+            - not_started
           x-enum-varnames:
             - VmInspectionStatusStatePending
             - VmInspectionStatusStateRunning
             - VmInspectionStatusStateCompleted
             - VmInspectionStatusStateCanceled
             - VmInspectionStatusStateError
-            - VmInspectionStatusStateNotFound
+            - VmInspectionStatusStateNotStarted
           description: Current inspection state
         error:
           type: string

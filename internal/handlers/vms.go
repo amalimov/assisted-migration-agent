@@ -127,7 +127,7 @@ func (h *Handler) GetVMInspectionStatus(c *gin.Context, id string) {
 	s, err := h.inspectorSrv.GetVmStatus(c.Request.Context(), id)
 	if err != nil {
 		if srvErrors.IsResourceNotFoundError(err) {
-			c.JSON(http.StatusNotFound, v1.VmInspectionStatus{State: v1.VmInspectionStatusStateNotFound})
+			c.JSON(http.StatusNotFound, v1.VmInspectionStatus{State: v1.VmInspectionStatusStateNotStarted})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get VM status: %v", err)})
@@ -152,7 +152,7 @@ func (h *Handler) RemoveVMFromInspection(c *gin.Context, id string) {
 	s, err := h.inspectorSrv.GetVmStatus(c.Request.Context(), id)
 	if err != nil {
 		if srvErrors.IsResourceNotFoundError(err) {
-			c.JSON(http.StatusNotFound, v1.VmInspectionStatus{State: v1.VmInspectionStatusStateNotFound})
+			c.JSON(http.StatusNotFound, v1.VmInspectionStatus{State: v1.VmInspectionStatusStateNotStarted})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get VM status: %v", err)})

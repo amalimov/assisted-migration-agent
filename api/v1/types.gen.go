@@ -60,12 +60,12 @@ const (
 
 // Defines values for VmInspectionStatusState.
 const (
-	VmInspectionStatusStateCanceled  VmInspectionStatusState = "canceled"
-	VmInspectionStatusStateCompleted VmInspectionStatusState = "completed"
-	VmInspectionStatusStateError     VmInspectionStatusState = "error"
-	VmInspectionStatusStateNotFound  VmInspectionStatusState = "not_found"
-	VmInspectionStatusStatePending   VmInspectionStatusState = "pending"
-	VmInspectionStatusStateRunning   VmInspectionStatusState = "running"
+	VmInspectionStatusStateCanceled   VmInspectionStatusState = "canceled"
+	VmInspectionStatusStateCompleted  VmInspectionStatusState = "completed"
+	VmInspectionStatusStateError      VmInspectionStatusState = "error"
+	VmInspectionStatusStateNotStarted VmInspectionStatusState = "not_started"
+	VmInspectionStatusStatePending    VmInspectionStatusState = "pending"
+	VmInspectionStatusStateRunning    VmInspectionStatusState = "running"
 )
 
 // AgentModeRequest defines model for AgentModeRequest.

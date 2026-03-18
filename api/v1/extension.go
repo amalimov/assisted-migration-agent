@@ -228,7 +228,7 @@ func NewInspectionStatus(status models.InspectionStatus) VmInspectionStatus {
 	case models.InspectionStateError.Value():
 		c.State = VmInspectionStatusStateError
 	default:
-		c.State = VmInspectionStatusStateNotFound
+		c.State = VmInspectionStatusStateNotStarted
 	}
 
 	if status.Error != nil {

@@ -540,7 +540,7 @@ var _ = Describe("VMs Handlers", func() {
 			var response v1.VmInspectionStatus
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response.State).To(Equal(v1.VmInspectionStatusStateNotFound))
+			Expect(response.State).To(Equal(v1.VmInspectionStatusStateNotStarted))
 		})
 
 		// Given a VM that has been inspected
@@ -645,7 +645,7 @@ var _ = Describe("VMs Handlers", func() {
 			Expect(w.Code).To(Equal(http.StatusNotFound))
 			var response v1.VmInspectionStatus
 			Expect(json.Unmarshal(w.Body.Bytes(), &response)).To(Succeed())
-			Expect(response.State).To(Equal(v1.VmInspectionStatusStateNotFound))
+			Expect(response.State).To(Equal(v1.VmInspectionStatusStateNotStarted))
 		})
 
 		It("RemoveVMFromInspection should return 500 when GetVmStatus fails", func() {
