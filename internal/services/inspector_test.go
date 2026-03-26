@@ -125,7 +125,7 @@ var _ = Describe("InspectorService", func() {
 		insertVM("vm-2", "test-vm-2")
 		insertVM("vm-3", "test-vm-3")
 
-		srv = services.NewInspectorService(10)
+		srv = services.NewInspectorService(nil, 10, "")
 	})
 
 	AfterEach(func() {
@@ -169,7 +169,7 @@ var _ = Describe("InspectorService", func() {
 
 				// Use mock inspection service with delay so per-VM pipelines stay running and inspector stays in Running state
 				builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-				srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+				srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 				err := srv.Credentials(ctx, *getVCenterCredentials())
 				Expect(err).NotTo(HaveOccurred())
@@ -227,7 +227,7 @@ var _ = Describe("InspectorService", func() {
 
 			// Use mock inspection service with delay to keep inspector running
 			builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-			srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -277,7 +277,7 @@ var _ = Describe("InspectorService", func() {
 
 				// Use mock inspection service with delay to keep inspector running
 				builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-				srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+				srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 				err := srv.Credentials(ctx, *getVCenterCredentials())
 				Expect(err).NotTo(HaveOccurred())
@@ -342,7 +342,7 @@ var _ = Describe("InspectorService", func() {
 	Describe("Start", func() {
 		It("should complete inspection successfully for single VM", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -364,7 +364,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should complete inspection successfully for multiple VMs", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -403,7 +403,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should mark VM as error when inspection fails and continue with next VM", func() {
 			builder := newMockInspectionBuilder().withVmError("vm-1", errors.New("inspection failed"))
-			srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -427,7 +427,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should clear previous inspection data on new start", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -458,7 +458,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should be busy while running", func() {
 			builder := newMockInspectionBuilder().withWorkDelay(100 * time.Millisecond)
-			srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -484,7 +484,7 @@ var _ = Describe("InspectorService", func() {
 	Describe("Stop", func() {
 		It("should stop inspector and cancel all pending VMs", func() {
 			builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-			srv = services.NewInspectorService(10).WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -514,7 +514,7 @@ var _ = Describe("InspectorService", func() {
 	Describe("Inspection limit", func() {
 		It("should return InspectionLimitReachedError when Start receives more VM IDs than the limit", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(2).
+			srv = services.NewInspectorService(nil, 2, "").
 				WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
@@ -533,7 +533,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should allow Start when VM count equals the limit", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(2).
+			srv = services.NewInspectorService(nil, 2, "").
 				WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
@@ -551,7 +551,7 @@ var _ = Describe("InspectorService", func() {
 			insertVM("vm-0", "test-vm-0")
 
 			builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-			srv = services.NewInspectorService(2).
+			srv = services.NewInspectorService(nil, 2, "").
 				WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())

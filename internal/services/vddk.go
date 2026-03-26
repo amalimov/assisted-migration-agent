@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	vddkFolder = "vddk"
+	vddkFolder  = "vddk"
+	vddkLibPath = "vmware-vix-disklib-distrib/lib64"
 )
 
 var (
@@ -117,7 +118,7 @@ func (v *VddkService) extractVersion(filename, extractedFolder string) (string, 
 	}
 
 	// fallback: by extracted content
-	entries, err := os.ReadDir(filepath.Join(extractedFolder, "vmware-vix-disklib-distrib", "lib64"))
+	entries, err := os.ReadDir(filepath.Join(extractedFolder, vddkLibPath))
 	if err != nil {
 		return "", fmt.Errorf("cannot read lib64 directory: %w", err)
 	}
@@ -134,7 +135,7 @@ func (v *VddkService) extractVersion(filename, extractedFolder string) (string, 
 	return "", fmt.Errorf("no version found in filename '%s' or tar content", filename)
 }
 
-// extractTarGz extracts all files and directories from a given reader and overrides a specified destination folder
+// extractTarGz extracts all files, directories, hard and symbolic links from a given reader and overrides a specified destination folder
 func extractTarGz(r io.Reader, destDir string) error {
 	gzr, err := gzip.NewReader(r)
 	if err != nil {
@@ -156,9 +157,8 @@ func extractTarGz(r io.Reader, destDir string) error {
 		}
 
 		targetPath := filepath.Clean(filepath.Join(destDir, header.Name))
-		// Ensure the target path is inside destDir
-		if !strings.HasPrefix(targetPath, filepath.Clean(destDir)+string(os.PathSeparator)) &&
-			targetPath != filepath.Clean(destDir) {
+
+		if !pathInsideDest(destDir, targetPath) {
 			return fmt.Errorf("illegal file path: %s", targetPath)
 		}
 
@@ -182,8 +182,41 @@ func extractTarGz(r io.Reader, destDir string) error {
 			if err := os.Chmod(targetPath, os.FileMode(header.Mode)); err != nil {
 				return err
 			}
+		case tar.TypeSymlink:
+			symlinkResolvedPath := filepath.Clean(header.Linkname)
+			if !filepath.IsAbs(header.Linkname) {
+				symlinkResolvedPath = filepath.Clean(filepath.Join(filepath.Dir(targetPath), header.Linkname))
+			}
+
+			if !pathInsideDest(destDir, symlinkResolvedPath) {
+				return fmt.Errorf("illegal symlink target %q -> %q", targetPath, header.Linkname)
+			}
+
+			_ = os.Remove(targetPath)
+			if err := os.Symlink(header.Linkname, targetPath); err != nil {
+				return fmt.Errorf("symlink %s: %w", targetPath, err)
+			}
+		case tar.TypeLink:
+			existingPath := filepath.Clean(filepath.Join(destDir, header.Linkname))
+			if !pathInsideDest(destDir, existingPath) {
+				return fmt.Errorf("illegal hard link target path: %s", existingPath)
+			}
+			_ = os.Remove(targetPath)
+			if err := os.Link(existingPath, targetPath); err != nil {
+				return fmt.Errorf("hard link %s -> %s: %w", targetPath, existingPath, err)
+			}
 		}
 	}
 
 	return nil
+}
+
+func pathInsideDest(destDir, candidate string) bool {
+	destClean := filepath.Clean(destDir)
+	candClean := filepath.Clean(candidate)
+	if candClean == destClean {
+		return true
+	}
+	sep := string(os.PathSeparator)
+	return strings.HasPrefix(candClean, destClean+sep)
 }

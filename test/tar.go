@@ -12,6 +12,8 @@ import (
 type TarEntry struct {
 	Path    string
 	Content string
+	// If set, writes a symlink at Path with this target instead of a regular file (Content is ignored).
+	LinkTarget string
 }
 
 // BuildTarGz builds a .tar.gz with the given files, creating parent directories as needed.
@@ -35,6 +37,15 @@ func BuildTarGz(entries ...TarEntry) []byte {
 		_ = tw.WriteHeader(&tar.Header{Name: d + "/", Typeflag: tar.TypeDir, Mode: 0755})
 	}
 	for _, e := range entries {
+		if e.LinkTarget != "" {
+			_ = tw.WriteHeader(&tar.Header{
+				Name:     e.Path,
+				Linkname: e.LinkTarget,
+				Typeflag: tar.TypeSymlink,
+				Mode:     0777,
+			})
+			continue
+		}
 		_ = tw.WriteHeader(&tar.Header{Name: e.Path, Mode: 0644, Size: int64(len(e.Content))})
 		_, _ = tw.Write([]byte(e.Content))
 	}

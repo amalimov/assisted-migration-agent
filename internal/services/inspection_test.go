@@ -14,13 +14,13 @@ import (
 var _ = Describe("inspectionService", func() {
 	Describe("GetVmStatus", func() {
 		It("returns NotFound when no pipelines exist", func() {
-			svc := newInspectionService()
+			svc := newInspectionService(nil)
 			status := svc.GetVmStatus("vm-1")
 			Expect(status.State).To(Equal(models.InspectionStateNotStarted))
 		})
 
 		It("returns pipeline state after Start", func() {
-			svc := newInspectionService().WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
+			svc := newInspectionService(nil).WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
 				return []models.WorkUnit[models.InspectionStatus, models.InspectionResult]{
 					{
 						Status: func() models.InspectionStatus {
@@ -41,7 +41,7 @@ var _ = Describe("inspectionService", func() {
 				}
 			})
 
-			err := svc.Start(nil, []string{"vm-1"})
+			err := svc.Start(nil, nil, []string{"vm-1"})
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() models.InspectionState {
@@ -53,7 +53,7 @@ var _ = Describe("inspectionService", func() {
 
 	Describe("Add", func() {
 		It("creates pipelines for new VM IDs", func() {
-			svc := newInspectionService().WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
+			svc := newInspectionService(nil).WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
 				return []models.WorkUnit[models.InspectionStatus, models.InspectionResult]{
 					{
 						Status: func() models.InspectionStatus {
@@ -74,7 +74,7 @@ var _ = Describe("inspectionService", func() {
 				}
 			})
 
-			err := svc.Start(nil, []string{"vm-1"})
+			err := svc.Start(nil, nil, []string{"vm-1"})
 			Expect(err).NotTo(HaveOccurred())
 
 			err = svc.Add("vm-2")
@@ -98,7 +98,7 @@ var _ = Describe("inspectionService", func() {
 		It("stops specified pipelines", func() {
 			var block sync.WaitGroup
 			block.Add(1)
-			svc := newInspectionService().WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
+			svc := newInspectionService(nil).WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
 				return []models.WorkUnit[models.InspectionStatus, models.InspectionResult]{
 					{
 						Status: func() models.InspectionStatus {
@@ -120,7 +120,7 @@ var _ = Describe("inspectionService", func() {
 				}
 			})
 
-			err := svc.Start(nil, []string{"vm-1", "vm-2"})
+			err := svc.Start(nil, nil, []string{"vm-1", "vm-2"})
 			Expect(err).NotTo(HaveOccurred())
 
 			svc.CancelVmInspection("vm-1")
@@ -142,7 +142,7 @@ var _ = Describe("inspectionService", func() {
 
 	Describe("Start", func() {
 		It("stores operator and creates pipelines for given IDs", func() {
-			svc := newInspectionService().WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
+			svc := newInspectionService(nil).WithWorkUnitsBuilder(func(id string) []models.WorkUnit[models.InspectionStatus, models.InspectionResult] {
 				return []models.WorkUnit[models.InspectionStatus, models.InspectionResult]{
 					{
 						Status: func() models.InspectionStatus {
@@ -163,7 +163,7 @@ var _ = Describe("inspectionService", func() {
 				}
 			})
 
-			err := svc.Start((*vmware.VMManager)(nil), []string{"vm-a", "vm-b"})
+			err := svc.Start((*vmware.VMManager)(nil), nil, []string{"vm-a", "vm-b"})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(svc.operator).To(BeNil())

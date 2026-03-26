@@ -2,8 +2,15 @@ package services
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
+
+	"github.com/kubev2v/vm-migration-detective/pkg/vmdetect"
+
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
 
 	"github.com/vmware/govmomi"
 
@@ -25,18 +32,20 @@ type InspectorService struct {
 	state           InspectorState
 	stop            chan struct{}
 	inspectionLimit int
+	vddkLibDir      string
 }
 
 // NewInspectorService returns an idle inspector using the default inspection work units
 // (validate, snapshot, inspect, save, remove snapshot).
 // inspectionLimit is the maximum distinct VMs per cycle (Start batch + Add); non-positive means unlimited.
-func NewInspectorService(inspectionLimit int) *InspectorService {
+func NewInspectorService(s *store.Store, inspectionLimit int, dateDir string) *InspectorService {
 	return &InspectorService{
 		state: InspectorState{
 			state: models.InspectorStateReady,
 		},
-		inspectionSvc:   newInspectionService(),
+		inspectionSvc:   newInspectionService(s),
 		inspectionLimit: inspectionLimit,
+		vddkLibDir:      filepath.Join(dateDir, vddkFolder, vddkLibPath),
 	}
 }
 
@@ -90,7 +99,21 @@ func (i *InspectorService) Start(ctx context.Context, vmIDs []string) error {
 	i.vsphereClient = vClient
 	i.stop = make(chan struct{}, 1)
 
-	if err := i.inspectionSvc.Start(vmware.NewVMManager(i.vsphereClient, i.cred.Username), vmIDs); err != nil {
+	detector, err := vmdetect.NewDetector(vmdetect.DetectorConfig{
+		Credentials: vmdetect.Credentials{
+			VCenterURL: i.cred.URL,
+			Username:   i.cred.Username,
+			Password:   i.cred.Password,
+		},
+		VDDKLibDir: i.vddkLibDir,
+		Logger:     logrus.StandardLogger(),
+	})
+	if err != nil {
+		return err
+	}
+
+	vmwareOperator := vmware.NewVMManager(i.vsphereClient, i.cred.Username)
+	if err := i.inspectionSvc.Start(vmwareOperator, detector, vmIDs); err != nil {
 		i.inspectionSvc.Stop()
 		_ = i.closeVsphereClient(ctx)
 		i.state.SetError(err)

@@ -82,14 +82,20 @@ ARG DUCKDB_VERSION=v1.4.3
 RUN wget -q "https://extensions.duckdb.org/${DUCKDB_VERSION}/linux_amd64/sqlite_scanner.duckdb_extension.gz" && \
     gunzip sqlite_scanner.duckdb_extension.gz
 
-
 # =============================================================================
 # Stage 6: Final runtime image
 # =============================================================================
-FROM --platform=linux/amd64 registry.access.redhat.com/ubi9/ubi-minimal
+FROM --platform=linux/amd64 quay.io/centos/centos:stream9
 
-RUN microdnf install -y ca-certificates tzdata && \
-    microdnf clean all
+RUN dnf install -y ca-certificates tzdata \
+    libguestfs \
+    libguestfs-tools \
+    libguestfs-tools-c \
+    virt-v2v \
+    qemu-kvm \
+    nbdkit \
+    nbdkit-vddk-plugin \
+    && dnf clean all
 
 WORKDIR /app
 
@@ -106,8 +112,10 @@ COPY --from=opa-builder /app/policies /app/policies
 COPY --from=duckdb-extensions /extensions /app/extensions
 
 # Create data directory (mounted via AGENT_DATA_FOLDER)
-RUN mkdir -p /var/lib/agent && \
-    chown -R 1001:0 /app/static /app/policies /app/extensions /var/lib/agent
+RUN mkdir -p /var/lib/agent /app/.cache/libvirt && \
+    chown -R 1001:0 /app/static /app/policies /app/extensions /var/lib/agent /app/.cache/libvirt
+
+ENV LIBGUESTFS_BACKEND=direct
 
 # Create entrypoint script
 RUN printf '#!/bin/sh\n\

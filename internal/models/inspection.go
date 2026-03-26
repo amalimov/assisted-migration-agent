@@ -40,8 +40,10 @@ type InspectionStatus struct {
 }
 
 // InspectionResult is the shared result struct threaded through inspection work units.
-// InspectionResult Todo: pass here data between inspection phase to saving step
-type InspectionResult struct{}
+type InspectionResult struct {
+	SnapshotID string
+	Concerns   []VmInspectionConcern
+}
 
 // VmInspectionResult is one persisted inspection run for a VM (ordered by inspection_id; CreatedAt is unset).
 type VmInspectionResult struct {

@@ -3,13 +3,11 @@ package vmware
 // RemoveSnapshotRequest contains the parameters needed to remove a snapshot from a VM.
 //
 // Fields:
-//   - VmId: the managed object ID of the virtual machine.
-//   - SnapshotName: the name of the snapshot to remove.
+//   - SnapshotId: the id of the snapshot to remove.
 //   - Consolidate: if true, consolidates disk files after snapshot removal.
 type RemoveSnapshotRequest struct {
-	VmId         string
-	SnapshotName string
-	Consolidate  bool
+	SnapshotId  string
+	Consolidate bool
 }
 
 // CreateSnapshotRequest contains the parameters needed to create a snapshot of a VM.

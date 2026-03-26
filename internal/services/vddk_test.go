@@ -51,6 +51,30 @@ var _ = Describe("VddkService", func() {
 	})
 
 	Describe("Upload", func() {
+		It("extracts symlinks from tar.gz", func() {
+			tarGz := test.BuildTarGz(
+				test.TarEntry{
+					Path:    "vmware-vix-disklib-distrib/lib64/libcares.so.2",
+					Content: "so-payload",
+				},
+				test.TarEntry{
+					Path:       "vmware-vix-disklib-distrib/lib64/libcares.so",
+					LinkTarget: "libcares.so.2",
+				},
+			)
+			filename := "VMware-vix-disklib-8.0.3-23950268.x86_64.tar.gz"
+			_, err := srv.Upload(context.Background(), filename, bytes.NewReader(tarGz))
+			Expect(err).NotTo(HaveOccurred())
+
+			link := filepath.Join(dataDir, "vddk", "vmware-vix-disklib-distrib", "lib64", "libcares.so")
+			fi, err := os.Lstat(link)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fi.Mode()&os.ModeSymlink != 0).To(BeTrue())
+			target, err := os.Readlink(link)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(target).To(Equal("libcares.so.2"))
+		})
+
 		It("extracts tar.gz, saves status and returns version/bytes/md5", func() {
 			tarGz := test.BuildTarGz(
 				test.TarEntry{

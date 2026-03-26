@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
+
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 	"github.com/kubev2v/assisted-migration-agent/pkg/vmware"
 
@@ -12,6 +14,8 @@ import (
 
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/pkg/scheduler"
+
+	"github.com/kubev2v/vm-migration-detective/pkg/vmdetect"
 )
 
 const (
@@ -32,12 +36,15 @@ type inspectionService struct {
 	pipelines map[string]*inspectionPipeline
 	operator  vmware.VMOperator
 	mu        sync.Mutex
+	detector  *vmdetect.Detector
+	store     *store.Store
 }
 
 // newInspectionService returns an idle coordinator with no scheduler until Start.
-func newInspectionService() *inspectionService {
+func newInspectionService(s *store.Store) *inspectionService {
 	return &inspectionService{
 		pipelines: make(map[string]*inspectionPipeline),
+		store:     s,
 	}
 }
 
@@ -56,6 +63,8 @@ func (i *inspectionService) Add(id string) error {
 	if found && pipeline != nil && pipeline.IsRunning() {
 		return srvErrors.NewInspectionInProgressError()
 	}
+
+	zap.S().Named("inspection_service").Infow("adding VM inspection pipeline", "vmId", id)
 
 	p := NewWorkPipeline(models.InspectionStatus{State: models.InspectionStatePending}, i.scheduler, i.buildFn(id))
 	_ = p.Start()
@@ -121,7 +130,7 @@ func (i *inspectionService) GetVmStatus(id string) models.InspectionStatus {
 }
 
 // Start creates the scheduler, resets the pipeline map, and starts one pipeline per vmID.
-func (i *inspectionService) Start(operator *vmware.VMManager, vmIDs []string) error {
+func (i *inspectionService) Start(operator *vmware.VMManager, detector *vmdetect.Detector, vmIDs []string) error {
 	i.operator = operator
 
 	sched, err := scheduler.NewScheduler[models.InspectionResult](defaultInspectionSchedulerNormalWorkers, defaultInspectionSchedulerReservedWorkers)
@@ -137,6 +146,10 @@ func (i *inspectionService) Start(operator *vmware.VMManager, vmIDs []string) er
 	i.mu.Lock()
 	i.pipelines = make(map[string]*inspectionPipeline)
 	i.mu.Unlock()
+
+	i.detector = detector
+
+	zap.S().Named("inspection_service").Infow("starting VM inspection pipelines", "vmCount", len(vmIDs), "vmIds", vmIDs)
 
 	for _, id := range vmIDs {
 		pipeline := NewWorkPipeline(models.InspectionStatus{State: models.InspectionStatePending}, i.scheduler, i.buildFn(id))
@@ -184,7 +197,8 @@ func (i *inspectionService) buildInspectionWorkUnits(id string) []models.WorkUni
 				return models.InspectionStatus{State: models.InspectionStateRunning}
 			},
 			Work: func(ctx context.Context, result models.InspectionResult) (models.InspectionResult, error) {
-				err := i.createSnapshot(ctx, id)
+				snapId, err := i.createSnapshot(ctx, id)
+				result.SnapshotID = snapId
 				return result, err
 			},
 		},
@@ -193,7 +207,18 @@ func (i *inspectionService) buildInspectionWorkUnits(id string) []models.WorkUni
 				return models.InspectionStatus{State: models.InspectionStateRunning}
 			},
 			Work: func(ctx context.Context, result models.InspectionResult) (models.InspectionResult, error) {
-				err := i.inspect(id)
+				var (
+					concerns []models.VmInspectionConcern
+					err      error
+				)
+
+				defer func() {
+					err = errors.Join(err, i.removeSnapshot(ctx, id, result.SnapshotID))
+				}()
+
+				concerns, err = i.inspect(ctx, id, result.SnapshotID)
+				result.Concerns = concerns
+
 				return result, err
 			},
 		},
@@ -202,16 +227,7 @@ func (i *inspectionService) buildInspectionWorkUnits(id string) []models.WorkUni
 				return models.InspectionStatus{State: models.InspectionStateRunning}
 			},
 			Work: func(ctx context.Context, result models.InspectionResult) (models.InspectionResult, error) {
-				err := i.save(ctx, id)
-				return result, err
-			},
-		},
-		{
-			Status: func() models.InspectionStatus {
-				return models.InspectionStatus{State: models.InspectionStateRunning}
-			},
-			Work: func(ctx context.Context, result models.InspectionResult) (models.InspectionResult, error) {
-				err := i.removeSnapshot(ctx, id)
+				err := i.save(ctx, id, result.Concerns)
 				return result, err
 			},
 		},
@@ -227,11 +243,17 @@ func (i *inspectionService) buildInspectionWorkUnits(id string) []models.WorkUni
 }
 
 func (i *inspectionService) validate(ctx context.Context, id string) error {
-	return i.operator.ValidatePrivileges(ctx, id, models.RequiredPrivileges)
+	zap.S().Named("inspection_service").Infow("validating VM privileges for inspection", "vmId", id)
+	if err := i.operator.ValidatePrivileges(ctx, id, models.RequiredPrivileges); err != nil {
+		zap.S().Named("inspection_service").Errorw("privilege validation failed", "vmId", id, "error", err)
+		return err
+	}
+	zap.S().Named("inspection_service").Infow("privilege validation passed", "vmId", id)
+	return nil
 }
 
-func (i *inspectionService) createSnapshot(ctx context.Context, id string) error {
-	zap.S().Named("inspector_service").Infow("creating VM snapshot", "vmId", id)
+func (i *inspectionService) createSnapshot(ctx context.Context, id string) (string, error) {
+	zap.S().Named("inspection_service").Infow("creating VM snapshot", "vmId", id)
 	req := vmware.CreateSnapshotRequest{
 		VmId:         id,
 		SnapshotName: models.InspectionSnapshotName,
@@ -240,39 +262,79 @@ func (i *inspectionService) createSnapshot(ctx context.Context, id string) error
 		Quiesce:      false,
 	}
 
-	if err := i.operator.CreateSnapshot(ctx, req); err != nil {
-		zap.S().Named("inspector_service").Errorw("failed to create VM snapshot", "vmId", id, "error", err)
-		return err
+	snapID, err := i.operator.CreateSnapshot(ctx, req)
+	if err != nil {
+		zap.S().Named("inspection_service").Errorw("failed to create VM snapshot", "vmId", id, "error", err)
+		return "", err
 	}
 
-	zap.S().Named("inspector_service").Infow("VM snapshot created", "vmId", id)
+	zap.S().Named("inspection_service").Infow("VM snapshot created", "vmId", id)
 
+	return snapID, nil
+}
+
+func (i *inspectionService) inspect(ctx context.Context, vmId, snapId string) ([]models.VmInspectionConcern, error) {
+	zap.S().Named("inspection_service").Infow("running deep inspection", "vmId", vmId, "snapshotId", snapId)
+
+	result, err := i.detector.Detect(vmdetect.DetectParams{
+		Ctx:           ctx,
+		VMMoref:       vmId,
+		SnapshotMoref: snapId,
+	})
+
+	if err != nil {
+		zap.S().Named("inspection_service").Errorw("deep inspection failed", "vmId", vmId, "snapshotId", snapId, "error", err)
+		return nil, err
+	}
+
+	zap.S().Named("inspection_service").Infow("inspection completed", "vmId", vmId, "snapshotId", snapId)
+
+	var out []models.VmInspectionConcern
+
+	if result.AllConcerns != nil {
+		out = make([]models.VmInspectionConcern, 0, len(result.AllConcerns))
+		for _, c := range result.AllConcerns {
+			out = append(out, models.VmInspectionConcern{
+				Label:    c.Label,
+				Category: string(c.Category),
+				Msg:      c.Message,
+			})
+		}
+	}
+
+	zap.S().Named("inspection_service").Infow("deep inspection completed", "vmId", vmId, "concernCount", len(out))
+
+	return out, nil
+}
+
+func (i *inspectionService) save(ctx context.Context, id string, concerns []models.VmInspectionConcern) error {
+	zap.S().Named("inspection_service").Infow("persisting inspection results", "vmId", id, "concernCount", len(concerns))
+	err := i.store.WithTx(ctx, func(txCtx context.Context) error {
+		return i.store.Inspection().InsertResult(txCtx, id, concerns)
+	})
+	if err != nil {
+		zap.S().Named("inspection_service").Errorw("failed to persist inspection results", "vmId", id, "error", err)
+		return err
+	}
+	zap.S().Named("inspection_service").Infow("inspection results persisted", "vmId", id)
 	return nil
 }
 
-func (i *inspectionService) inspect(id string) error {
-	return nil
-}
+func (i *inspectionService) removeSnapshot(ctx context.Context, vmId, snapId string) error {
 
-func (i *inspectionService) save(ctx context.Context, id string) error {
-	return nil
-}
-
-func (i *inspectionService) removeSnapshot(ctx context.Context, id string) error {
-	zap.S().Named("inspector_service").Infow("removing VM snapshot", "vmId", id)
+	zap.S().Named("inspection_service").Infow("removing VM snapshot", "vmId", vmId)
 
 	removeSnapReq := vmware.RemoveSnapshotRequest{
-		VmId:         id,
-		SnapshotName: models.InspectionSnapshotName,
-		Consolidate:  true,
+		SnapshotId:  snapId,
+		Consolidate: true,
 	}
 
 	if err := i.operator.RemoveSnapshot(ctx, removeSnapReq); err != nil {
-		zap.S().Named("inspector_service").Errorw("failed to remove VM snapshot", "vmId", id, "error", err)
+		zap.S().Named("inspection_service").Errorw("failed to remove VM snapshot", "vmId", vmId, "error", err)
 		return err
 	}
 
-	zap.S().Named("inspector_service").Infow("VM snapshot removed", "vmId", id)
+	zap.S().Named("inspection_service").Infow("VM snapshot removed", "vmId", vmId)
 
 	return nil
 }

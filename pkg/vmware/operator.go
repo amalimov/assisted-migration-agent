@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vim25/methods"
+	"github.com/vmware/govmomi/vim25/types"
+
 	"github.com/vmware/govmomi"
 )
 
 type VMOperator interface {
-	CreateSnapshot(context.Context, CreateSnapshotRequest) error
+	CreateSnapshot(context.Context, CreateSnapshotRequest) (string, error)
 	RemoveSnapshot(context.Context, RemoveSnapshotRequest) error
 	ValidatePrivileges(ctx context.Context, vmId string, requiredPrivileges []string) error
 }
@@ -47,20 +51,25 @@ func NewVMManager(gc *govmomi.Client, username string) *VMManager {
 // Returns an error if:
 //   - the snapshot task creation fails,
 //   - or the snapshot operation fails during execution.
-func (m *VMManager) CreateSnapshot(ctx context.Context, req CreateSnapshotRequest) error {
+func (m *VMManager) CreateSnapshot(ctx context.Context, req CreateSnapshotRequest) (string, error) {
 	vm := m.vmFromMoid(req.VmId)
 
 	task, err := vm.CreateSnapshot(ctx, req.SnapshotName, req.Description, req.Memory, req.Quiesce)
 	if err != nil {
-		return fmt.Errorf("failed to create snapshot task: %w", err)
+		return "", fmt.Errorf("failed to create snapshot task: %w", err)
 	}
 
-	err = task.Wait(ctx)
+	result, err := task.WaitForResult(ctx)
 	if err != nil {
-		return fmt.Errorf("snapshot creation failed: %w", err)
+		return "", fmt.Errorf("snapshot creation failed: %w", err)
 	}
 
-	return nil
+	snapshotRef, ok := result.Result.(types.ManagedObjectReference)
+	if !ok {
+		return "", fmt.Errorf("unexpected result type %T", result.Result)
+	}
+
+	return snapshotRef.Value, nil
 }
 
 // RemoveSnapshot deletes a snapshot and all its children by name from a virtual machine.
@@ -68,24 +77,34 @@ func (m *VMManager) CreateSnapshot(ctx context.Context, req CreateSnapshotReques
 // Parameters:
 //   - ctx: the context for the API request.
 //   - req: the RemoveSnapshotRequest containing:
-//   - VmId: the managed object ID of the VM.
-//   - SnapshotName: the name of the snapshot to remove.
+//   - SnapshotId: the id of the snapshot to remove.
 //   - Consolidate: if true, consolidates disk files after snapshot removal.
 //
 // Returns an error if:
 //   - the snapshot deletion task cannot be initiated,
 //   - or the snapshot deletion fails during execution.
 func (m *VMManager) RemoveSnapshot(ctx context.Context, req RemoveSnapshotRequest) error {
-	vm := m.vmFromMoid(req.VmId)
-
-	task, err := vm.RemoveSnapshot(ctx, req.SnapshotName, true, &req.Consolidate)
-	if err != nil {
-		return fmt.Errorf("failed to initiate delete snapshot task: %w", err)
+	snapshotRef := types.ManagedObjectReference{
+		Type:  "VirtualMachineSnapshot",
+		Value: req.SnapshotId,
 	}
 
-	err = task.Wait(ctx)
+	r := types.RemoveSnapshot_Task{
+		This:           snapshotRef,
+		RemoveChildren: true,
+		Consolidate:    &req.Consolidate,
+	}
+
+	res, err := methods.RemoveSnapshot_Task(ctx, m.gc.RoundTripper, &r)
 	if err != nil {
-		return fmt.Errorf("snapshot deletion failed: %w", err)
+		return fmt.Errorf("failed to start snapshot removal: %w", err)
+	}
+
+	// Wait for task
+	task := object.NewTask(m.gc.Client, res.Returnval)
+
+	if err := task.Wait(ctx); err != nil {
+		return fmt.Errorf("snapshot removal failed: %w", err)
 	}
 
 	return nil
