@@ -15,6 +15,7 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	"github.com/kubev2v/assisted-migration-agent/test"
 )
 
 // getVCenterCredentials returns test credentials for vCenter.
@@ -33,6 +34,8 @@ type mockInspectionBuilder struct {
 	vmErrors  map[string]error
 	inspected []string
 	mu        sync.Mutex
+	st        *store.Store
+	concerns  map[string][]models.VmInspectionConcern
 }
 
 func (m *mockInspectionBuilder) withWorkDelay(d time.Duration) *mockInspectionBuilder {
@@ -41,10 +44,17 @@ func (m *mockInspectionBuilder) withWorkDelay(d time.Duration) *mockInspectionBu
 }
 
 func (m *mockInspectionBuilder) withVmError(vmID string, err error) *mockInspectionBuilder {
-	if m.vmErrors == nil {
-		m.vmErrors = make(map[string]error)
-	}
 	m.vmErrors[vmID] = err
+	return m
+}
+
+func (m *mockInspectionBuilder) withStore(st *store.Store) *mockInspectionBuilder {
+	m.st = st
+	return m
+}
+
+func (m *mockInspectionBuilder) withVmConcerns(vmID string, concerns []models.VmInspectionConcern) *mockInspectionBuilder {
+	m.concerns[vmID] = concerns
 	return m
 }
 
@@ -75,6 +85,16 @@ func (m *mockInspectionBuilder) builder() func(id string) []models.WorkUnit[mode
 					m.mu.Lock()
 					m.inspected = append(m.inspected, id)
 					m.mu.Unlock()
+					if m.st != nil {
+						if cc := m.concerns[id]; len(cc) > 0 {
+							err := m.st.WithTx(ctx, func(txCtx context.Context) error {
+								return m.st.Inspection().InsertResult(txCtx, id, cc)
+							})
+							if err != nil {
+								return result, err
+							}
+						}
+					}
 					return result, nil
 				},
 			},
@@ -91,13 +111,17 @@ func (m *mockInspectionBuilder) builder() func(id string) []models.WorkUnit[mode
 }
 
 func newMockInspectionBuilder() *mockInspectionBuilder {
-	return &mockInspectionBuilder{}
+	return &mockInspectionBuilder{
+		vmErrors: make(map[string]error),
+		concerns: make(map[string][]models.VmInspectionConcern),
+	}
 }
 
 var _ = Describe("InspectorService", func() {
 	var (
 		ctx context.Context
 		db  *sql.DB
+		st  *store.Store
 		srv *services.InspectorService
 	)
 
@@ -120,12 +144,14 @@ var _ = Describe("InspectorService", func() {
 		err = migrations.Run(ctx, db)
 		Expect(err).NotTo(HaveOccurred())
 
+		st = store.NewStore(db, test.NewMockValidator())
+
 		// Insert test VMs into vinfo (required for foreign key constraint)
 		insertVM("vm-1", "test-vm-1")
 		insertVM("vm-2", "test-vm-2")
 		insertVM("vm-3", "test-vm-3")
 
-		srv = services.NewInspectorService(nil, 10, "")
+		srv = services.NewInspectorService(st, 10, "")
 	})
 
 	AfterEach(func() {
@@ -169,7 +195,7 @@ var _ = Describe("InspectorService", func() {
 
 				// Use mock inspection service with delay so per-VM pipelines stay running and inspector stays in Running state
 				builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-				srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+				srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 				err := srv.Credentials(ctx, *getVCenterCredentials())
 				Expect(err).NotTo(HaveOccurred())
@@ -227,7 +253,7 @@ var _ = Describe("InspectorService", func() {
 
 			// Use mock inspection service with delay to keep inspector running
 			builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -277,7 +303,7 @@ var _ = Describe("InspectorService", func() {
 
 				// Use mock inspection service with delay to keep inspector running
 				builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-				srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+				srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 				err := srv.Credentials(ctx, *getVCenterCredentials())
 				Expect(err).NotTo(HaveOccurred())
@@ -341,8 +367,11 @@ var _ = Describe("InspectorService", func() {
 
 	Describe("Start", func() {
 		It("should complete inspection successfully for single VM", func() {
-			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+			builder := newMockInspectionBuilder().withStore(st).withVmConcerns("vm-1", []models.VmInspectionConcern{
+				{Category: "disk", Label: "L1", Msg: "m1"},
+				{Category: "net", Label: "L2", Msg: "m2"},
+			})
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -356,6 +385,15 @@ var _ = Describe("InspectorService", func() {
 
 			// Verify VM was inspected
 			Expect(builder.getInspectedVMs()).To(ContainElement("vm-1"))
+			results, err := st.Inspection().ListResults(ctx, "vm-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].VMID).To(Equal("vm-1"))
+			Expect(results[0].Concerns).To(HaveLen(2))
+			Expect(results[0].Concerns).To(ContainElements(
+				models.VmInspectionConcern{Category: "disk", Label: "L1", Msg: "m1"},
+				models.VmInspectionConcern{Category: "net", Label: "L2", Msg: "m2"},
+			))
 
 			// Verify VM status is completed
 			status := srv.GetVmStatus("vm-1")
@@ -364,7 +402,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should complete inspection successfully for multiple VMs", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -403,7 +441,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should mark VM as error when inspection fails and continue with next VM", func() {
 			builder := newMockInspectionBuilder().withVmError("vm-1", errors.New("inspection failed"))
-			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -427,7 +465,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should clear previous inspection data on new start", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -458,7 +496,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should be busy while running", func() {
 			builder := newMockInspectionBuilder().withWorkDelay(100 * time.Millisecond)
-			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -484,7 +522,7 @@ var _ = Describe("InspectorService", func() {
 	Describe("Stop", func() {
 		It("should stop inspector and cancel all pending VMs", func() {
 			builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-			srv = services.NewInspectorService(nil, 10, "").WithInspectionBuilder(builder.builder())
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
 			Expect(err).NotTo(HaveOccurred())
@@ -514,7 +552,7 @@ var _ = Describe("InspectorService", func() {
 	Describe("Inspection limit", func() {
 		It("should return InspectionLimitReachedError when Start receives more VM IDs than the limit", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(nil, 2, "").
+			srv = services.NewInspectorService(st, 2, "").
 				WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
@@ -533,7 +571,7 @@ var _ = Describe("InspectorService", func() {
 
 		It("should allow Start when VM count equals the limit", func() {
 			builder := newMockInspectionBuilder()
-			srv = services.NewInspectorService(nil, 2, "").
+			srv = services.NewInspectorService(st, 2, "").
 				WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
@@ -551,7 +589,7 @@ var _ = Describe("InspectorService", func() {
 			insertVM("vm-0", "test-vm-0")
 
 			builder := newMockInspectionBuilder().withWorkDelay(1 * time.Second)
-			srv = services.NewInspectorService(nil, 2, "").
+			srv = services.NewInspectorService(st, 2, "").
 				WithInspectionBuilder(builder.builder())
 
 			err := srv.Credentials(ctx, *getVCenterCredentials())
@@ -570,6 +608,59 @@ var _ = Describe("InspectorService", func() {
 			err = srv.Add("vm-2")
 			Expect(err).To(HaveOccurred())
 			Expect(srvErrors.IsInspectionLimitReachedError(err)).To(BeTrue())
+		})
+	})
+
+	Describe("store persistence (mock inspection)", func() {
+
+		It("should use only the latest inspection run for VM list concern count when the same VM is inspected twice", func() {
+			builder := newMockInspectionBuilder().withStore(st).withVmConcerns("vm-1", []models.VmInspectionConcern{
+				{Category: "old", Label: "a", Msg: "first-run"},
+			})
+			srv = services.NewInspectorService(st, 10, "").WithInspectionBuilder(builder.builder())
+
+			err := srv.Credentials(ctx, *getVCenterCredentials())
+			Expect(err).NotTo(HaveOccurred())
+
+			err = srv.Start(ctx, []string{"vm-1"})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func() models.InspectorState {
+				return srv.GetStatus().State
+			}, time.Second*10).Should(Equal(models.InspectorStateCompleted))
+
+			builder.withVmConcerns("vm-1", []models.VmInspectionConcern{
+				{Category: "n1", Label: "b", Msg: "r2"},
+				{Category: "n2", Label: "c", Msg: "r2"},
+				{Category: "n3", Label: "d", Msg: "r2"},
+			})
+
+			err = srv.Start(ctx, []string{"vm-1"})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func() models.InspectorState {
+				return srv.GetStatus().State
+			}, time.Second*10).Should(Equal(models.InspectorStateCompleted))
+
+			results, err := st.Inspection().ListResults(ctx, "vm-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(2))
+			Expect(results[0].InspectionID).To(BeNumerically(">", results[1].InspectionID))
+			Expect(results[0].Concerns).To(HaveLen(3))
+			Expect(results[1].Concerns).To(HaveLen(1))
+
+			vms, err := st.VM().List(ctx, nil, store.WithDefaultSort())
+			Expect(err).NotTo(HaveOccurred())
+
+			var vm *models.VirtualMachineSummary
+			for i := range vms {
+				if vms[i].ID == "vm-1" {
+					vm = &vms[i]
+					break
+				}
+			}
+			Expect(vm).NotTo(BeNil())
+			Expect(vm.InspectionConcernCount).To(Equal(3))
 		})
 	})
 
