@@ -30,8 +30,12 @@ func (h *Handler) StartInspection(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.vddkSrv.Status(c.Request.Context()); err != nil && srvErrors.IsResourceNotFoundError(err) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "must upload a vddk before starting an inspection"})
+	if _, err := h.vddkSrv.Status(c.Request.Context()); err != nil {
+		if srvErrors.IsResourceNotFoundError(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "A VDDK must be uploaded before starting an inspection"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
