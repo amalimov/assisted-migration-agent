@@ -100,6 +100,7 @@ RUN dnf install -y ca-certificates tzdata \
     qemu-kvm \
     nbdkit \
     nbdkit-vddk-plugin \
+    && rm -rf /usr/share/virtio-win # ~1G of unneeded files \
     && dnf clean all
 
 WORKDIR /app
