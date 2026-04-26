@@ -62,6 +62,7 @@ func main() {
 
 	rootCmd.AddCommand(cmd.NewRunCommand(cfg))
 	rootCmd.AddCommand(cmd.NewVersionCommand(cfg))
+	rootCmd.AddCommand(cmd.NewRightSizingCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Printf("%s", err)
