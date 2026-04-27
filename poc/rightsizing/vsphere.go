@@ -116,32 +116,11 @@ func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMI
 	return result, nil
 }
 
-// QueryVMMetrics queries historical performance metrics for a single VM.
-// It validates metric availability at the given interval before querying, and
-// records per-metric warnings for unavailable or empty metrics without failing the whole call.
-//
-// Returns nil metrics (not an error) if all desired metrics are unavailable.
-func QueryVMMetrics(ctx context.Context, client *govmomi.Client, vm VMInfo, cfg Config, start, end time.Time) (map[string]MetricStats, []string) {
-	pm := performance.NewManager(client.Client)
-
-	// Look up all counter names this vCenter knows about.
-	countersByName, err := pm.CounterInfoByName(ctx)
-	if err != nil {
-		return nil, []string{fmt.Sprintf("failed to get counter info: %v", err)}
-	}
-
-	// Determine which counters are available for this VM at the requested interval.
-	available, err := pm.AvailableMetric(ctx, vm.Ref, int32(cfg.IntervalID))
-	if err != nil {
-		return nil, []string{fmt.Sprintf("failed to query available metrics for %s: %v", vm.Name, err)}
-	}
-	availableIDs := make(map[int32]bool, len(available))
-	for _, m := range available {
-		availableIDs[m.CounterId] = true
-	}
-
-	// Build the query list: desired metrics that are both recognized and available.
-	var queryMetrics []string
+// resolveMetricIDs translates DesiredMetrics names to PerfMetricId values using the
+// vCenter's counter registry. Unrecognized names are skipped and reported as warnings.
+// Instance "" requests the aggregate rollup (not per-vCPU or per-disk breakdown).
+func resolveMetricIDs(countersByName map[string]*types.PerfCounterInfo) ([]types.PerfMetricId, []string) {
+	var ids []types.PerfMetricId
 	var warnings []string
 	for _, name := range DesiredMetrics {
 		info, ok := countersByName[name]
@@ -149,66 +128,137 @@ func QueryVMMetrics(ctx context.Context, client *govmomi.Client, vm VMInfo, cfg 
 			warnings = append(warnings, fmt.Sprintf("metric %q not recognized by this vCenter", name))
 			continue
 		}
-		if !availableIDs[info.Key] {
-			warnings = append(warnings, fmt.Sprintf("metric %q not available at interval %d for this VM", name, cfg.IntervalID))
+		ids = append(ids, types.PerfMetricId{CounterId: info.Key, Instance: ""})
+	}
+	return ids, warnings
+}
+
+// buildBatchSpecs builds one PerfQuerySpec per VM in the batch.
+// All specs share the same metric IDs, interval, and time window.
+func buildBatchSpecs(batch []VMInfo, metricIDs []types.PerfMetricId, intervalID int, start, end time.Time, maxSamples int32) []types.PerfQuerySpec {
+	specs := make([]types.PerfQuerySpec, len(batch))
+	for i, vm := range batch {
+		// Copy start/end per iteration so each spec holds an independent pointer.
+		s, e := start, end
+		specs[i] = types.PerfQuerySpec{
+			Entity: vm.Ref,
+			// IntervalId 7200 = "month" rollup (2 h samples); 300=day, 1800=week, 86400=year.
+			IntervalId: int32(intervalID),
+			MetricId:   metricIDs,
+			StartTime:  &s,
+			EndTime:    &e,
+			MaxSample:  maxSamples,
+		}
+	}
+	return specs
+}
+
+// parseEntityMetrics extracts a MetricStats map from a single PerfEntityMetric result.
+// Empty sample sets and duplicate instances are recorded as warnings, not errors.
+func parseEntityMetrics(em *types.PerfEntityMetric, countersByKey map[int32]*types.PerfCounterInfo) (map[string]MetricStats, []string) {
+	metrics := make(map[string]MetricStats)
+	var warnings []string
+	for _, v := range em.Value {
+		series, ok := v.(*types.PerfMetricIntSeries)
+		if !ok {
 			continue
 		}
-		queryMetrics = append(queryMetrics, name)
-	}
-
-	if len(queryMetrics) == 0 {
-		return nil, append(warnings, "no desired metrics available for this VM at the requested interval")
-	}
-
-	// Compute how many samples fit in the lookback window at the chosen interval.
-	// IntervalID is in seconds; Lookback is a time.Duration (nanoseconds).
-	maxSamples := max(int32(cfg.Lookback/(time.Duration(cfg.IntervalID)*time.Second)), 1)
-
-	spec := types.PerfQuerySpec{
-		StartTime: &start,
-		EndTime:   &end,
-		// IntervalId 7200 = "month" historical rollup (one sample per 2 hours).
-		// Other common values: 300=day (5 min), 1800=week (30 min), 86400=year (1 day).
-		IntervalId: int32(cfg.IntervalID), // DEVIATION: Config.IntervalID is int; cast to int32 here at the API boundary
-		MaxSample:  maxSamples,
-		// Instance "" = aggregate rollup, not per-vCPU or per-disk breakdown.
-		// Use Instance "*" if you want per-device granularity.
-		MetricId: []types.PerfMetricId{{Instance: ""}},
-	}
-
-	// TODO: construct performance.Manager once per command run and pass it into this function.
-	// Currently a fresh Manager is created per VM, bypassing its internal CounterInfoByName
-	// cache and incurring one extra vCenter round-trip per VM. Also batch the VM refs so
-	// SampleByName is called once for all VMs instead of once per VM.
-	raw, err := pm.SampleByName(ctx, spec, queryMetrics, []types.ManagedObjectReference{vm.Ref})
-	if err != nil {
-		return nil, append(warnings, fmt.Sprintf("query failed: %v", err))
-	}
-
-	series, err := pm.ToMetricSeries(ctx, raw)
-	if err != nil {
-		return nil, append(warnings, fmt.Sprintf("failed to convert metric series: %v", err))
-	}
-
-	metrics := make(map[string]MetricStats)
-	for _, em := range series {
-		for _, ms := range em.Value {
-			if _, exists := metrics[ms.Name]; exists {
-				// Multiple instances returned (e.g. per-disk entries alongside the aggregate).
-				// Keep the first occurrence (instance="", the aggregate) and skip the rest.
-				continue
-			}
-			if len(ms.Value) == 0 {
-				warnings = append(warnings, fmt.Sprintf("metric %q returned no samples (data may not exist for the requested window)", ms.Name))
-				continue
-			}
-			metrics[ms.Name] = ComputeStats(ms.Value)
+		info, ok := countersByKey[series.Id.CounterId]
+		if !ok {
+			continue
 		}
+		name := info.Name()
+		if _, exists := metrics[name]; exists {
+			// Defensive guard: duplicate counter IDs should not occur when Instance="" is
+			// requested, but skip any unexpected extra series rather than overwriting.
+			continue
+		}
+		if len(series.Value) == 0 {
+			warnings = append(warnings, fmt.Sprintf("metric %q returned no samples (data may not exist for the requested window)", name))
+			continue
+		}
+		metrics[name] = ComputeStats(series.Value)
 	}
-
-	if len(metrics) == 0 {
+	if len(metrics) == 0 && len(warnings) == 0 {
+		// em.Value was empty — vCenter returned no series at all for this VM.
 		warnings = append(warnings, "query succeeded but returned no samples (data gap or window too far in the past)")
 	}
-
 	return metrics, warnings
+}
+
+// backfillMissingVMs records a warning for every VM in the batch that vCenter
+// returned no result for, and sets the Name field on entries that do exist.
+func backfillMissingVMs(batch []VMInfo, results map[string]VMReport) {
+	for _, vm := range batch {
+		r, exists := results[vm.Ref.Value]
+		if !exists {
+			results[vm.Ref.Value] = VMReport{
+				Name:     vm.Name,
+				MOID:     vm.Ref.Value,
+				Warnings: []string{"vCenter returned no data for this VM (powered off throughout window, or data not yet collected)"},
+			}
+			continue
+		}
+		r.Name = vm.Name
+		results[vm.Ref.Value] = r
+	}
+}
+
+// QueryMetrics queries historical performance metrics for all VMs in batches.
+// Counter info is resolved once; one QueryPerf call is made per batch of cfg.BatchSize VMs.
+// The returned map is keyed by VM MoRef value and always contains an entry for every input VM.
+func QueryMetrics(ctx context.Context, client *govmomi.Client, vms []VMInfo, cfg Config, start, end time.Time) (map[string]VMReport, []string) {
+	pm := performance.NewManager(client.Client)
+
+	countersByName, err := pm.CounterInfoByName(ctx)
+	if err != nil {
+		return nil, []string{fmt.Sprintf("failed to get counter info: %v", err)}
+	}
+	countersByKey, err := pm.CounterInfoByKey(ctx)
+	if err != nil {
+		return nil, []string{fmt.Sprintf("failed to get counter info by key: %v", err)}
+	}
+
+	// We skip the per-VM AvailableMetric check: QueryPerf returns no data for unavailable
+	// metrics rather than erroring; missing data is surfaced as per-VM warnings below.
+	metricIDs, globalWarnings := resolveMetricIDs(countersByName)
+	if len(metricIDs) == 0 {
+		return nil, append(globalWarnings, "no desired metrics recognized by this vCenter")
+	}
+
+	if cfg.IntervalID <= 0 {
+		return nil, []string{fmt.Sprintf("IntervalID must be > 0 (got %d)", cfg.IntervalID)}
+	}
+	maxSamples := max(int32(cfg.Lookback/(time.Duration(cfg.IntervalID)*time.Second)), 1)
+	results := make(map[string]VMReport, len(vms))
+
+	for i := 0; i < len(vms); i += cfg.BatchSize {
+		batch := vms[i:min(i+cfg.BatchSize, len(vms))]
+		specs := buildBatchSpecs(batch, metricIDs, cfg.IntervalID, start, end, maxSamples)
+
+		raw, err := pm.Query(ctx, specs)
+		if err != nil {
+			for _, vm := range batch {
+				results[vm.Ref.Value] = VMReport{
+					Name:     vm.Name,
+					MOID:     vm.Ref.Value,
+					Warnings: []string{fmt.Sprintf("batch query failed: %v", err)},
+				}
+			}
+			continue
+		}
+
+		for _, base := range raw {
+			em, ok := base.(*types.PerfEntityMetric)
+			if !ok {
+				continue
+			}
+			metrics, warnings := parseEntityMetrics(em, countersByKey)
+			results[em.Entity.Value] = VMReport{MOID: em.Entity.Value, Metrics: metrics, Warnings: warnings}
+		}
+
+		backfillMissingVMs(batch, results)
+	}
+
+	return results, globalWarnings
 }

@@ -17,6 +17,7 @@ export VM_NAME_FILTER=''         # optional: filter by name substring
 export MAX_VMS=5                 # max VMs to query (default: 5)
 export LOOKBACK=720h             # lookback window (default: 720h = 30 days)
 export INTERVAL_ID=7200          # vSphere interval ID (default: 7200 = month)
+export BATCH_SIZE=64             # VMs per QueryPerf call (default: 64)
 
 go run . rightsizing
 ```
@@ -42,6 +43,7 @@ Each flag falls back to its environment variable.
 | `--max-vms` | `MAX_VMS` | `5` | Max VMs |
 | `--lookback` | `LOOKBACK` | `720h` | Lookback (Go duration) |
 | `--interval-id` | `INTERVAL_ID` | `7200` | vSphere interval ID |
+| `--batch-size` | `BATCH_SIZE` | `64` | VMs per QueryPerf round-trip |
 
 ## vSphere Interval IDs
 

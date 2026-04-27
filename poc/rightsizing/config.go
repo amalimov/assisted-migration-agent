@@ -13,4 +13,5 @@ type Config struct {
 	MaxVMs     int
 	Lookback   time.Duration
 	IntervalID int // vSphere historical interval in seconds (300=day, 1800=week, 7200=month, 86400=year)
+	BatchSize  int // number of VMs per QueryPerf round-trip (default 64)
 }
