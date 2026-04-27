@@ -90,10 +90,11 @@ func runRightSizing(ctx context.Context, cfg rightsizing.Config) error {
 	windowStart := now.Add(-cfg.Lookback)
 
 	report := rightsizing.Report{
-		VCenter:     cfg.VCenterURL,
-		WindowStart: windowStart,
-		WindowEnd:   now,
-		IntervalID:  cfg.IntervalID,
+		VCenter:             cfg.VCenterURL,
+		WindowStart:         windowStart,
+		WindowEnd:           now,
+		IntervalID:          cfg.IntervalID,
+		ExpectedSampleCount: int(cfg.Lookback / (time.Duration(cfg.IntervalID) * time.Second)),
 	}
 
 	zap.S().Infof("querying metrics for %d VM(s) in batches of %d ...", len(vms), cfg.BatchSize)

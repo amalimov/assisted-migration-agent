@@ -81,6 +81,7 @@ No live vCenter required.
   "window_start": "2026-03-27T12:00:00Z",
   "window_end": "2026-04-26T12:00:00Z",
   "interval_id": 7200,
+  "expected_sample_count": 360,
   "vms": [
     {
       "name": "app-server-01",

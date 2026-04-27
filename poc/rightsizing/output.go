@@ -8,12 +8,17 @@ import (
 
 // Report is the top-level JSON output structure.
 type Report struct {
-	VCenter     string     `json:"vcenter"`
-	WindowStart time.Time  `json:"window_start"`
-	WindowEnd   time.Time  `json:"window_end"`
-	IntervalID  int        `json:"interval_id"`
-	VMs         []VMReport `json:"vms"`
-	Warnings    []string   `json:"warnings"`
+	VCenter     string    `json:"vcenter"`
+	WindowStart time.Time `json:"window_start"`
+	WindowEnd   time.Time `json:"window_end"`
+	IntervalID  int       `json:"interval_id"`
+	// ExpectedSampleCount is the theoretical maximum number of samples for the
+	// queried window: floor(lookback / interval). Compare against MetricStats.SampleCount
+	// to gauge data coverage. A low ratio may indicate the VM was powered off, recently
+	// migrated, or that vCenter has a data gap — not necessarily missing or bad data.
+	ExpectedSampleCount int        `json:"expected_sample_count"`
+	VMs                 []VMReport `json:"vms"`
+	Warnings            []string   `json:"warnings"`
 }
 
 // VMReport holds per-VM metric summaries and any per-VM warnings.
