@@ -44,6 +44,7 @@ Each flag falls back to its environment variable.
 | `--lookback` | `LOOKBACK` | `720h` | Lookback (Go duration) |
 | `--interval-id` | `INTERVAL_ID` | `7200` | vSphere interval ID |
 | `--batch-size` | `BATCH_SIZE` | `64` | VMs per QueryPerf round-trip |
+| `--db-path` | `DB_PATH` | `""` | DuckDB file path for persisting results; empty = no persistence |
 
 ## vSphere Interval IDs
 
@@ -64,6 +65,33 @@ Each flag falls back to its environment variable.
 | `mem.consumed.average` | KB | guest + hypervisor overhead |
 | `disk.used.latest` | KB | actual disk occupancy |
 | `disk.provisioned.latest` | KB | provisioned disk size |
+
+## Persisting Results
+
+Pass `--db-path` (or set `DB_PATH`) to write results to a DuckDB file:
+
+```bash
+go run . rightsizing --db-path ./rightsizing.duckdb
+```
+
+The schema is applied automatically. Two tables are created:
+
+| Table | Contents |
+|-------|----------|
+| `rightsizing_reports` | One row per run: vcenter, cluster, window, expected vs written batch count |
+| `rightsizing_metrics` | One row per VM × metric: all six aggregated stat fields |
+
+Query results with the DuckDB CLI or any DuckDB-compatible tool:
+
+```sql
+-- Coverage: compare actual vs expected samples per VM and metric
+SELECT r.vcenter, r.cluster_id, m.vm_name, m.metric_key,
+       m.sample_count, r.expected_sample_count,
+       ROUND(m.sample_count * 100.0 / r.expected_sample_count, 1) AS coverage_pct
+FROM rightsizing_metrics m
+JOIN rightsizing_reports r ON r.id = m.report_id
+ORDER BY coverage_pct ASC;
+```
 
 ## Running Tests
 

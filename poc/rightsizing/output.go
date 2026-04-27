@@ -9,6 +9,7 @@ import (
 // Report is the top-level JSON output structure.
 type Report struct {
 	VCenter     string    `json:"vcenter"`
+	ClusterID   string    `json:"cluster_id,omitempty"` // empty = all clusters
 	WindowStart time.Time `json:"window_start"`
 	WindowEnd   time.Time `json:"window_end"`
 	IntervalID  int       `json:"interval_id"`

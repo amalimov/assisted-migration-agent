@@ -1,0 +1,188 @@
+package store_test
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/kubev2v/assisted-migration-agent/internal/models"
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
+	"github.com/kubev2v/assisted-migration-agent/test"
+)
+
+var _ = Describe("RightSizingStore", func() {
+	var (
+		ctx context.Context
+		db  *sql.DB
+		s   *store.Store
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+
+		var err error
+		db, err = store.NewDB(nil, ":memory:")
+		Expect(err).NotTo(HaveOccurred())
+
+		err = migrations.Run(ctx, db)
+		Expect(err).NotTo(HaveOccurred())
+
+		s = store.NewStore(db, test.NewMockValidator())
+	})
+
+	AfterEach(func() {
+		if db != nil {
+			_ = db.Close()
+		}
+	})
+
+	testReport := func() models.RightSizingReport {
+		return models.RightSizingReport{
+			VCenter:             "https://vcenter.example.com/sdk",
+			ClusterID:           "domain-c123",
+			IntervalID:          7200,
+			WindowStart:         time.Now().Add(-720 * time.Hour).UTC(),
+			WindowEnd:           time.Now().UTC(),
+			ExpectedSampleCount: 360,
+		}
+	}
+
+	Describe("CreateReport", func() {
+		It("should insert a report and return a non-empty UUID", func() {
+			id, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 5)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(id).NotTo(BeEmpty())
+		})
+
+		It("should set expected_batch_count to ceil(vmCount/batchSize)", func() {
+			// ceil(10/3) = 4
+			id, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 3)
+			Expect(err).NotTo(HaveOccurred())
+
+			var expectedBatches, writtenBatches int
+			err = db.QueryRow(
+				`SELECT expected_batch_count, written_batch_count FROM rightsizing_reports WHERE id = ?`, id,
+			).Scan(&expectedBatches, &writtenBatches)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(expectedBatches).To(Equal(4))
+			Expect(writtenBatches).To(Equal(0))
+		})
+
+		It("should persist vcenter and cluster_id correctly", func() {
+			r := testReport()
+			id, err := s.RightSizing().CreateReport(ctx, r, 1, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			var vcenter, clusterID string
+			err = db.QueryRow(
+				`SELECT vcenter, cluster_id FROM rightsizing_reports WHERE id = ?`, id,
+			).Scan(&vcenter, &clusterID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vcenter).To(Equal(r.VCenter))
+			Expect(clusterID).To(Equal(r.ClusterID))
+		})
+
+		It("should return an error when batchSize is zero", func() {
+			_, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 0)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("WriteBatch", func() {
+		It("should insert metric rows for all metrics with non-zero SampleCount", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+
+			metrics := []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 360, Average: 500, P95: 1200, P99: 1500, Max: 2000, Latest: 450},
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "mem.consumed.average", SampleCount: 360, Average: 2048, P95: 3000, P99: 3500, Max: 4096, Latest: 2100},
+			}
+			Expect(s.RightSizing().WriteBatch(ctx, id, metrics)).To(Succeed())
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_metrics WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(2))
+		})
+
+		It("should skip metrics with zero SampleCount", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+
+			metrics := []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 0},
+			}
+			Expect(s.RightSizing().WriteBatch(ctx, id, metrics)).To(Succeed())
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_metrics WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
+		})
+
+		It("should return nil and insert nothing when given an empty slice", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			Expect(s.RightSizing().WriteBatch(ctx, id, nil)).To(Succeed())
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_metrics WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
+		})
+
+		It("should be idempotent on duplicate rows", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+
+			metrics := []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 10, Average: 100},
+			}
+			Expect(s.RightSizing().WriteBatch(ctx, id, metrics)).To(Succeed())
+			Expect(s.RightSizing().WriteBatch(ctx, id, metrics)).To(Succeed()) // duplicate
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_metrics WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+		})
+	})
+
+	Describe("IncrementWrittenBatchCount", func() {
+		It("should increment written_batch_count by 1 per call", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 4, 2)
+
+			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
+			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
+
+			var written int
+			Expect(db.QueryRow(`SELECT written_batch_count FROM rightsizing_reports WHERE id = ?`, id).Scan(&written)).To(Succeed())
+			Expect(written).To(Equal(2))
+		})
+	})
+
+	Describe("WithTx atomicity", func() {
+		It("should roll back both WriteBatch and IncrementWrittenBatchCount on error", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+
+			err := s.WithTx(ctx, func(txCtx context.Context) error {
+				metrics := []models.RightSizingMetric{
+					{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 10, Average: 100},
+				}
+				if err := s.RightSizing().WriteBatch(txCtx, id, metrics); err != nil {
+					return err
+				}
+				if err := s.RightSizing().IncrementWrittenBatchCount(txCtx, id); err != nil {
+					return err
+				}
+				return errors.New("simulated failure — rolls back everything")
+			})
+			Expect(err).To(HaveOccurred())
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_metrics WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
+
+			var written int
+			Expect(db.QueryRow(`SELECT written_batch_count FROM rightsizing_reports WHERE id = ?`, id).Scan(&written)).To(Succeed())
+			Expect(written).To(Equal(0))
+		})
+	})
+})

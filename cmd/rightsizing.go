@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -10,6 +11,9 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/kubev2v/assisted-migration-agent/internal/models"
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
 	"github.com/kubev2v/assisted-migration-agent/poc/rightsizing"
 )
 
@@ -45,6 +49,7 @@ func NewRightSizingCommand() *cobra.Command {
 	c.Flags().StringVar(&lookbackStr, "lookback", rsEnvStr("LOOKBACK", "720h"), "lookback window as Go duration (720h = 30 days)")
 	c.Flags().IntVar(&intervalID, "interval-id", rsEnvInt("INTERVAL_ID", 7200), "vSphere historical interval ID (7200=month, 1800=week, 300=day)")
 	c.Flags().IntVar(&cfg.BatchSize, "batch-size", rsEnvInt("BATCH_SIZE", 64), "number of VMs per QueryPerf round-trip")
+	c.Flags().StringVar(&cfg.DBPath, "db-path", rsEnvStr("DB_PATH", ""), "path to DuckDB file for persisting results (empty = no persistence)")
 
 	return c
 }
@@ -91,6 +96,7 @@ func runRightSizing(ctx context.Context, cfg rightsizing.Config) error {
 
 	report := rightsizing.Report{
 		VCenter:             cfg.VCenterURL,
+		ClusterID:           cfg.ClusterID,
 		WindowStart:         windowStart,
 		WindowEnd:           now,
 		IntervalID:          cfg.IntervalID,
@@ -104,7 +110,99 @@ func runRightSizing(ctx context.Context, cfg rightsizing.Config) error {
 		report.VMs = append(report.VMs, vmResults[vm.Ref.Value])
 	}
 
+	if cfg.DBPath != "" {
+		// Note: ctx carries the 5-minute timeout shared with connect/discover/query.
+		// Storage writes run against the remaining budget; large inventories may be
+		// partially written if the budget expires.
+		if err := persistReport(ctx, cfg, report, vms, vmResults); err != nil {
+			zap.S().Warnf("storage failed (results still printed): %v", err)
+		}
+	}
+
 	return rightsizing.PrintReport(report)
+}
+
+// persistReport opens the DuckDB store, runs any pending migrations, and writes
+// the rightsizing results in sub-batches matching cfg.BatchSize.
+// WriteBatch and IncrementWrittenBatchCount are wrapped in a single transaction
+// per batch so the counter always reflects the number of fully-written batches.
+func persistReport(
+	ctx context.Context,
+	cfg rightsizing.Config,
+	report rightsizing.Report,
+	vms []rightsizing.VMInfo,
+	vmResults map[string]rightsizing.VMReport,
+) error {
+	db, err := store.NewDB(nil, cfg.DBPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := migrations.Run(ctx, db); err != nil {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+
+	// nil validator: OPA-based VM filtering is not used here. persistReport
+	// never calls s.Migrate(), s.Parser(), or s.VM() — the only paths that
+	// invoke the parser — so passing nil is safe.
+	s := store.NewStore(db, nil)
+
+	r := models.RightSizingReport{
+		VCenter:             report.VCenter,
+		ClusterID:           report.ClusterID,
+		IntervalID:          report.IntervalID,
+		WindowStart:         report.WindowStart,
+		WindowEnd:           report.WindowEnd,
+		ExpectedSampleCount: report.ExpectedSampleCount,
+	}
+	reportID, err := s.RightSizing().CreateReport(ctx, r, len(vms), cfg.BatchSize)
+	if err != nil {
+		return fmt.Errorf("create report: %w", err)
+	}
+	zap.S().Infof("created rightsizing report %s in %s", reportID, cfg.DBPath)
+
+	expectedBatches := int(math.Ceil(float64(len(vms)) / float64(cfg.BatchSize)))
+	for i := 0; i < len(vms); i += cfg.BatchSize {
+		batchVMs := vms[i:min(i+cfg.BatchSize, len(vms))]
+		batchMetrics := toRightSizingMetrics(batchVMs, vmResults)
+		batchNum := i/cfg.BatchSize + 1
+
+		if err := s.WithTx(ctx, func(txCtx context.Context) error {
+			if err := s.RightSizing().WriteBatch(txCtx, reportID, batchMetrics); err != nil {
+				return err
+			}
+			return s.RightSizing().IncrementWrittenBatchCount(txCtx, reportID)
+		}); err != nil {
+			zap.S().Warnf("batch %d/%d write failed: %v", batchNum, expectedBatches, err)
+		} else {
+			zap.S().Infof("wrote batch %d/%d to %s", batchNum, expectedBatches, cfg.DBPath)
+		}
+	}
+	return nil
+}
+
+// toRightSizingMetrics flattens the per-VM metric map into a flat slice
+// for a sub-batch of VMs, preserving the original vms order.
+func toRightSizingMetrics(batchVMs []rightsizing.VMInfo, vmResults map[string]rightsizing.VMReport) []models.RightSizingMetric {
+	var out []models.RightSizingMetric
+	for _, vm := range batchVMs {
+		r := vmResults[vm.Ref.Value]
+		for key, stats := range r.Metrics {
+			out = append(out, models.RightSizingMetric{
+				VMName:      r.Name,
+				MOID:        r.MOID,
+				MetricKey:   key,
+				SampleCount: stats.SampleCount,
+				Average:     stats.Average,
+				P95:         stats.P95,
+				P99:         stats.P99,
+				Max:         stats.Max,
+				Latest:      stats.Latest,
+			})
+		}
+	}
+	return out
 }
 
 // rsEnvStr / rsEnvBool / rsEnvInt are flag-default helpers scoped to this command.
