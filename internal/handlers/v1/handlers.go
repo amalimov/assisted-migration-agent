@@ -60,15 +60,23 @@ type GroupService interface {
 	Delete(ctx context.Context, id int) error
 }
 
+// RightsizingService defines the interface for rightsizing operations.
+type RightsizingService interface {
+	TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReport, error)
+	ListReports(ctx context.Context) ([]models.RightsizingReport, error)
+	GetReport(ctx context.Context, id string) (*models.RightsizingReport, error)
+}
+
 type Handler struct {
-	cfg          config.Configuration
-	consoleSrv   ConsoleService
-	collectorSrv CollectorService
-	inventorySrv InventoryService
-	inspectorSrv InspectorService
-	vddkSrv      VddkService
-	vmSrv        VMService
-	groupSrv     GroupService
+	cfg            config.Configuration
+	consoleSrv     ConsoleService
+	collectorSrv   CollectorService
+	inventorySrv   InventoryService
+	inspectorSrv   InspectorService
+	vddkSrv        VddkService
+	vmSrv          VMService
+	groupSrv       GroupService
+	rightsizingSrv RightsizingService
 }
 
 func NewHandler(cfg config.Configuration) *Handler {
@@ -107,5 +115,10 @@ func (h *Handler) WithVddkService(srv VddkService) *Handler {
 
 func (h *Handler) WithGroupService(srv GroupService) *Handler {
 	h.groupSrv = srv
+	return h
+}
+
+func (h *Handler) WithRightsizingService(srv RightsizingService) *Handler {
+	h.rightsizingSrv = srv
 	return h
 }

@@ -301,3 +301,47 @@ func NewGroupFromModel(g models.Group) Group {
 	}
 	return group
 }
+
+// NewRightsizingMetricStatsFromModel converts a models.RightsizingMetricStats to the API type.
+func NewRightsizingMetricStatsFromModel(s models.RightsizingMetricStats) RightsizingMetricStats {
+	return RightsizingMetricStats{
+		SampleCount: s.SampleCount,
+		Average:     s.Average,
+		P95:         s.P95,
+		P99:         s.P99,
+		Max:         s.Max,
+		Latest:      s.Latest,
+	}
+}
+
+// NewRightsizingVMReportFromModel converts a models.RightsizingVMReport to the API type.
+func NewRightsizingVMReportFromModel(vm models.RightsizingVMReport) RightsizingVMReport {
+	metrics := make(map[string]RightsizingMetricStats, len(vm.Metrics))
+	for k, v := range vm.Metrics {
+		metrics[k] = NewRightsizingMetricStatsFromModel(v)
+	}
+	return RightsizingVMReport{
+		Name:    vm.Name,
+		Moid:    vm.MOID,
+		Metrics: metrics,
+	}
+}
+
+// NewRightsizingReportFromModel converts a models.RightsizingReport to the API type.
+func NewRightsizingReportFromModel(r models.RightsizingReport) RightsizingReport {
+	vms := make([]RightsizingVMReport, 0, len(r.VMs))
+	for _, vm := range r.VMs {
+		vms = append(vms, NewRightsizingVMReportFromModel(vm))
+	}
+	return RightsizingReport{
+		Id:                  r.ID,
+		Vcenter:             r.VCenter,
+		ClusterId:           r.ClusterID,
+		WindowStart:         r.WindowStart,
+		WindowEnd:           r.WindowEnd,
+		IntervalId:          r.IntervalID,
+		ExpectedSampleCount: r.ExpectedSampleCount,
+		Vms:                 vms,
+		CreatedAt:           r.CreatedAt,
+	}
+}

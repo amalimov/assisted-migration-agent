@@ -206,6 +206,73 @@ type InspectorStatus struct {
 // InspectorStatusState Inspector state
 type InspectorStatusState string
 
+// RightsizingCollectRequest defines model for RightsizingCollectRequest.
+type RightsizingCollectRequest struct {
+	// BatchSize Number of VMs per QueryPerf round-trip
+	BatchSize *int `json:"batch_size,omitempty"`
+
+	// ClusterId MoRef value of a ClusterComputeResource to scope discovery (e.g. domain-c123)
+	ClusterId   *string            `json:"cluster_id,omitempty"`
+	Credentials VcenterCredentials `json:"credentials"`
+
+	// IntervalId vSphere historical interval ID in seconds (300=day, 1800=week, 7200=month)
+	IntervalId *int `json:"interval_id,omitempty"`
+
+	// LookbackHours Lookback window in hours (default 720 = 30 days)
+	LookbackHours *int `json:"lookback_hours,omitempty"`
+
+	// MaxVms Maximum number of VMs to query
+	MaxVms *int `json:"max_vms,omitempty"`
+
+	// NameFilter Filter VMs by name substring
+	NameFilter *string `json:"name_filter,omitempty"`
+}
+
+// RightsizingMetricStats defines model for RightsizingMetricStats.
+type RightsizingMetricStats struct {
+	Average     float64 `json:"average"`
+	Latest      float64 `json:"latest"`
+	Max         float64 `json:"max"`
+	P95         float64 `json:"p95"`
+	P99         float64 `json:"p99"`
+	SampleCount int     `json:"sample_count"`
+}
+
+// RightsizingReport defines model for RightsizingReport.
+type RightsizingReport struct {
+	// ClusterId MoRef of the ClusterComputeResource scoped for this collection (empty = all clusters)
+	ClusterId string    `json:"cluster_id"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// ExpectedSampleCount Theoretical maximum samples for the window (lookback / interval)
+	ExpectedSampleCount int `json:"expected_sample_count"`
+
+	// Id UUID of the report
+	Id         string `json:"id"`
+	IntervalId int    `json:"interval_id"`
+
+	// Vcenter vCenter URL used for this collection
+	Vcenter     string                `json:"vcenter"`
+	Vms         []RightsizingVMReport `json:"vms"`
+	WindowEnd   time.Time             `json:"window_end"`
+	WindowStart time.Time             `json:"window_start"`
+}
+
+// RightsizingReportListResponse defines model for RightsizingReportListResponse.
+type RightsizingReportListResponse struct {
+	Reports []RightsizingReport `json:"reports"`
+
+	// Total Total number of stored reports
+	Total int `json:"total"`
+}
+
+// RightsizingVMReport defines model for RightsizingVMReport.
+type RightsizingVMReport struct {
+	Metrics map[string]RightsizingMetricStats `json:"metrics"`
+	Moid    string                            `json:"moid"`
+	Name    string                            `json:"name"`
+}
+
 // UpdateGroupRequest defines model for UpdateGroupRequest.
 type UpdateGroupRequest struct {
 	// Description Optional group description
@@ -577,3 +644,6 @@ type PutInspectorCredentialsJSONRequestBody = VcenterCredentials
 
 // PutInspectorVddkMultipartRequestBody defines body for PutInspectorVddk for multipart/form-data ContentType.
 type PutInspectorVddkMultipartRequestBody PutInspectorVddkMultipartBody
+
+// TriggerRightsizingCollectionJSONRequestBody defines body for TriggerRightsizingCollection for application/json ContentType.
+type TriggerRightsizingCollectionJSONRequestBody = RightsizingCollectRequest

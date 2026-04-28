@@ -64,6 +64,15 @@ type ServerInterface interface {
 	// Get collected inventory
 	// (GET /inventory)
 	GetInventory(c *gin.Context, params GetInventoryParams)
+	// List all rightsizing reports
+	// (GET /rightsizing)
+	ListRightsizingReports(c *gin.Context)
+	// Trigger rightsizing metrics collection
+	// (POST /rightsizing)
+	TriggerRightsizingCollection(c *gin.Context)
+	// Get a specific rightsizing report with full VM metrics
+	// (GET /rightsizing/{id})
+	GetRightsizingReport(c *gin.Context, id string)
 	// Get agent version information
 	// (GET /version)
 	GetVersion(c *gin.Context)
@@ -439,6 +448,56 @@ func (siw *ServerInterfaceWrapper) GetInventory(c *gin.Context) {
 	siw.Handler.GetInventory(c, params)
 }
 
+// ListRightsizingReports operation middleware
+func (siw *ServerInterfaceWrapper) ListRightsizingReports(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListRightsizingReports(c)
+}
+
+// TriggerRightsizingCollection operation middleware
+func (siw *ServerInterfaceWrapper) TriggerRightsizingCollection(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.TriggerRightsizingCollection(c)
+}
+
+// GetRightsizingReport operation middleware
+func (siw *ServerInterfaceWrapper) GetRightsizingReport(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetRightsizingReport(c, id)
+}
+
 // GetVersion operation middleware
 func (siw *ServerInterfaceWrapper) GetVersion(c *gin.Context) {
 
@@ -594,6 +653,9 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/inspector/vddk", wrapper.GetInspectorVddkStatus)
 	router.PUT(options.BaseURL+"/inspector/vddk", wrapper.PutInspectorVddk)
 	router.GET(options.BaseURL+"/inventory", wrapper.GetInventory)
+	router.GET(options.BaseURL+"/rightsizing", wrapper.ListRightsizingReports)
+	router.POST(options.BaseURL+"/rightsizing", wrapper.TriggerRightsizingCollection)
+	router.GET(options.BaseURL+"/rightsizing/:id", wrapper.GetRightsizingReport)
 	router.GET(options.BaseURL+"/version", wrapper.GetVersion)
 	router.GET(options.BaseURL+"/vms", wrapper.GetVMs)
 	router.GET(options.BaseURL+"/vms/:id", wrapper.GetVM)

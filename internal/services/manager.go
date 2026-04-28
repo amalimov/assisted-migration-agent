@@ -18,14 +18,15 @@ type ServiceManager struct {
 	store         *store.Store
 	consoleClient *console.Client
 
-	console   *Console
-	collector *CollectorService
-	inspector *InspectorService
-	vddk      *VddkService
-	inventory *InventoryService
-	event     *EventService
-	vm        *VMService
-	group     *GroupService
+	console     *Console
+	collector   *CollectorService
+	inspector   *InspectorService
+	vddk        *VddkService
+	inventory   *InventoryService
+	event       *EventService
+	vm          *VMService
+	group       *GroupService
+	rightsizing *RightsizingService
 }
 
 type ServiceManagerOption func(*ServiceManager)
@@ -93,6 +94,7 @@ func (m *ServiceManager) Initialize() error {
 
 	m.vm = NewVMService(m.store)
 	m.group = NewGroupService(m.store)
+	m.rightsizing = NewRightsizingService()
 
 	return nil
 }
@@ -127,6 +129,10 @@ func (m *ServiceManager) VirtualMachineService() *VMService {
 
 func (m *ServiceManager) GroupService() *GroupService {
 	return m.group
+}
+
+func (m *ServiceManager) RightsizingService() *RightsizingService {
+	return m.rightsizing
 }
 
 func (m *ServiceManager) Stop(ctx context.Context) {
