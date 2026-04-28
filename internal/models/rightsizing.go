@@ -31,6 +31,32 @@ type RightSizingMetric struct {
 	Latest      float64
 }
 
+// RightsizingCollectionStateType is the state of an async rightsizing collection run.
+type RightsizingCollectionStateType string
+
+const (
+	RightsizingCollectionStateConnecting  RightsizingCollectionStateType = "connecting"
+	RightsizingCollectionStateDiscovering RightsizingCollectionStateType = "discovering"
+	RightsizingCollectionStateQuerying    RightsizingCollectionStateType = "querying"
+	RightsizingCollectionStatePersisting  RightsizingCollectionStateType = "persisting"
+	RightsizingCollectionStateCompleted   RightsizingCollectionStateType = "completed"
+	RightsizingCollectionStateError       RightsizingCollectionStateType = "error"
+)
+
+// RightsizingCollectionStatus is the status type threaded through the work pipeline.
+// During the persisting phase, BatchNum and TotalBatches describe batch progress.
+type RightsizingCollectionStatus struct {
+	State        RightsizingCollectionStateType
+	Error        error
+	BatchNum     int // 1-indexed; 0 = not in batch phase
+	TotalBatches int
+}
+
+// RightsizingCollectionResult is the result type threaded through the work pipeline.
+type RightsizingCollectionResult struct {
+	ReportID string
+}
+
 // API read-model types (RightsizingXxx — lowercase s).
 // These are returned by RightsizingService and consumed by the HTTP handler layer.
 

@@ -137,6 +137,27 @@ func (s *RightSizingStore) IncrementWrittenBatchCount(ctx context.Context, repor
 	return nil
 }
 
+// UpdateExpectedBatchCount sets expected_batch_count = ceil(vmCount/batchSize).
+// Called after VM discovery, once the real VM count is known.
+func (s *RightSizingStore) UpdateExpectedBatchCount(ctx context.Context, reportID string, vmCount, batchSize int) error {
+	if batchSize <= 0 {
+		return fmt.Errorf("batchSize must be > 0, got %d", batchSize)
+	}
+	expectedBatches := int(math.Ceil(float64(vmCount) / float64(batchSize)))
+
+	query, args, err := sq.Update(rsReportsTable).
+		Set(rsReportsColExpectedBatchCount, expectedBatches).
+		Where(sq.Eq{rsReportsColID: reportID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building update expected batch count query: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("updating expected_batch_count: %w", err)
+	}
+	return nil
+}
+
 // ListReports returns metadata for all rightsizing reports ordered by creation time descending.
 // VM metrics are not included; use GetReport to retrieve the full report with metrics.
 // Returns an empty slice (not nil) when no reports exist.

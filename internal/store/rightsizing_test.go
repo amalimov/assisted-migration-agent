@@ -187,6 +187,27 @@ var _ = Describe("RightSizingStore", func() {
 		})
 	})
 
+	Describe("UpdateExpectedBatchCount", func() {
+		It("should update expected_batch_count after VM discovery", func() {
+			id, err := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// ceil(10/3) = 4
+			Expect(s.RightSizing().UpdateExpectedBatchCount(ctx, id, 10, 3)).To(Succeed())
+
+			var expected int
+			Expect(db.QueryRow(
+				`SELECT expected_batch_count FROM rightsizing_reports WHERE id = ?`, id,
+			).Scan(&expected)).To(Succeed())
+			Expect(expected).To(Equal(4))
+		})
+
+		It("should return an error when batchSize is zero", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
+			Expect(s.RightSizing().UpdateExpectedBatchCount(ctx, id, 10, 0)).To(HaveOccurred())
+		})
+	})
+
 	// seedReport creates a report and writes one VM with two metrics.
 	// Returns the report ID.
 	seedReport := func(vcenter string) string {

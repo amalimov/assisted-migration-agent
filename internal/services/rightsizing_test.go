@@ -12,6 +12,8 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/internal/services"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	rsig "github.com/kubev2v/assisted-migration-agent/pkg/rightsizing"
+	"github.com/kubev2v/assisted-migration-agent/pkg/work"
 	"github.com/kubev2v/assisted-migration-agent/test"
 )
 
@@ -98,10 +100,72 @@ var _ = Describe("RightsizingService", func() {
 	})
 
 	Describe("TriggerCollection", func() {
-		It("should return an error (not yet implemented)", func() {
-			_, err := svc.TriggerCollection(ctx, models.RightsizingParams{})
+		It("should create a report shell in DuckDB and return it immediately", func() {
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+				return &services.RightsizingCollectionHandle{
+					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
+						{
+							Status: func() models.RightsizingCollectionStatus {
+								return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateCompleted}
+							},
+							Work: func(ctx context.Context, result models.RightsizingCollectionResult) (models.RightsizingCollectionResult, error) {
+								return result, nil
+							},
+						},
+					}),
+					LogoutFn: func() {},
+				}
+			})
+
+			params := models.RightsizingParams{
+				Credentials: models.Credentials{URL: "https://vc.example.com", Username: "admin", Password: "secret"},
+				LookbackH:   720,
+				IntervalID:  7200,
+				MaxVMs:      10,
+				BatchSize:   5,
+			}
+			report, err := svc.TriggerCollection(ctx, params)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(report.ID).NotTo(BeEmpty())
+			Expect(report.VCenter).To(Equal("https://vc.example.com"))
+
+			// Shell must be persisted in the DB.
+			summaries, err := svc.ListReports(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(summaries).To(HaveLen(1))
+			Expect(summaries[0].ID).To(Equal(report.ID))
+		})
+
+		It("should reject a second TriggerCollection while one is running", func() {
+			blockCh := make(chan struct{})
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+				return &services.RightsizingCollectionHandle{
+					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
+						{
+							Status: func() models.RightsizingCollectionStatus {
+								return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateConnecting}
+							},
+							Work: func(ctx context.Context, result models.RightsizingCollectionResult) (models.RightsizingCollectionResult, error) {
+								<-blockCh
+								return result, nil
+							},
+						},
+					}),
+					LogoutFn: func() {},
+				}
+			})
+
+			params := models.RightsizingParams{
+				Credentials: models.Credentials{URL: "https://vc.example.com", Username: "admin", Password: "secret"},
+			}
+			_, err := svc.TriggerCollection(ctx, params)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = svc.TriggerCollection(ctx, params)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not yet implemented"))
+			Expect(srvErrors.IsOperationInProgressError(err)).To(BeTrue())
+
+			close(blockCh)
 		})
 	})
 })

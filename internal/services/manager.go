@@ -139,4 +139,5 @@ func (m *ServiceManager) Stop(ctx context.Context) {
 	m.console.Stop()
 	m.collector.Stop()
 	_ = m.inspector.Stop()
+	m.rightsizing.Stop()
 }
