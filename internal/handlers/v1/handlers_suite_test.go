@@ -224,7 +224,7 @@ type MockRightsizingService struct {
 	TriggerCallCount  int
 	LastTriggerParams models.RightsizingParams
 
-	ListResult []models.RightsizingReport
+	ListResult []models.RightsizingReportSummary
 	ListError  error
 
 	GetResult *models.RightsizingReport
@@ -238,7 +238,7 @@ func (m *MockRightsizingService) TriggerCollection(ctx context.Context, params m
 	return m.TriggerResult, m.TriggerError
 }
 
-func (m *MockRightsizingService) ListReports(ctx context.Context) ([]models.RightsizingReport, error) {
+func (m *MockRightsizingService) ListReports(ctx context.Context) ([]models.RightsizingReportSummary, error) {
 	return m.ListResult, m.ListError
 }
 

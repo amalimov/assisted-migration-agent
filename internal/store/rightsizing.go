@@ -137,9 +137,10 @@ func (s *RightSizingStore) IncrementWrittenBatchCount(ctx context.Context, repor
 	return nil
 }
 
-// ListReports returns all rightsizing reports ordered by creation time descending,
-// with their VM metrics populated. Returns an empty slice (not nil) when no reports exist.
-func (s *RightSizingStore) ListReports(ctx context.Context) ([]models.RightsizingReport, error) {
+// ListReports returns metadata for all rightsizing reports ordered by creation time descending.
+// VM metrics are not included; use GetReport to retrieve the full report with metrics.
+// Returns an empty slice (not nil) when no reports exist.
+func (s *RightSizingStore) ListReports(ctx context.Context) ([]models.RightsizingReportSummary, error) {
 	query, args, err := sq.Select(
 		rsReportsColID, rsReportsColVCenter, rsReportsColClusterID, rsReportsColIntervalID,
 		rsReportsColWindowStart, rsReportsColWindowEnd, rsReportsColExpectedSampleCount, rsReportsColCreatedAt,
@@ -156,31 +157,21 @@ func (s *RightSizingStore) ListReports(ctx context.Context) ([]models.Rightsizin
 	}
 	defer func() { _ = rows.Close() }()
 
-	reports := []models.RightsizingReport{}
-	idxByID := map[string]int{}
+	reports := []models.RightsizingReportSummary{}
 	for rows.Next() {
-		var r models.RightsizingReport
+		var r models.RightsizingReportSummary
 		if err := rows.Scan(
 			&r.ID, &r.VCenter, &r.ClusterID, &r.IntervalID,
 			&r.WindowStart, &r.WindowEnd, &r.ExpectedSampleCount, &r.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning report row: %w", err)
 		}
-		r.VMs = []models.RightsizingVMReport{}
-		idxByID[r.ID] = len(reports)
 		reports = append(reports, r)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating report rows: %w", err)
 	}
 
-	if len(reports) == 0 {
-		return reports, nil
-	}
-
-	if err := s.appendMetrics(ctx, reports, idxByID); err != nil {
-		return nil, err
-	}
 	return reports, nil
 }
 

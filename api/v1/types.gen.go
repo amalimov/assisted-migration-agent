@@ -260,10 +260,30 @@ type RightsizingReport struct {
 
 // RightsizingReportListResponse defines model for RightsizingReportListResponse.
 type RightsizingReportListResponse struct {
-	Reports []RightsizingReport `json:"reports"`
+	// Reports List of report summaries. Use GET /rightsizing/{id} for full VM metrics.
+	Reports []RightsizingReportSummary `json:"reports"`
 
 	// Total Total number of stored reports
 	Total int `json:"total"`
+}
+
+// RightsizingReportSummary Rightsizing report metadata without VM metrics. Use GET /rightsizing/{id} to retrieve the full report including metrics.
+type RightsizingReportSummary struct {
+	// ClusterId MoRef of the ClusterComputeResource scoped for this collection (empty = all clusters)
+	ClusterId string    `json:"cluster_id"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// ExpectedSampleCount Theoretical maximum samples for the window (lookback / interval)
+	ExpectedSampleCount int `json:"expected_sample_count"`
+
+	// Id UUID of the report
+	Id         string `json:"id"`
+	IntervalId int    `json:"interval_id"`
+
+	// Vcenter vCenter URL used for this collection
+	Vcenter     string    `json:"vcenter"`
+	WindowEnd   time.Time `json:"window_end"`
+	WindowStart time.Time `json:"window_start"`
 }
 
 // RightsizingVMReport defines model for RightsizingVMReport.

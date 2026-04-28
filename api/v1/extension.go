@@ -327,6 +327,20 @@ func NewRightsizingVMReportFromModel(vm models.RightsizingVMReport) RightsizingV
 	}
 }
 
+// NewRightsizingReportSummaryFromModel converts a models.RightsizingReportSummary to the API type.
+func NewRightsizingReportSummaryFromModel(r models.RightsizingReportSummary) RightsizingReportSummary {
+	return RightsizingReportSummary{
+		Id:                  r.ID,
+		Vcenter:             r.VCenter,
+		ClusterId:           r.ClusterID,
+		WindowStart:         r.WindowStart,
+		WindowEnd:           r.WindowEnd,
+		IntervalId:          r.IntervalID,
+		ExpectedSampleCount: r.ExpectedSampleCount,
+		CreatedAt:           r.CreatedAt,
+	}
+}
+
 // NewRightsizingReportFromModel converts a models.RightsizingReport to the API type.
 func NewRightsizingReportFromModel(r models.RightsizingReport) RightsizingReport {
 	vms := make([]RightsizingVMReport, 0, len(r.VMs))

@@ -69,15 +69,13 @@ var _ = Describe("RightsizingService", func() {
 			Expect(reports).To(BeEmpty())
 		})
 
-		It("should return stored reports with VM metrics populated", func() {
+		It("should return report metadata without VM metrics", func() {
 			id := seedReport("https://vcenter.example.com")
 
 			reports, err := svc.ListReports(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reports).To(HaveLen(1))
 			Expect(reports[0].ID).To(Equal(id))
-			Expect(reports[0].VMs).To(HaveLen(1))
-			Expect(reports[0].VMs[0].Metrics).To(HaveKey("cpu.usagemhz.average"))
 		})
 	})
 

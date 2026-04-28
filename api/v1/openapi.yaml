@@ -1342,6 +1342,43 @@ components:
           type: string
           format: date-time
 
+    RightsizingReportSummary:
+      type: object
+      description: Rightsizing report metadata without VM metrics. Use GET /rightsizing/{id} to retrieve the full report including metrics.
+      required:
+        - id
+        - vcenter
+        - cluster_id
+        - window_start
+        - window_end
+        - interval_id
+        - expected_sample_count
+        - created_at
+      properties:
+        id:
+          type: string
+          description: UUID of the report
+        vcenter:
+          type: string
+          description: vCenter URL used for this collection
+        cluster_id:
+          type: string
+          description: MoRef of the ClusterComputeResource scoped for this collection (empty = all clusters)
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        interval_id:
+          type: integer
+        expected_sample_count:
+          type: integer
+          description: Theoretical maximum samples for the window (lookback / interval)
+        created_at:
+          type: string
+          format: date-time
+
     RightsizingReportListResponse:
       type: object
       required:
@@ -1350,8 +1387,9 @@ components:
       properties:
         reports:
           type: array
+          description: List of report summaries. Use GET /rightsizing/{id} for full VM metrics.
           items:
-            $ref: '#/components/schemas/RightsizingReport'
+            $ref: '#/components/schemas/RightsizingReportSummary'
         total:
           type: integer
           description: Total number of stored reports

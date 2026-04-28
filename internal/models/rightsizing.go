@@ -62,7 +62,19 @@ type RightsizingVMReport struct {
 	Metrics map[string]RightsizingMetricStats
 }
 
-// RightsizingReport is the API read model returned by ListReports and GetReport.
+// RightsizingReportSummary is the API read model returned by ListReports (metadata only, no VM metrics).
+type RightsizingReportSummary struct {
+	ID                  string
+	VCenter             string
+	ClusterID           string
+	WindowStart         time.Time
+	WindowEnd           time.Time
+	IntervalID          int
+	ExpectedSampleCount int
+	CreatedAt           time.Time
+}
+
+// RightsizingReport is the API read model returned by GetReport (includes full VM metrics).
 type RightsizingReport struct {
 	ID                  string
 	VCenter             string

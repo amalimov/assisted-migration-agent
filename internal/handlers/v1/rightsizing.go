@@ -21,9 +21,9 @@ func (h *Handler) ListRightsizingReports(c *gin.Context) {
 		return
 	}
 
-	apiReports := make([]v1.RightsizingReport, 0, len(reports))
+	apiReports := make([]v1.RightsizingReportSummary, 0, len(reports))
 	for _, r := range reports {
-		apiReports = append(apiReports, v1.NewRightsizingReportFromModel(r))
+		apiReports = append(apiReports, v1.NewRightsizingReportSummaryFromModel(r))
 	}
 
 	c.JSON(http.StatusOK, v1.RightsizingReportListResponse{

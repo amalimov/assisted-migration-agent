@@ -219,7 +219,7 @@ var _ = Describe("RightSizingStore", func() {
 			Expect(reports).To(BeEmpty())
 		})
 
-		It("should return all reports with VM metrics populated", func() {
+		It("should return report metadata without VM metrics", func() {
 			id := seedReport("https://vc1.example.com")
 
 			reports, err := s.RightSizing().ListReports(ctx)
@@ -227,10 +227,6 @@ var _ = Describe("RightSizingStore", func() {
 			Expect(reports).To(HaveLen(1))
 			Expect(reports[0].ID).To(Equal(id))
 			Expect(reports[0].VCenter).To(Equal("https://vc1.example.com"))
-			Expect(reports[0].VMs).To(HaveLen(1))
-			Expect(reports[0].VMs[0].MOID).To(Equal("vm-100"))
-			Expect(reports[0].VMs[0].Metrics).To(HaveKey("cpu.usagemhz.average"))
-			Expect(reports[0].VMs[0].Metrics).To(HaveKey("mem.consumed.average"))
 		})
 
 		It("should return multiple reports with correct data for each", func() {

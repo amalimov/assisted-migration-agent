@@ -42,7 +42,7 @@ var _ = Describe("Rightsizing Handlers", func() {
 
 	Describe("ListRightsizingReports", func() {
 		It("should return 200 with empty list when no reports exist", func() {
-			mockSvc.ListResult = []models.RightsizingReport{}
+			mockSvc.ListResult = []models.RightsizingReportSummary{}
 			req := httptest.NewRequest(http.MethodGet, "/rightsizing", nil)
 			w := httptest.NewRecorder()
 
@@ -55,10 +55,10 @@ var _ = Describe("Rightsizing Handlers", func() {
 			Expect(resp.Reports).To(BeEmpty())
 		})
 
-		It("should return all reports", func() {
-			mockSvc.ListResult = []models.RightsizingReport{
-				{ID: "a", VCenter: "https://vc1", WindowStart: now, WindowEnd: now, IntervalID: 7200, VMs: []models.RightsizingVMReport{}, CreatedAt: now},
-				{ID: "b", VCenter: "https://vc2", WindowStart: now, WindowEnd: now, IntervalID: 7200, VMs: []models.RightsizingVMReport{}, CreatedAt: now},
+		It("should return all reports without VM metrics", func() {
+			mockSvc.ListResult = []models.RightsizingReportSummary{
+				{ID: "a", VCenter: "https://vc1", WindowStart: now, WindowEnd: now, IntervalID: 7200, CreatedAt: now},
+				{ID: "b", VCenter: "https://vc2", WindowStart: now, WindowEnd: now, IntervalID: 7200, CreatedAt: now},
 			}
 			req := httptest.NewRequest(http.MethodGet, "/rightsizing", nil)
 			w := httptest.NewRecorder()

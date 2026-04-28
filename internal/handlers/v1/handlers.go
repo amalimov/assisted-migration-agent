@@ -63,7 +63,7 @@ type GroupService interface {
 // RightsizingService defines the interface for rightsizing operations.
 type RightsizingService interface {
 	TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReport, error)
-	ListReports(ctx context.Context) ([]models.RightsizingReport, error)
+	ListReports(ctx context.Context) ([]models.RightsizingReportSummary, error)
 	GetReport(ctx context.Context, id string) (*models.RightsizingReport, error)
 }
 

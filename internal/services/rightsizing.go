@@ -17,8 +17,8 @@ func NewRightsizingService(st *store.Store) *RightsizingService {
 	return &RightsizingService{store: st}
 }
 
-// ListReports returns all rightsizing reports ordered by creation time descending.
-func (s *RightsizingService) ListReports(ctx context.Context) ([]models.RightsizingReport, error) {
+// ListReports returns metadata for all rightsizing reports (no VM metrics).
+func (s *RightsizingService) ListReports(ctx context.Context) ([]models.RightsizingReportSummary, error) {
 	return s.store.RightSizing().ListReports(ctx)
 }
 
