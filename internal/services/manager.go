@@ -94,7 +94,7 @@ func (m *ServiceManager) Initialize() error {
 
 	m.vm = NewVMService(m.store)
 	m.group = NewGroupService(m.store)
-	m.rightsizing = NewRightsizingService()
+	m.rightsizing = NewRightsizingService(m.store)
 
 	return nil
 }

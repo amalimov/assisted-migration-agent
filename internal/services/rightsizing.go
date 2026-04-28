@@ -2,90 +2,33 @@ package services
 
 import (
 	"context"
-	"sort"
-	"sync"
-	"time"
-
-	"github.com/google/uuid"
+	"fmt"
 
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
 )
 
-// RightsizingService stores reports in memory and returns mocked data.
-// The real implementation will use the govmomi-based PoC in poc/rightsizing.
+// RightsizingService provides API access to stored rightsizing reports.
 type RightsizingService struct {
-	mu      sync.RWMutex
-	reports map[string]models.RightsizingReport
+	store *store.Store
 }
 
-func NewRightsizingService() *RightsizingService {
-	return &RightsizingService{
-		reports: make(map[string]models.RightsizingReport),
-	}
+func NewRightsizingService(st *store.Store) *RightsizingService {
+	return &RightsizingService{store: st}
 }
 
-func (s *RightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReport, error) {
-	// Apply defaults
-	if params.LookbackH <= 0 {
-		params.LookbackH = 720 // 30 days
-	}
-	if params.IntervalID <= 0 {
-		params.IntervalID = 7200 // monthly
-	}
-
-	now := time.Now().UTC()
-	lookback := time.Duration(params.LookbackH) * time.Hour
-	intervalDur := time.Duration(params.IntervalID) * time.Second
-
-	expectedSamples := 0
-	if intervalDur > 0 {
-		expectedSamples = int(lookback / intervalDur)
-	}
-
-	report := models.RightsizingReport{
-		ID:                  uuid.New().String(),
-		VCenter:             params.URL,
-		ClusterID:           params.ClusterID,
-		WindowStart:         now.Add(-lookback),
-		WindowEnd:           now,
-		IntervalID:          params.IntervalID,
-		ExpectedSampleCount: expectedSamples,
-		VMs:                 []models.RightsizingVMReport{},
-		CreatedAt:           now,
-	}
-
-	s.mu.Lock()
-	s.reports[report.ID] = report
-	s.mu.Unlock()
-
-	return &report, nil
-}
-
+// ListReports returns all rightsizing reports ordered by creation time descending.
 func (s *RightsizingService) ListReports(ctx context.Context) ([]models.RightsizingReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	reports := make([]models.RightsizingReport, 0, len(s.reports))
-	for _, r := range s.reports {
-		reports = append(reports, r)
-	}
-
-	// Sort by CreatedAt ascending
-	sort.Slice(reports, func(i, j int) bool {
-		return reports[i].CreatedAt.Before(reports[j].CreatedAt)
-	})
-
-	return reports, nil
+	return s.store.RightSizing().ListReports(ctx)
 }
 
+// GetReport returns a single rightsizing report by ID.
+// Returns a ResourceNotFoundError if the ID does not exist.
 func (s *RightsizingService) GetReport(ctx context.Context, id string) (*models.RightsizingReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	return s.store.RightSizing().GetReport(ctx, id)
+}
 
-	r, ok := s.reports[id]
-	if !ok {
-		return nil, srvErrors.NewResourceNotFoundError("rightsizing report", id)
-	}
-	return &r, nil
+// TriggerCollection is not yet implemented.
+func (s *RightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReport, error) {
+	return nil, fmt.Errorf("rightsizing collection trigger is not yet implemented")
 }

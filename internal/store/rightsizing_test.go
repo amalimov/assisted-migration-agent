@@ -12,6 +12,7 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
+	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 	"github.com/kubev2v/assisted-migration-agent/test"
 )
 
@@ -183,6 +184,85 @@ var _ = Describe("RightSizingStore", func() {
 			var written int
 			Expect(db.QueryRow(`SELECT written_batch_count FROM rightsizing_reports WHERE id = ?`, id).Scan(&written)).To(Succeed())
 			Expect(written).To(Equal(0))
+		})
+	})
+
+	// seedReport creates a report and writes one VM with two metrics.
+	// Returns the report ID.
+	seedReport := func(vcenter string) string {
+		r := models.RightSizingReport{
+			VCenter:             vcenter,
+			ClusterID:           "domain-c123",
+			IntervalID:          7200,
+			WindowStart:         time.Now().Add(-720 * time.Hour).UTC(),
+			WindowEnd:           time.Now().UTC(),
+			ExpectedSampleCount: 360,
+		}
+		id, err := s.RightSizing().CreateReport(ctx, r, 1, 1)
+		Expect(err).NotTo(HaveOccurred())
+
+		metrics := []models.RightSizingMetric{
+			{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average",
+				SampleCount: 360, Average: 500, P95: 1200, P99: 1500, Max: 2000, Latest: 450},
+			{VMName: "vm-a", MOID: "vm-100", MetricKey: "mem.consumed.average",
+				SampleCount: 360, Average: 2048, P95: 3000, P99: 3500, Max: 4096, Latest: 2100},
+		}
+		Expect(s.RightSizing().WriteBatch(ctx, id, metrics)).To(Succeed())
+		return id
+	}
+
+	Describe("ListReports", func() {
+		It("should return an empty slice when no reports exist", func() {
+			reports, err := s.RightSizing().ListReports(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reports).NotTo(BeNil())
+			Expect(reports).To(BeEmpty())
+		})
+
+		It("should return all reports with VM metrics populated", func() {
+			id := seedReport("https://vc1.example.com")
+
+			reports, err := s.RightSizing().ListReports(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reports).To(HaveLen(1))
+			Expect(reports[0].ID).To(Equal(id))
+			Expect(reports[0].VCenter).To(Equal("https://vc1.example.com"))
+			Expect(reports[0].VMs).To(HaveLen(1))
+			Expect(reports[0].VMs[0].MOID).To(Equal("vm-100"))
+			Expect(reports[0].VMs[0].Metrics).To(HaveKey("cpu.usagemhz.average"))
+			Expect(reports[0].VMs[0].Metrics).To(HaveKey("mem.consumed.average"))
+		})
+
+		It("should return multiple reports with correct data for each", func() {
+			id1 := seedReport("https://vc1.example.com")
+			id2 := seedReport("https://vc2.example.com")
+
+			reports, err := s.RightSizing().ListReports(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reports).To(HaveLen(2))
+			ids := []string{reports[0].ID, reports[1].ID}
+			Expect(ids).To(ConsistOf(id1, id2))
+		})
+	})
+
+	Describe("GetReport", func() {
+		It("should return the report with all VM metrics", func() {
+			id := seedReport("https://vc1.example.com")
+
+			report, err := s.RightSizing().GetReport(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(report.ID).To(Equal(id))
+			Expect(report.VMs).To(HaveLen(1))
+			Expect(report.VMs[0].Metrics).To(HaveKey("cpu.usagemhz.average"))
+			cpu := report.VMs[0].Metrics["cpu.usagemhz.average"]
+			Expect(cpu.SampleCount).To(Equal(360))
+			Expect(cpu.Average).To(Equal(500.0))
+		})
+
+		It("should return a ResourceNotFoundError for unknown ID", func() {
+			_, err := s.RightSizing().GetReport(ctx, "no-such-id")
+			Expect(err).To(HaveOccurred())
+			Expect(srvErrors.IsResourceNotFoundError(err)).To(BeTrue())
 		})
 	})
 })

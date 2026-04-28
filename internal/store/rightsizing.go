@@ -2,11 +2,15 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+
+	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 )
@@ -22,6 +26,7 @@ const (
 	rsReportsColExpectedSampleCount = "expected_sample_count"
 	rsReportsColExpectedBatchCount  = "expected_batch_count"
 	rsReportsColWrittenBatchCount   = "written_batch_count"
+	rsReportsColCreatedAt           = "created_at"
 
 	rsMetricsTable          = "rightsizing_metrics"
 	rsMetricsColReportID    = "report_id"
@@ -130,4 +135,144 @@ func (s *RightSizingStore) IncrementWrittenBatchCount(ctx context.Context, repor
 		return fmt.Errorf("incrementing written_batch_count: %w", err)
 	}
 	return nil
+}
+
+// ListReports returns all rightsizing reports ordered by creation time descending,
+// with their VM metrics populated. Returns an empty slice (not nil) when no reports exist.
+func (s *RightSizingStore) ListReports(ctx context.Context) ([]models.RightsizingReport, error) {
+	query, args, err := sq.Select(
+		rsReportsColID, rsReportsColVCenter, rsReportsColClusterID, rsReportsColIntervalID,
+		rsReportsColWindowStart, rsReportsColWindowEnd, rsReportsColExpectedSampleCount, rsReportsColCreatedAt,
+	).From(rsReportsTable).
+		OrderBy(rsReportsColCreatedAt + " DESC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list reports query: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("executing list reports query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	reports := []models.RightsizingReport{}
+	idxByID := map[string]int{}
+	for rows.Next() {
+		var r models.RightsizingReport
+		if err := rows.Scan(
+			&r.ID, &r.VCenter, &r.ClusterID, &r.IntervalID,
+			&r.WindowStart, &r.WindowEnd, &r.ExpectedSampleCount, &r.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning report row: %w", err)
+		}
+		r.VMs = []models.RightsizingVMReport{}
+		idxByID[r.ID] = len(reports)
+		reports = append(reports, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating report rows: %w", err)
+	}
+
+	if len(reports) == 0 {
+		return reports, nil
+	}
+
+	if err := s.appendMetrics(ctx, reports, idxByID); err != nil {
+		return nil, err
+	}
+	return reports, nil
+}
+
+// GetReport returns a single rightsizing report by ID with all VM metrics populated.
+// Returns a ResourceNotFoundError if the ID does not exist.
+func (s *RightSizingStore) GetReport(ctx context.Context, id string) (*models.RightsizingReport, error) {
+	query, args, err := sq.Select(
+		rsReportsColID, rsReportsColVCenter, rsReportsColClusterID, rsReportsColIntervalID,
+		rsReportsColWindowStart, rsReportsColWindowEnd, rsReportsColExpectedSampleCount, rsReportsColCreatedAt,
+	).From(rsReportsTable).
+		Where(sq.Eq{rsReportsColID: id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get report query: %w", err)
+	}
+
+	var r models.RightsizingReport
+	err = s.db.QueryRowContext(ctx, query, args...).Scan(
+		&r.ID, &r.VCenter, &r.ClusterID, &r.IntervalID,
+		&r.WindowStart, &r.WindowEnd, &r.ExpectedSampleCount, &r.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, srvErrors.NewResourceNotFoundError("rightsizing report", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scanning report: %w", err)
+	}
+
+	r.VMs = []models.RightsizingVMReport{}
+	reports := []models.RightsizingReport{r}
+	if err := s.appendMetrics(ctx, reports, map[string]int{r.ID: 0}); err != nil {
+		return nil, err
+	}
+	return &reports[0], nil
+}
+
+// appendMetrics fetches all metric rows for the given reports (by index map)
+// and builds the nested VMs structure in place.
+func (s *RightSizingStore) appendMetrics(ctx context.Context, reports []models.RightsizingReport, idxByID map[string]int) error {
+	ids := make([]string, 0, len(idxByID))
+	for id := range idxByID {
+		ids = append(ids, id)
+	}
+
+	query, args, err := sq.Select(
+		rsMetricsColReportID, rsMetricsColVMName, rsMetricsColMOID, rsMetricsColMetricKey,
+		rsMetricsColSampleCount, rsMetricsColAverage, rsMetricsColP95, rsMetricsColP99,
+		rsMetricsColMax, rsMetricsColLatest,
+	).From(rsMetricsTable).
+		Where(sq.Eq{rsMetricsColReportID: ids}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building metrics query: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("executing metrics query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	// vmIdx[reportID][moid] = index in reports[rIdx].VMs
+	vmIdx := make(map[string]map[string]int)
+
+	for rows.Next() {
+		var reportID, vmName, moid, metricKey string
+		var stats models.RightsizingMetricStats
+		if err := rows.Scan(
+			&reportID, &vmName, &moid, &metricKey,
+			&stats.SampleCount, &stats.Average, &stats.P95, &stats.P99, &stats.Max, &stats.Latest,
+		); err != nil {
+			return fmt.Errorf("scanning metric row: %w", err)
+		}
+
+		rIdx := idxByID[reportID]
+		if vmIdx[reportID] == nil {
+			vmIdx[reportID] = make(map[string]int)
+		}
+
+		vIdx, ok := vmIdx[reportID][moid]
+		if !ok {
+			reports[rIdx].VMs = append(reports[rIdx].VMs, models.RightsizingVMReport{
+				Name:    vmName,
+				MOID:    moid,
+				Metrics: map[string]models.RightsizingMetricStats{},
+			})
+			vIdx = len(reports[rIdx].VMs) - 1
+			vmIdx[reportID][moid] = vIdx
+		}
+
+		reports[rIdx].VMs[vIdx].Metrics[metricKey] = stats
+	}
+
+	return rows.Err()
 }
