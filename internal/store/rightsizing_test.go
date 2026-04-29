@@ -322,6 +322,78 @@ var _ = Describe("RightSizingStore", func() {
 		})
 	})
 
+	Describe("ComputeAndStoreUtilization", func() {
+		It("should compute and store utilization rows for VMs with metrics", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usage.average",
+					SampleCount: 360, Average: 5000, P95: 8000, Max: 9000, Latest: 4500},
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "disk.used.latest",
+					SampleCount: 1, Average: 5000000, Latest: 5000000},
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "disk.provisioned.latest",
+					SampleCount: 1, Average: 10000000, Latest: 10000000},
+			})).To(Succeed())
+			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
+
+			Expect(s.RightSizing().ComputeAndStoreUtilization(ctx, id)).To(Succeed())
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_vm_utilization WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+
+			var cpuP95, diskPct float64
+			Expect(db.QueryRow(
+				`SELECT cpu_p95_pct, disk_pct FROM rightsizing_vm_utilization WHERE report_id = ? AND moid = ?`,
+				id, "vm-100",
+			).Scan(&cpuP95, &diskPct)).To(Succeed())
+			Expect(cpuP95).To(BeNumerically("~", 80.0, 0.01))  // 8000 / 100
+			Expect(diskPct).To(BeNumerically("~", 50.0, 0.01)) // 5000000 / 10000000 * 100
+		})
+
+		It("should be idempotent via ON CONFLICT DO NOTHING", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usage.average",
+					SampleCount: 1, Average: 5000, Latest: 5000},
+			})).To(Succeed())
+			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
+			Expect(s.RightSizing().ComputeAndStoreUtilization(ctx, id)).To(Succeed())
+			Expect(s.RightSizing().ComputeAndStoreUtilization(ctx, id)).To(Succeed()) // second call
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_vm_utilization WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+		})
+	})
+
+	Describe("GetVMUtilization", func() {
+		It("should return utilization for a VM from the latest completed report", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usage.average",
+					SampleCount: 10, Average: 5000, P95: 8000, Max: 9000, Latest: 4500},
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "disk.used.latest",
+					SampleCount: 1, Latest: 5000000},
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "disk.provisioned.latest",
+					SampleCount: 1, Latest: 10000000},
+			})).To(Succeed())
+			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
+			Expect(s.RightSizing().ComputeAndStoreUtilization(ctx, id)).To(Succeed())
+
+			d, err := s.RightSizing().GetVMUtilization(ctx, "vm-100")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(d.MOID).To(Equal("vm-100"))
+			Expect(d.CpuP95Pct).To(BeNumerically("~", 80.0, 0.01))
+			Expect(d.DiskPct).To(BeNumerically("~", 50.0, 0.01))
+		})
+
+		It("should return ResourceNotFoundError when no data exists", func() {
+			_, err := s.RightSizing().GetVMUtilization(ctx, "vm-no-data")
+			Expect(err).To(HaveOccurred())
+			Expect(srvErrors.IsResourceNotFoundError(err)).To(BeTrue())
+		})
+	})
+
 	Describe("GetReport merges warning-only VMs", func() {
 		It("should include VMs with no data alongside VMs with metrics", func() {
 			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)

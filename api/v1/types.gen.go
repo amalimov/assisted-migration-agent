@@ -406,11 +406,20 @@ type VirtualMachine struct {
 	// Cluster Cluster name
 	Cluster string `json:"cluster"`
 
+	// ConfidencePct Rightsizing data confidence — sample_count / expected_sample_count × 100
+	ConfidencePct *float64 `json:"confidence_pct,omitempty"`
+
+	// CpuP95Pct CPU utilization at p95 (%); absent when no rightsizing data
+	CpuP95Pct *float64 `json:"cpu_p95_pct,omitempty"`
+
 	// Datacenter Datacenter name
 	Datacenter string `json:"datacenter"`
 
 	// DiskSize Total disk size in MB
 	DiskSize int64 `json:"diskSize"`
+
+	// DiskPct Disk utilization (%); absent when no rightsizing data
+	DiskPct *float64 `json:"disk_pct,omitempty"`
 
 	// Id VirtualMachine ID in vCenter
 	Id string `json:"id"`
@@ -421,6 +430,9 @@ type VirtualMachine struct {
 
 	// IssueCount Number of issues found for this VirtualMachine
 	IssueCount int `json:"issueCount"`
+
+	// MemP95Pct Memory utilization at p95 (%); absent when no rightsizing data
+	MemP95Pct *float64 `json:"mem_p95_pct,omitempty"`
 
 	// Memory Memory size in MB
 	Memory int64 `json:"memory"`
@@ -578,6 +590,29 @@ type VmInspectionStatus struct {
 
 // VmInspectionStatusState Current inspection state
 type VmInspectionStatusState string
+
+// VmRightsizingDetails defines model for VmRightsizingDetails.
+type VmRightsizingDetails struct {
+	// ConfidencePct Data confidence — sample_count / expected_sample_count × 100
+	ConfidencePct float64 `json:"confidence_pct"`
+
+	// CpuAvgPct CPU utilization average (%)
+	CpuAvgPct    float64 `json:"cpu_avg_pct"`
+	CpuLatestPct float64 `json:"cpu_latest_pct"`
+	CpuMaxPct    float64 `json:"cpu_max_pct"`
+	CpuP95Pct    float64 `json:"cpu_p95_pct"`
+
+	// DiskPct Disk utilization (%)
+	DiskPct float64 `json:"disk_pct"`
+
+	// MemAvgPct Memory utilization average (%)
+	MemAvgPct    float64 `json:"mem_avg_pct"`
+	MemLatestPct float64 `json:"mem_latest_pct"`
+	MemMaxPct    float64 `json:"mem_max_pct"`
+	MemP95Pct    float64 `json:"mem_p95_pct"`
+	Moid         string  `json:"moid"`
+	VmName       string  `json:"vm_name"`
+}
 
 // ListGroupsParams defines parameters for ListGroups.
 type ListGroupsParams struct {

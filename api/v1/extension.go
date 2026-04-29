@@ -47,6 +47,11 @@ func NewVirtualMachineFromSummary(vm models.VirtualMachineSummary) VirtualMachin
 		result.InspectionConcernCount = &vm.InspectionConcernCount
 	}
 
+	result.CpuP95Pct = vm.CpuP95Pct
+	result.MemP95Pct = vm.MemP95Pct
+	result.DiskPct = vm.DiskPct
+	result.ConfidencePct = vm.ConfidencePct
+
 	return result
 }
 
@@ -362,5 +367,23 @@ func NewRightsizingReportFromModel(r models.RightsizingReport) RightsizingReport
 		ExpectedSampleCount: r.ExpectedSampleCount,
 		Vms:                 vms,
 		CreatedAt:           r.CreatedAt,
+	}
+}
+
+// NewVmRightsizingDetailsFromModel converts a models.VmRightsizingDetails to the API type.
+func NewVmRightsizingDetailsFromModel(d models.VmRightsizingDetails) VmRightsizingDetails {
+	return VmRightsizingDetails{
+		Moid:          d.MOID,
+		VmName:        d.VMName,
+		CpuAvgPct:     d.CpuAvgPct,
+		CpuP95Pct:     d.CpuP95Pct,
+		CpuMaxPct:     d.CpuMaxPct,
+		CpuLatestPct:  d.CpuLatestPct,
+		MemAvgPct:     d.MemAvgPct,
+		MemP95Pct:     d.MemP95Pct,
+		MemMaxPct:     d.MemMaxPct,
+		MemLatestPct:  d.MemLatestPct,
+		DiskPct:       d.DiskPct,
+		ConfidencePct: d.ConfidencePct,
 	}
 }

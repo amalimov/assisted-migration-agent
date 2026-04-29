@@ -148,6 +148,22 @@ func (b *rightsizingWorkBuilder) generateBatches() {
 			},
 		})
 	}
+
+	// Final stage: compute and persist per-VM utilization percentages.
+	// Runs after all metric batches and warnings are persisted.
+	reportID := b.reportID
+	st := b.store
+	b.batchUnits = append(b.batchUnits, rightsizingWorkUnit{
+		Status: func() models.RightsizingCollectionStatus {
+			return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStatePersisting}
+		},
+		Work: func(ctx context.Context, result models.RightsizingCollectionResult) (models.RightsizingCollectionResult, error) {
+			if err := st.RightSizing().ComputeAndStoreUtilization(ctx, reportID); err != nil {
+				return result, fmt.Errorf("computing VM utilization: %w", err)
+			}
+			return result, nil
+		},
+	})
 }
 
 // RightsizingService provides API access to stored rightsizing reports and
@@ -180,6 +196,11 @@ func (s *RightsizingService) ListReports(ctx context.Context) ([]models.Rightsiz
 // GetReport returns a single rightsizing report by ID with full VM metrics.
 func (s *RightsizingService) GetReport(ctx context.Context, id string) (*models.RightsizingReport, error) {
 	return s.store.RightSizing().GetReport(ctx, id)
+}
+
+// GetVMUtilization returns the full rightsizing utilization breakdown for a VM.
+func (s *RightsizingService) GetVMUtilization(ctx context.Context, vmID string) (*models.VmRightsizingDetails, error) {
+	return s.store.RightSizing().GetVMUtilization(ctx, vmID)
 }
 
 // TriggerCollection starts an async rightsizing collection run.

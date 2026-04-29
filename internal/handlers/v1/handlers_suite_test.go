@@ -230,6 +230,10 @@ type MockRightsizingService struct {
 	GetResult *models.RightsizingReport
 	GetError  error
 	LastGetID string
+
+	GetUtilizationResult *models.VmRightsizingDetails
+	GetUtilizationError  error
+	LastUtilizationVMID  string
 }
 
 func (m *MockRightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReportSummary, error) {
@@ -245,4 +249,9 @@ func (m *MockRightsizingService) ListReports(ctx context.Context) ([]models.Righ
 func (m *MockRightsizingService) GetReport(ctx context.Context, id string) (*models.RightsizingReport, error) {
 	m.LastGetID = id
 	return m.GetResult, m.GetError
+}
+
+func (m *MockRightsizingService) GetVMUtilization(ctx context.Context, vmID string) (*models.VmRightsizingDetails, error) {
+	m.LastUtilizationVMID = vmID
+	return m.GetUtilizationResult, m.GetUtilizationError
 }

@@ -192,6 +192,94 @@ func (s *RightSizingStore) WriteVMWarnings(ctx context.Context, reportID string,
 	return nil
 }
 
+// ComputeAndStoreUtilization computes per-VM utilization percentages from collected
+// metrics and the vinfo inventory, persisting them to rightsizing_vm_utilization.
+// Uses a single SQL pivot query; idempotent via ON CONFLICT DO NOTHING.
+func (s *RightSizingStore) ComputeAndStoreUtilization(ctx context.Context, reportID string) error {
+	query := `
+INSERT INTO rightsizing_vm_utilization
+    (report_id, moid, vm_name,
+     cpu_avg_pct, cpu_p95_pct, cpu_max_pct, cpu_latest_pct,
+     mem_avg_pct, mem_p95_pct, mem_max_pct, mem_latest_pct,
+     disk_pct, confidence_pct)
+SELECT
+    rm.report_id,
+    rm.moid,
+    MAX(rm.vm_name) AS vm_name,
+    MAX(CASE WHEN rm.metric_key = 'cpu.usage.average' THEN rm.average  / 100.0 END) AS cpu_avg_pct,
+    MAX(CASE WHEN rm.metric_key = 'cpu.usage.average' THEN rm.p95     / 100.0 END) AS cpu_p95_pct,
+    MAX(CASE WHEN rm.metric_key = 'cpu.usage.average' THEN rm.max     / 100.0 END) AS cpu_max_pct,
+    MAX(CASE WHEN rm.metric_key = 'cpu.usage.average' THEN rm.latest  / 100.0 END) AS cpu_latest_pct,
+    MAX(CASE WHEN rm.metric_key = 'mem.consumed.average' THEN rm.average / NULLIF(v."Memory" * 1024.0, 0) * 100.0 END) AS mem_avg_pct,
+    MAX(CASE WHEN rm.metric_key = 'mem.consumed.average' THEN rm.p95     / NULLIF(v."Memory" * 1024.0, 0) * 100.0 END) AS mem_p95_pct,
+    MAX(CASE WHEN rm.metric_key = 'mem.consumed.average' THEN rm.max     / NULLIF(v."Memory" * 1024.0, 0) * 100.0 END) AS mem_max_pct,
+    MAX(CASE WHEN rm.metric_key = 'mem.consumed.average' THEN rm.latest  / NULLIF(v."Memory" * 1024.0, 0) * 100.0 END) AS mem_latest_pct,
+    MAX(CASE WHEN rm.metric_key = 'disk.used.latest'        THEN rm.latest END)
+      / NULLIF(MAX(CASE WHEN rm.metric_key = 'disk.provisioned.latest' THEN rm.latest END), 0)
+      * 100.0 AS disk_pct,
+    MAX(CASE WHEN rm.metric_key = 'cpu.usage.average' THEN rm.sample_count END)
+      * 100.0 / NULLIF(r.expected_sample_count, 0) AS confidence_pct
+FROM rightsizing_metrics rm
+LEFT JOIN vinfo v ON v."VM ID" = rm.moid
+JOIN rightsizing_reports r ON r.id = rm.report_id
+WHERE rm.report_id = ?
+GROUP BY rm.report_id, rm.moid, r.expected_sample_count
+ON CONFLICT DO NOTHING`
+
+	if _, err := s.db.ExecContext(ctx, query, reportID); err != nil {
+		return fmt.Errorf("computing VM utilization: %w", err)
+	}
+	return nil
+}
+
+// GetVMUtilization returns the full utilization breakdown for a VM from the latest
+// completed report (written_batch_count > 0). Returns ResourceNotFoundError if no
+// rightsizing data exists for this VM.
+func (s *RightSizingStore) GetVMUtilization(ctx context.Context, moid string) (*models.VmRightsizingDetails, error) {
+	query := `
+SELECT moid, vm_name,
+       cpu_avg_pct, cpu_p95_pct, cpu_max_pct, cpu_latest_pct,
+       mem_avg_pct, mem_p95_pct, mem_max_pct, mem_latest_pct,
+       disk_pct, confidence_pct
+FROM rightsizing_vm_utilization
+WHERE moid = ?
+  AND report_id = (
+      SELECT id FROM rightsizing_reports
+      WHERE written_batch_count > 0
+      ORDER BY created_at DESC LIMIT 1
+  )`
+
+	var d models.VmRightsizingDetails
+	var (
+		cpuAvg, cpuP95, cpuMax, cpuLatest sql.NullFloat64
+		memAvg, memP95, memMax, memLatest sql.NullFloat64
+		disk, confidence                  sql.NullFloat64
+	)
+	err := s.db.QueryRowContext(ctx, query, moid).Scan(
+		&d.MOID, &d.VMName,
+		&cpuAvg, &cpuP95, &cpuMax, &cpuLatest,
+		&memAvg, &memP95, &memMax, &memLatest,
+		&disk, &confidence,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, srvErrors.NewResourceNotFoundError("vm rightsizing", moid)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scanning VM utilization: %w", err)
+	}
+	d.CpuAvgPct = cpuAvg.Float64
+	d.CpuP95Pct = cpuP95.Float64
+	d.CpuMaxPct = cpuMax.Float64
+	d.CpuLatestPct = cpuLatest.Float64
+	d.MemAvgPct = memAvg.Float64
+	d.MemP95Pct = memP95.Float64
+	d.MemMaxPct = memMax.Float64
+	d.MemLatestPct = memLatest.Float64
+	d.DiskPct = disk.Float64
+	d.ConfidencePct = confidence.Float64
+	return &d, nil
+}
+
 // ListInventoryVMs reads VM IDs and names from the local inventory (vinfo table).
 // "VM ID" is the MoRef value; "VM" is the display name.
 // Returns all entries ordered by name.

@@ -126,3 +126,20 @@ type RightsizingReport struct {
 	VMs                 []RightsizingVMReport
 	CreatedAt           time.Time
 }
+
+// VmRightsizingDetails holds the full utilization breakdown for a single VM.
+// Returned by GET /vms/{id}/rightsizing.
+type VmRightsizingDetails struct {
+	MOID          string
+	VMName        string
+	CpuAvgPct     float64
+	CpuP95Pct     float64
+	CpuMaxPct     float64
+	CpuLatestPct  float64
+	MemAvgPct     float64
+	MemP95Pct     float64
+	MemMaxPct     float64
+	MemLatestPct  float64
+	DiskPct       float64
+	ConfidencePct float64
+}
