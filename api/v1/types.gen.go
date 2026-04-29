@@ -215,14 +215,14 @@ type RightsizingCollectRequest struct {
 	ClusterId   *string            `json:"cluster_id,omitempty"`
 	Credentials VcenterCredentials `json:"credentials"`
 
+	// DiscoverVms If true, discover VMs live from vSphere. If false (default), use the VMs already stored in the local inventory.
+	DiscoverVms *bool `json:"discover_vms,omitempty"`
+
 	// IntervalId vSphere historical interval ID in seconds (300=day, 1800=week, 7200=month)
 	IntervalId *int `json:"interval_id,omitempty"`
 
 	// LookbackHours Lookback window in hours (default 720 = 30 days)
 	LookbackHours *int `json:"lookback_hours,omitempty"`
-
-	// MaxVms Maximum number of VMs to query
-	MaxVms *int `json:"max_vms,omitempty"`
 
 	// NameFilter Filter VMs by name substring
 	NameFilter *string `json:"name_filter,omitempty"`
@@ -291,6 +291,9 @@ type RightsizingVMReport struct {
 	Metrics map[string]RightsizingMetricStats `json:"metrics"`
 	Moid    string                            `json:"moid"`
 	Name    string                            `json:"name"`
+
+	// Warnings Non-empty when the VM was queried but had no historical metrics data.
+	Warnings []string `json:"warnings"`
 }
 
 // UpdateGroupRequest defines model for UpdateGroupRequest.

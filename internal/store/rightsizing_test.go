@@ -282,4 +282,68 @@ var _ = Describe("RightSizingStore", func() {
 			Expect(srvErrors.IsResourceNotFoundError(err)).To(BeTrue())
 		})
 	})
+
+	Describe("ListInventoryVMs", func() {
+		It("should return empty when vinfo has no rows", func() {
+			vms, err := s.RightSizing().ListInventoryVMs(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vms).To(BeEmpty())
+		})
+	})
+
+	Describe("WriteVMWarnings", func() {
+		It("should insert warning rows for VMs with no data", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)
+			warnings := []models.VMWarning{
+				{MOID: "vm-100", VMName: "vm-a", Warning: "vCenter returned no data for this VM"},
+				{MOID: "vm-200", VMName: "vm-b", Warning: "query succeeded but returned no samples"},
+			}
+			Expect(s.RightSizing().WriteVMWarnings(ctx, id, warnings)).To(Succeed())
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_vm_warnings WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(2))
+		})
+
+		It("should be idempotent on duplicate (report_id, moid)", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			w := []models.VMWarning{{MOID: "vm-100", VMName: "vm-a", Warning: "no data"}}
+			Expect(s.RightSizing().WriteVMWarnings(ctx, id, w)).To(Succeed())
+			Expect(s.RightSizing().WriteVMWarnings(ctx, id, w)).To(Succeed())
+
+			var count int
+			Expect(db.QueryRow(`SELECT COUNT(*) FROM rightsizing_vm_warnings WHERE report_id = ?`, id).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+		})
+
+		It("should return nil and insert nothing for empty input", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
+			Expect(s.RightSizing().WriteVMWarnings(ctx, id, nil)).To(Succeed())
+		})
+	})
+
+	Describe("GetReport merges warning-only VMs", func() {
+		It("should include VMs with no data alongside VMs with metrics", func() {
+			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)
+			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 360, Average: 500},
+			})).To(Succeed())
+			Expect(s.RightSizing().WriteVMWarnings(ctx, id, []models.VMWarning{
+				{MOID: "vm-200", VMName: "vm-b", Warning: "vCenter returned no data for this VM"},
+			})).To(Succeed())
+
+			report, err := s.RightSizing().GetReport(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(report.VMs).To(HaveLen(2))
+
+			vmByMOID := map[string]models.RightsizingVMReport{}
+			for _, vm := range report.VMs {
+				vmByMOID[vm.MOID] = vm
+			}
+			Expect(vmByMOID["vm-100"].Metrics).To(HaveKey("cpu.usagemhz.average"))
+			Expect(vmByMOID["vm-100"].Warnings).To(BeEmpty())
+			Expect(vmByMOID["vm-200"].Metrics).To(BeEmpty())
+			Expect(vmByMOID["vm-200"].Warnings).To(ConsistOf("vCenter returned no data for this VM"))
+		})
+	})
 })

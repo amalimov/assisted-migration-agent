@@ -66,7 +66,7 @@ func Connect(ctx context.Context, cfg Config) (*govmomi.Client, error) {
 }
 
 // DiscoverVMs lists VMs from vCenter, preferring powered-on VMs, filtered by
-// name substring (when cfg.NameFilter is set), up to cfg.MaxVMs results.
+// name substring (when cfg.NameFilter is set).
 func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMInfo, error) {
 	container := client.ServiceContent.RootFolder
 	if cfg.ClusterID != "" {
@@ -90,7 +90,7 @@ func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMI
 		return nil, fmt.Errorf("failed to retrieve VMs: %w", err)
 	}
 
-	// Put powered-on VMs first so they are preferred when MaxVMs is reached.
+	// Put powered-on VMs first so they are preferred.
 	var poweredOn, other []mo.VirtualMachine
 	for _, vm := range vms {
 		if vm.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOn {
@@ -109,9 +109,6 @@ func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMI
 			continue
 		}
 		result = append(result, VMInfo{Name: vm.Name, Ref: vm.Self})
-		if len(result) >= cfg.MaxVMs {
-			break
-		}
 	}
 	return result, nil
 }

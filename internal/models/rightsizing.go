@@ -31,6 +31,12 @@ type RightSizingMetric struct {
 	Latest      float64
 }
 
+// InventoryVM is a VM read from the local inventory (vinfo table).
+type InventoryVM struct {
+	ID   string // MoRef value, e.g. "vm-12345"
+	Name string
+}
+
 // RightsizingCollectionStateType is the state of an async rightsizing collection run.
 type RightsizingCollectionStateType string
 
@@ -63,12 +69,12 @@ type RightsizingCollectionResult struct {
 // RightsizingParams holds request parameters for the TriggerCollection service call.
 type RightsizingParams struct {
 	Credentials
-	NameFilter string
-	ClusterID  string
-	MaxVMs     int
-	LookbackH  int // hours; e.g. 720 = 30 days
-	IntervalID int // vSphere interval in seconds (300=day, 1800=week, 7200=month)
-	BatchSize  int
+	NameFilter  string
+	ClusterID   string
+	LookbackH   int // hours; e.g. 720 = 30 days
+	IntervalID  int // vSphere interval in seconds (300=day, 1800=week, 7200=month)
+	BatchSize   int
+	DiscoverVMs bool // true = query vSphere live; false (default) = use local inventory
 }
 
 // RightsizingMetricStats holds per-metric aggregated statistics for the API read model.
@@ -83,9 +89,17 @@ type RightsizingMetricStats struct {
 
 // RightsizingVMReport groups all metric stats for a single VM in the API read model.
 type RightsizingVMReport struct {
-	Name    string
+	Name     string
+	MOID     string
+	Metrics  map[string]RightsizingMetricStats
+	Warnings []string // non-empty when VM was queried but had no metrics data
+}
+
+// VMWarning is a VM that was queried but had no historical metrics data.
+type VMWarning struct {
 	MOID    string
-	Metrics map[string]RightsizingMetricStats
+	VMName  string
+	Warning string
 }
 
 // RightsizingReportSummary is the API read model returned by ListReports (metadata only, no VM metrics).

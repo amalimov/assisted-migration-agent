@@ -39,6 +39,16 @@ const (
 	rsMetricsColP99         = "p99"
 	rsMetricsColMax         = "max"
 	rsMetricsColLatest      = "latest"
+
+	vinfoTable   = "vinfo"
+	vinfoColVMID = "VM ID"
+	vinfoColName = "VM"
+
+	rsWarningsTable       = "rightsizing_vm_warnings"
+	rsWarningsColReportID = "report_id"
+	rsWarningsColMOID     = "moid"
+	rsWarningsColVMName   = "vm_name"
+	rsWarningsColWarning  = "warning"
 )
 
 // RightSizingStore persists rightsizing report metadata and per-VM metric aggregates.
@@ -158,6 +168,62 @@ func (s *RightSizingStore) UpdateExpectedBatchCount(ctx context.Context, reportI
 	return nil
 }
 
+// WriteVMWarnings persists one warning row per VM that was queried but had no metrics.
+// Duplicate rows (same report_id/moid) are silently ignored.
+func (s *RightSizingStore) WriteVMWarnings(ctx context.Context, reportID string, warnings []models.VMWarning) error {
+	if len(warnings) == 0 {
+		return nil
+	}
+
+	builder := sq.Insert(rsWarningsTable).
+		Columns(rsWarningsColReportID, rsWarningsColMOID, rsWarningsColVMName, rsWarningsColWarning)
+
+	for _, w := range warnings {
+		builder = builder.Values(reportID, w.MOID, w.VMName, w.Warning)
+	}
+
+	query, args, err := builder.Suffix("ON CONFLICT DO NOTHING").ToSql()
+	if err != nil {
+		return fmt.Errorf("building write VM warnings query: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("inserting VM warnings: %w", err)
+	}
+	return nil
+}
+
+// ListInventoryVMs reads VM IDs and names from the local inventory (vinfo table).
+// "VM ID" is the MoRef value; "VM" is the display name.
+// Returns all entries ordered by name.
+func (s *RightSizingStore) ListInventoryVMs(ctx context.Context) ([]models.InventoryVM, error) {
+	builder := sq.Select(
+		fmt.Sprintf(`"%s"`, vinfoColVMID),
+		fmt.Sprintf(`"%s"`, vinfoColName),
+	).From(vinfoTable).
+		OrderBy(fmt.Sprintf(`"%s"`, vinfoColName))
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list inventory VMs query: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("executing list inventory VMs query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var result []models.InventoryVM
+	for rows.Next() {
+		var vm models.InventoryVM
+		if err := rows.Scan(&vm.ID, &vm.Name); err != nil {
+			return nil, fmt.Errorf("scanning inventory VM row: %w", err)
+		}
+		result = append(result, vm)
+	}
+	return result, rows.Err()
+}
+
 // ListReports returns metadata for all rightsizing reports ordered by creation time descending.
 // VM metrics are not included; use GetReport to retrieve the full report with metrics.
 // Returns an empty slice (not nil) when no reports exist.
@@ -226,6 +292,9 @@ func (s *RightSizingStore) GetReport(ctx context.Context, id string) (*models.Ri
 	if err := s.appendMetrics(ctx, reports, map[string]int{r.ID: 0}); err != nil {
 		return nil, err
 	}
+	if err := s.appendVMWarnings(ctx, reports, map[string]int{r.ID: 0}); err != nil {
+		return nil, err
+	}
 	return &reports[0], nil
 }
 
@@ -286,5 +355,44 @@ func (s *RightSizingStore) appendMetrics(ctx context.Context, reports []models.R
 		reports[rIdx].VMs[vIdx].Metrics[metricKey] = stats
 	}
 
+	return rows.Err()
+}
+
+// appendVMWarnings reads warning-only VMs and merges them into reports[rIdx].VMs
+// with an empty Metrics map and populated Warnings slice.
+func (s *RightSizingStore) appendVMWarnings(ctx context.Context, reports []models.RightsizingReport, idxByID map[string]int) error {
+	ids := make([]string, 0, len(idxByID))
+	for id := range idxByID {
+		ids = append(ids, id)
+	}
+
+	query, args, err := sq.Select(
+		rsWarningsColReportID, rsWarningsColMOID, rsWarningsColVMName, rsWarningsColWarning,
+	).From(rsWarningsTable).
+		Where(sq.Eq{rsWarningsColReportID: ids}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building VM warnings query: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("executing VM warnings query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var reportID, moid, vmName, warning string
+		if err := rows.Scan(&reportID, &moid, &vmName, &warning); err != nil {
+			return fmt.Errorf("scanning VM warning row: %w", err)
+		}
+		rIdx := idxByID[reportID]
+		reports[rIdx].VMs = append(reports[rIdx].VMs, models.RightsizingVMReport{
+			Name:     vmName,
+			MOID:     moid,
+			Metrics:  map[string]models.RightsizingMetricStats{},
+			Warnings: []string{warning},
+		})
+	}
 	return rows.Err()
 }

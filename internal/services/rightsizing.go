@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vmware/govmomi"
+	"github.com/vmware/govmomi/vim25/types"
 	"go.uber.org/zap"
 
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
@@ -32,7 +33,7 @@ type (
 
 	// rightsizingWorkBuilderFunc builds the work pipeline for a single collection run.
 	// Swappable via WithWorkBuilder for tests.
-	rightsizingWorkBuilderFunc func(reportID string, cfg rsig.Config, st *store.Store, start, end time.Time) *RightsizingCollectionHandle
+	rightsizingWorkBuilderFunc func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *RightsizingCollectionHandle
 )
 
 // rightsizingWorkBuilder is a custom WorkBuilder that emits three static stages
@@ -113,6 +114,40 @@ func (b *rightsizingWorkBuilder) generateBatches() {
 			},
 		})
 	}
+
+	// Collect VMs that had no metrics data and append a single work unit to persist their warnings.
+	var noDataWarnings []models.VMWarning
+	for _, vm := range vms {
+		r := vmResults[vm.Ref.Value]
+		if len(r.Metrics) == 0 {
+			warning := "vCenter returned no data for this VM"
+			if len(r.Warnings) > 0 {
+				warning = r.Warnings[0]
+			}
+			noDataWarnings = append(noDataWarnings, models.VMWarning{
+				MOID:    vm.Ref.Value,
+				VMName:  vm.Name,
+				Warning: warning,
+			})
+		}
+	}
+
+	if len(noDataWarnings) > 0 {
+		capturedWarnings := noDataWarnings
+		reportID := b.reportID
+		st := b.store
+		b.batchUnits = append(b.batchUnits, rightsizingWorkUnit{
+			Status: func() models.RightsizingCollectionStatus {
+				return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStatePersisting}
+			},
+			Work: func(ctx context.Context, result models.RightsizingCollectionResult) (models.RightsizingCollectionResult, error) {
+				if err := st.RightSizing().WriteVMWarnings(ctx, reportID, capturedWarnings); err != nil {
+					return result, fmt.Errorf("persisting VM warnings: %w", err)
+				}
+				return result, nil
+			},
+		})
+	}
 }
 
 // RightsizingService provides API access to stored rightsizing reports and
@@ -150,15 +185,13 @@ func (s *RightsizingService) GetReport(ctx context.Context, id string) (*models.
 // TriggerCollection starts an async rightsizing collection run.
 // The report shell is persisted in DuckDB synchronously before returning (202 Accepted).
 // Callers poll GET /rightsizing/{id} to observe metrics being populated.
-func (s *RightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReport, error) {
+func (s *RightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReportSummary, error) {
+	//TODO: replace magic numbers with package level consts
 	if params.LookbackH <= 0 {
 		params.LookbackH = 720
 	}
 	if params.IntervalID <= 0 {
 		params.IntervalID = 7200
-	}
-	if params.MaxVMs <= 0 {
-		params.MaxVMs = 100
 	}
 	if params.BatchSize <= 0 {
 		params.BatchSize = 64
@@ -191,20 +224,20 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 		return nil, fmt.Errorf("creating report shell: %w", err)
 	}
 
+	//TODO: check if the config can be injected to the function instead of created here
 	cfg := rsig.Config{
 		VCenterURL: params.URL,
 		Username:   params.Username,
 		Password:   params.Password,
-		Insecure:   false, // production default; the dev CLI defaults to true
+		Insecure:   true, // TODO: this is also hardcoded in the collector, is this ok??
 		NameFilter: params.NameFilter,
 		ClusterID:  params.ClusterID,
-		MaxVMs:     params.MaxVMs,
 		Lookback:   lookback,
 		IntervalID: params.IntervalID,
 		BatchSize:  params.BatchSize,
 	}
 
-	handle := s.buildFn(reportID, cfg, s.store, windowStart, now)
+	handle := s.buildFn(reportID, cfg, params.DiscoverVMs, s.store, windowStart, now)
 	srv := work.NewService(
 		models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateConnecting},
 		handle.Builder,
@@ -232,7 +265,7 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 
 	s.workSrv = srv
 
-	return &models.RightsizingReport{
+	return &models.RightsizingReportSummary{
 		ID:                  reportID,
 		VCenter:             params.URL,
 		ClusterID:           params.ClusterID,
@@ -240,7 +273,6 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 		WindowEnd:           now,
 		IntervalID:          params.IntervalID,
 		ExpectedSampleCount: expectedSamples,
-		VMs:                 []models.RightsizingVMReport{},
 	}, nil
 }
 
@@ -272,7 +304,7 @@ func (s *RightsizingService) Stop() {
 
 // defaultRightsizingWorkBuilder constructs the real four-stage govmomi pipeline.
 // Stages: connect → discover → query → [batch-1 … batch-N] (dynamic).
-func defaultRightsizingWorkBuilder(reportID string, cfg rsig.Config, st *store.Store, start, end time.Time) *RightsizingCollectionHandle {
+func defaultRightsizingWorkBuilder(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *RightsizingCollectionHandle {
 	var client *govmomi.Client
 	var vms []rsig.VMInfo
 	var vmResults map[string]rsig.VMReport
@@ -304,11 +336,29 @@ func defaultRightsizingWorkBuilder(reportID string, cfg rsig.Config, st *store.S
 				return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateDiscovering}
 			},
 			Work: func(ctx context.Context, result models.RightsizingCollectionResult) (models.RightsizingCollectionResult, error) {
-				discovered, err := rsig.DiscoverVMs(ctx, client, cfg)
-				if err != nil {
-					return result, fmt.Errorf("discovering VMs: %w", err)
+				if discoverVMs {
+					// Live vSphere discovery — original behaviour.
+					discovered, err := rsig.DiscoverVMs(ctx, client, cfg)
+					if err != nil {
+						return result, fmt.Errorf("discovering VMs from vSphere: %w", err)
+					}
+					vms = discovered
+				} else {
+					// Inventory-based discovery from local DB (default).
+					inventoryVMs, err := st.RightSizing().ListInventoryVMs(ctx)
+					if err != nil {
+						return result, fmt.Errorf("reading VMs from inventory: %w", err)
+					}
+					for _, vm := range inventoryVMs {
+						vms = append(vms, rsig.VMInfo{
+							Name: vm.Name,
+							Ref: types.ManagedObjectReference{
+								Type:  "VirtualMachine",
+								Value: vm.ID,
+							},
+						})
+					}
 				}
-				vms = discovered
 				if err := st.RightSizing().UpdateExpectedBatchCount(ctx, reportID, len(vms), cfg.BatchSize); err != nil {
 					return result, fmt.Errorf("updating expected batch count: %w", err)
 				}

@@ -320,10 +320,15 @@ func NewRightsizingVMReportFromModel(vm models.RightsizingVMReport) RightsizingV
 	for k, v := range vm.Metrics {
 		metrics[k] = NewRightsizingMetricStatsFromModel(v)
 	}
+	warnings := vm.Warnings
+	if warnings == nil {
+		warnings = []string{}
+	}
 	return RightsizingVMReport{
-		Name:    vm.Name,
-		Moid:    vm.MOID,
-		Metrics: metrics,
+		Name:     vm.Name,
+		Moid:     vm.MOID,
+		Metrics:  metrics,
+		Warnings: warnings,
 	}
 }
 

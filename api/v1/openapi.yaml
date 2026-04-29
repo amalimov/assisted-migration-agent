@@ -526,11 +526,11 @@ paths:
               $ref: '#/components/schemas/RightsizingCollectRequest'
       responses:
         '202':
-          description: Collection triggered; returns the newly created report
+          description: Collection triggered; returns report
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RightsizingReport'
+                $ref: '#/components/schemas/RightsizingReportSummary'
         '400':
           description: Invalid request
         '500':
@@ -1242,10 +1242,6 @@ components:
           type: integer
           description: vSphere historical interval ID in seconds (300=day, 1800=week, 7200=month)
           default: 7200
-        max_vms:
-          type: integer
-          description: Maximum number of VMs to query
-          default: 100
         name_filter:
           type: string
           description: Filter VMs by name substring
@@ -1256,6 +1252,12 @@ components:
           type: integer
           description: Number of VMs per QueryPerf round-trip
           default: 64
+        discover_vms:
+          type: boolean
+          description: >
+            If true, discover VMs live from vSphere.
+            If false (default), use the VMs already stored in the local inventory.
+          default: false
 
     RightsizingMetricStats:
       type: object
@@ -1291,6 +1293,7 @@ components:
         - name
         - moid
         - metrics
+        - warnings
       properties:
         name:
           type: string
@@ -1300,6 +1303,11 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/RightsizingMetricStats'
+        warnings:
+          type: array
+          description: Non-empty when the VM was queried but had no historical metrics data.
+          items:
+            type: string
 
     RightsizingReport:
       type: object

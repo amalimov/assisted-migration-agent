@@ -101,7 +101,7 @@ var _ = Describe("RightsizingService", func() {
 
 	Describe("TriggerCollection", func() {
 		It("should create a report shell in DuckDB and return it immediately", func() {
-			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
 				return &services.RightsizingCollectionHandle{
 					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
 						{
@@ -121,7 +121,6 @@ var _ = Describe("RightsizingService", func() {
 				Credentials: models.Credentials{URL: "https://vc.example.com", Username: "admin", Password: "secret"},
 				LookbackH:   720,
 				IntervalID:  7200,
-				MaxVMs:      10,
 				BatchSize:   5,
 			}
 			report, err := svc.TriggerCollection(ctx, params)
@@ -138,7 +137,7 @@ var _ = Describe("RightsizingService", func() {
 
 		It("should reject a second TriggerCollection while one is running", func() {
 			blockCh := make(chan struct{})
-			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
 				return &services.RightsizingCollectionHandle{
 					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
 						{

@@ -66,7 +66,6 @@ func (h *Handler) TriggerRightsizingCollection(c *gin.Context) {
 		},
 		LookbackH:  defaultInt(req.LookbackHours, 720),
 		IntervalID: defaultInt(req.IntervalId, 7200),
-		MaxVMs:     defaultInt(req.MaxVms, 100),
 		BatchSize:  defaultInt(req.BatchSize, 64),
 	}
 	if req.NameFilter != nil {
@@ -74,6 +73,9 @@ func (h *Handler) TriggerRightsizingCollection(c *gin.Context) {
 	}
 	if req.ClusterId != nil {
 		params.ClusterID = *req.ClusterId
+	}
+	if req.DiscoverVms != nil {
+		params.DiscoverVMs = *req.DiscoverVms
 	}
 
 	report, err := h.rightsizingSrv.TriggerCollection(c.Request.Context(), params)
@@ -83,7 +85,7 @@ func (h *Handler) TriggerRightsizingCollection(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusAccepted, v1.NewRightsizingReportFromModel(*report))
+	c.JSON(http.StatusAccepted, v1.NewRightsizingReportSummaryFromModel(*report))
 }
 
 func defaultInt(p *int, fallback int) int {

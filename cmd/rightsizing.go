@@ -45,7 +45,6 @@ func NewRightSizingCommand() *cobra.Command {
 	c.Flags().BoolVar(&cfg.Insecure, "insecure", rsEnvBool("VCENTER_INSECURE", true), "skip TLS certificate verification (default true for PoC; set false in production)")
 	c.Flags().StringVar(&cfg.NameFilter, "name-filter", rsEnvStr("VM_NAME_FILTER", ""), "filter VMs by name substring")
 	c.Flags().StringVar(&cfg.ClusterID, "cluster-id", rsEnvStr("CLUSTER_ID", ""), "MoRef value of a ClusterComputeResource to scope discovery (e.g. domain-c123); empty = all clusters")
-	c.Flags().IntVar(&cfg.MaxVMs, "max-vms", rsEnvInt("MAX_VMS", 5), "maximum number of VMs to query")
 	c.Flags().StringVar(&lookbackStr, "lookback", rsEnvStr("LOOKBACK", "720h"), "lookback window as Go duration (720h = 30 days)")
 	c.Flags().IntVar(&intervalID, "interval-id", rsEnvInt("INTERVAL_ID", 7200), "vSphere historical interval ID (7200=month, 1800=week, 300=day)")
 	c.Flags().IntVar(&cfg.BatchSize, "batch-size", rsEnvInt("BATCH_SIZE", 64), "number of VMs per QueryPerf round-trip")
@@ -77,7 +76,7 @@ func runRightSizing(ctx context.Context, cfg rightsizing.Config) error {
 	defer func() { _ = client.Logout(ctx) }()
 	zap.S().Info("connected successfully")
 
-	zap.S().Infof("discovering VMs (name-filter=%q, max=%d)", cfg.NameFilter, cfg.MaxVMs)
+	zap.S().Infof("discovering VMs (name-filter=%q)", cfg.NameFilter)
 	vms, err := rightsizing.DiscoverVMs(ctx, client, cfg)
 	if err != nil {
 		return fmt.Errorf("error discovering VMs: %w", err)

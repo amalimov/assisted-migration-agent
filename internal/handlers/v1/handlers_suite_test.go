@@ -219,7 +219,7 @@ func (m *MockGroupService) Delete(ctx context.Context, id int) error {
 
 // MockRightsizingService is a mock implementation of RightsizingService.
 type MockRightsizingService struct {
-	TriggerResult     *models.RightsizingReport
+	TriggerResult     *models.RightsizingReportSummary
 	TriggerError      error
 	TriggerCallCount  int
 	LastTriggerParams models.RightsizingParams
@@ -232,7 +232,7 @@ type MockRightsizingService struct {
 	LastGetID string
 }
 
-func (m *MockRightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReport, error) {
+func (m *MockRightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReportSummary, error) {
 	m.TriggerCallCount++
 	m.LastTriggerParams = params
 	return m.TriggerResult, m.TriggerError

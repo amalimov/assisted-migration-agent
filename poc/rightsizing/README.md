@@ -14,7 +14,6 @@ export VCENTER_USERNAME='user@vsphere.local'
 export VCENTER_PASSWORD='...'
 export VCENTER_INSECURE=true     # skip TLS verification (default: true)
 export VM_NAME_FILTER=''         # optional: filter by name substring
-export MAX_VMS=5                 # max VMs to query (default: 5)
 export LOOKBACK=720h             # lookback window (default: 720h = 30 days)
 export INTERVAL_ID=7200          # vSphere interval ID (default: 7200 = month)
 export BATCH_SIZE=64             # VMs per QueryPerf call (default: 64)
@@ -40,7 +39,6 @@ Each flag falls back to its environment variable.
 | `--insecure` | `VCENTER_INSECURE` | `true` | Skip TLS verification (set false in production) |
 | `--name-filter` | `VM_NAME_FILTER` | `""` | VM name substring filter |
 | `--cluster-id` | `CLUSTER_ID` | `""` | Scope to a cluster (MoRef value, e.g. `domain-c123`); empty = all clusters |
-| `--max-vms` | `MAX_VMS` | `5` | Max VMs |
 | `--lookback` | `LOOKBACK` | `720h` | Lookback (Go duration) |
 | `--interval-id` | `INTERVAL_ID` | `7200` | vSphere interval ID |
 | `--batch-size` | `BATCH_SIZE` | `64` | VMs per QueryPerf round-trip |

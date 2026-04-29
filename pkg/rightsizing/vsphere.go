@@ -43,7 +43,6 @@ type Config struct {
 	Insecure   bool
 	NameFilter string
 	ClusterID  string
-	MaxVMs     int
 	Lookback   time.Duration
 	IntervalID int
 	BatchSize  int
@@ -87,7 +86,7 @@ func Connect(ctx context.Context, cfg Config) (*govmomi.Client, error) {
 }
 
 // DiscoverVMs lists VMs from vCenter, preferring powered-on VMs, filtered by
-// name substring (when cfg.NameFilter is set), up to cfg.MaxVMs results.
+// name substring (when cfg.NameFilter is set).
 func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMInfo, error) {
 	container := client.ServiceContent.RootFolder
 	if cfg.ClusterID != "" {
@@ -127,12 +126,11 @@ func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMI
 			continue
 		}
 		result = append(result, VMInfo{Name: vm.Name, Ref: vm.Self})
-		if len(result) >= cfg.MaxVMs {
-			break
-		}
 	}
 	return result, nil
 }
+
+//TODO: QueryMetrics is long, has high cyclomatic complexity and has too many reponsibilites. It should be refactored according to clean code principles.
 
 // QueryMetrics queries historical performance metrics for all VMs in batches.
 // Counter info is resolved once; one QueryPerf call is made per batch of cfg.BatchSize VMs.

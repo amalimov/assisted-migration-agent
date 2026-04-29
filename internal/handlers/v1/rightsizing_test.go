@@ -181,8 +181,8 @@ var _ = Describe("Rightsizing Handlers", func() {
 			Expect(respBody["error"]).NotTo(BeEmpty())
 		})
 
-		It("should return 202 with the created report", func() {
-			createdReport := models.RightsizingReport{
+		It("should return 202 with the created report summary (no vms field)", func() {
+			createdReport := models.RightsizingReportSummary{
 				ID:                  "new-report-uuid",
 				VCenter:             "https://vcenter.example.com",
 				ClusterID:           "domain-c123",
@@ -190,14 +190,12 @@ var _ = Describe("Rightsizing Handlers", func() {
 				WindowEnd:           now,
 				IntervalID:          7200,
 				ExpectedSampleCount: 360,
-				VMs:                 []models.RightsizingVMReport{},
 				CreatedAt:           now,
 			}
 			mockSvc.TriggerResult = &createdReport
 
 			lookbackHours := 720
 			intervalID := 7200
-			maxVMs := 50
 			clusterId := "domain-c123"
 			body := v1.RightsizingCollectRequest{
 				Credentials: v1.VcenterCredentials{
@@ -207,7 +205,6 @@ var _ = Describe("Rightsizing Handlers", func() {
 				},
 				LookbackHours: &lookbackHours,
 				IntervalId:    &intervalID,
-				MaxVms:        &maxVMs,
 				ClusterId:     &clusterId,
 			}
 			bodyBytes, _ := json.Marshal(body)
@@ -218,13 +215,12 @@ var _ = Describe("Rightsizing Handlers", func() {
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusAccepted))
-			var resp v1.RightsizingReport
+			var resp v1.RightsizingReportSummary
 			Expect(json.Unmarshal(w.Body.Bytes(), &resp)).To(Succeed())
 			Expect(resp.Id).To(Equal("new-report-uuid"))
 			Expect(mockSvc.TriggerCallCount).To(Equal(1))
 			Expect(mockSvc.LastTriggerParams.URL).To(Equal("https://vcenter.example.com"))
 			Expect(mockSvc.LastTriggerParams.LookbackH).To(Equal(720))
-			Expect(mockSvc.LastTriggerParams.MaxVMs).To(Equal(50))
 			Expect(mockSvc.LastTriggerParams.IntervalID).To(Equal(7200))
 			Expect(mockSvc.LastTriggerParams.ClusterID).To(Equal("domain-c123"))
 		})
