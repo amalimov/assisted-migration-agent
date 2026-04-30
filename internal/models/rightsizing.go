@@ -46,6 +46,7 @@ const (
 	RightsizingCollectionStateQuerying    RightsizingCollectionStateType = "querying"
 	RightsizingCollectionStatePersisting  RightsizingCollectionStateType = "persisting"
 	RightsizingCollectionStateCompleted   RightsizingCollectionStateType = "completed"
+	RightsizingCollectionStateIdle        RightsizingCollectionStateType = "idle"
 	RightsizingCollectionStateError       RightsizingCollectionStateType = "error"
 )
 

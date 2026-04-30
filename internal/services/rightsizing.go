@@ -19,6 +19,12 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/pkg/work"
 )
 
+const (
+	rightsizingDefaultLookbackHours   = 720  // 30 days
+	rightsizingDefaultIntervalSeconds = 7200 // monthly vSphere rollup
+	rightsizingDefaultBatchSize       = 25
+)
+
 // Type aliases following the CollectorService pattern.
 type (
 	rightsizingWorkUnit = work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]
@@ -203,20 +209,48 @@ func (s *RightsizingService) GetVMUtilization(ctx context.Context, vmID string) 
 	return s.store.RightSizing().GetVMUtilization(ctx, vmID)
 }
 
+// applyCollectionDefaults fills zero-value params with package defaults.
+func applyCollectionDefaults(p *models.RightsizingParams) {
+	if p.LookbackH <= 0 {
+		p.LookbackH = rightsizingDefaultLookbackHours
+	}
+	if p.IntervalID <= 0 {
+		p.IntervalID = rightsizingDefaultIntervalSeconds
+	}
+	if p.BatchSize <= 0 {
+		p.BatchSize = rightsizingDefaultBatchSize
+	}
+}
+
+// computeCollectionWindow derives the time window and expected sample count from params.
+func computeCollectionWindow(params models.RightsizingParams) (windowStart, windowEnd time.Time, expectedSamples int, lookback time.Duration) {
+	windowEnd = time.Now().UTC()
+	lookback = time.Duration(params.LookbackH) * time.Hour
+	windowStart = windowEnd.Add(-lookback)
+	expectedSamples = int(lookback / (time.Duration(params.IntervalID) * time.Second))
+	return
+}
+
+// buildVSphereConfig constructs the rsig.Config from collection params.
+func buildVSphereConfig(params models.RightsizingParams, lookback time.Duration) rsig.Config {
+	return rsig.Config{
+		VCenterURL: params.URL,
+		Username:   params.Username,
+		Password:   params.Password,
+		Insecure:   true, // TODO issue 4: wire from agent config
+		NameFilter: params.NameFilter,
+		ClusterID:  params.ClusterID,
+		Lookback:   lookback,
+		IntervalID: params.IntervalID,
+		BatchSize:  params.BatchSize,
+	}
+}
+
 // TriggerCollection starts an async rightsizing collection run.
 // The report shell is persisted in DuckDB synchronously before returning (202 Accepted).
 // Callers poll GET /rightsizing/{id} to observe metrics being populated.
 func (s *RightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReportSummary, error) {
-	//TODO: replace magic numbers with package level consts
-	if params.LookbackH <= 0 {
-		params.LookbackH = 720
-	}
-	if params.IntervalID <= 0 {
-		params.IntervalID = 7200
-	}
-	if params.BatchSize <= 0 {
-		params.BatchSize = 64
-	}
+	applyCollectionDefaults(&params)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -225,10 +259,7 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 		return nil, srvErrors.NewRightsizingCollectionInProgressError()
 	}
 
-	now := time.Now().UTC()
-	lookback := time.Duration(params.LookbackH) * time.Hour
-	windowStart := now.Add(-lookback)
-	expectedSamples := int(lookback / (time.Duration(params.IntervalID) * time.Second))
+	windowStart, windowEnd, expectedSamples, lookback := computeCollectionWindow(params)
 
 	// Persist a shell report before launching the pipeline so the ID exists immediately.
 	// vmCount=0 here; UpdateExpectedBatchCount corrects it after VM discovery.
@@ -237,28 +268,16 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 		ClusterID:           params.ClusterID,
 		IntervalID:          params.IntervalID,
 		WindowStart:         windowStart,
-		WindowEnd:           now,
+		WindowEnd:           windowEnd,
 		ExpectedSampleCount: expectedSamples,
 	}
-	reportID, err := s.store.RightSizing().CreateReport(ctx, storeReport, 0, params.BatchSize)
+	reportID, createdAt, err := s.store.RightSizing().CreateReport(ctx, storeReport, 0, params.BatchSize)
 	if err != nil {
 		return nil, fmt.Errorf("creating report shell: %w", err)
 	}
 
-	//TODO: check if the config can be injected to the function instead of created here
-	cfg := rsig.Config{
-		VCenterURL: params.URL,
-		Username:   params.Username,
-		Password:   params.Password,
-		Insecure:   true, // TODO: this is also hardcoded in the collector, is this ok??
-		NameFilter: params.NameFilter,
-		ClusterID:  params.ClusterID,
-		Lookback:   lookback,
-		IntervalID: params.IntervalID,
-		BatchSize:  params.BatchSize,
-	}
-
-	handle := s.buildFn(reportID, cfg, params.DiscoverVMs, s.store, windowStart, now)
+	cfg := buildVSphereConfig(params, lookback)
+	handle := s.buildFn(reportID, cfg, params.DiscoverVMs, s.store, windowStart, windowEnd)
 	srv := work.NewService(
 		models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateConnecting},
 		handle.Builder,
@@ -291,9 +310,10 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 		VCenter:             params.URL,
 		ClusterID:           params.ClusterID,
 		WindowStart:         windowStart,
-		WindowEnd:           now,
+		WindowEnd:           windowEnd,
 		IntervalID:          params.IntervalID,
 		ExpectedSampleCount: expectedSamples,
+		CreatedAt:           createdAt,
 	}, nil
 }
 
@@ -304,7 +324,7 @@ func (s *RightsizingService) GetStatus() models.RightsizingCollectionStatus {
 	s.mu.Unlock()
 
 	if srv == nil {
-		return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateCompleted}
+		return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateIdle}
 	}
 	state := srv.State()
 	if state.Err != nil && !errors.Is(state.Err, work.ErrStopped) {

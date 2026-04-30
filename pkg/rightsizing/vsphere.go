@@ -3,6 +3,7 @@ package rightsizing
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 	"time"
@@ -130,7 +131,88 @@ func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMI
 	return result, nil
 }
 
-//TODO: QueryMetrics is long, has high cyclomatic complexity and has too many reponsibilites. It should be refactored according to clean code principles.
+// resolveCounters maps DesiredMetrics names to PerfMetricId query specs and
+// builds the countersByKey reverse lookup needed to name the returned series.
+func resolveCounters(ctx context.Context, pm *performance.Manager) (
+	metricIDs []types.PerfMetricId,
+	countersByKey map[int32]*types.PerfCounterInfo,
+	warnings []string,
+) {
+	countersByName, err := pm.CounterInfoByName(ctx)
+	if err != nil {
+		return nil, nil, []string{fmt.Sprintf("failed to get counter info: %v", err)}
+	}
+	countersByKey, err = pm.CounterInfoByKey(ctx)
+	if err != nil {
+		return nil, nil, []string{fmt.Sprintf("failed to get counter info by key: %v", err)}
+	}
+	for _, name := range DesiredMetrics {
+		info, ok := countersByName[name]
+		if !ok {
+			warnings = append(warnings, fmt.Sprintf("metric %q not recognized by this vCenter", name))
+			continue
+		}
+		metricIDs = append(metricIDs, types.PerfMetricId{CounterId: info.Key, Instance: ""})
+	}
+	return metricIDs, countersByKey, warnings
+}
+
+// parseBatchResults converts raw QueryPerf results for one batch into VMReport
+// entries and fills a no-data entry for any VM absent from the response.
+func parseBatchResults(
+	raw []types.BasePerfEntityMetricBase,
+	countersByKey map[int32]*types.PerfCounterInfo,
+	batch []VMInfo,
+) map[string]VMReport {
+	results := make(map[string]VMReport, len(batch))
+
+	for _, base := range raw {
+		em, ok := base.(*types.PerfEntityMetric)
+		if !ok {
+			continue
+		}
+		moid := em.Entity.Value
+		metrics := make(map[string]MetricStats)
+		var warnings []string
+		for _, v := range em.Value {
+			series, ok := v.(*types.PerfMetricIntSeries)
+			if !ok {
+				continue
+			}
+			info, ok := countersByKey[series.Id.CounterId]
+			if !ok {
+				continue
+			}
+			name := info.Name()
+			if _, exists := metrics[name]; exists {
+				continue
+			}
+			if len(series.Value) == 0 {
+				warnings = append(warnings, fmt.Sprintf("metric %q returned no samples", name))
+				continue
+			}
+			metrics[name] = ComputeStats(series.Value)
+		}
+		if len(metrics) == 0 && len(warnings) == 0 {
+			warnings = append(warnings, "query succeeded but returned no samples")
+		}
+		results[moid] = VMReport{MOID: moid, Metrics: metrics, Warnings: warnings}
+	}
+
+	for _, vm := range batch {
+		if r, exists := results[vm.Ref.Value]; !exists {
+			results[vm.Ref.Value] = VMReport{
+				Name:     vm.Name,
+				MOID:     vm.Ref.Value,
+				Warnings: []string{"vCenter returned no data for this VM"},
+			}
+		} else {
+			r.Name = vm.Name
+			results[vm.Ref.Value] = r
+		}
+	}
+	return results
+}
 
 // QueryMetrics queries historical performance metrics for all VMs in batches.
 // Counter info is resolved once; one QueryPerf call is made per batch of cfg.BatchSize VMs.
@@ -138,25 +220,7 @@ func DiscoverVMs(ctx context.Context, client *govmomi.Client, cfg Config) ([]VMI
 func QueryMetrics(ctx context.Context, client *govmomi.Client, vms []VMInfo, cfg Config, start, end time.Time) (map[string]VMReport, []string) {
 	pm := performance.NewManager(client.Client)
 
-	countersByName, err := pm.CounterInfoByName(ctx)
-	if err != nil {
-		return nil, []string{fmt.Sprintf("failed to get counter info: %v", err)}
-	}
-	countersByKey, err := pm.CounterInfoByKey(ctx)
-	if err != nil {
-		return nil, []string{fmt.Sprintf("failed to get counter info by key: %v", err)}
-	}
-
-	var metricIDs []types.PerfMetricId
-	var globalWarnings []string
-	for _, name := range DesiredMetrics {
-		info, ok := countersByName[name]
-		if !ok {
-			globalWarnings = append(globalWarnings, fmt.Sprintf("metric %q not recognized by this vCenter", name))
-			continue
-		}
-		metricIDs = append(metricIDs, types.PerfMetricId{CounterId: info.Key, Instance: ""})
-	}
+	metricIDs, countersByKey, globalWarnings := resolveCounters(ctx, pm)
 	if len(metricIDs) == 0 {
 		return nil, append(globalWarnings, "no desired metrics recognized by this vCenter")
 	}
@@ -179,10 +243,6 @@ func QueryMetrics(ctx context.Context, client *govmomi.Client, vms []VMInfo, cfg
 			}
 		}
 
-		// TODO: construct performance.Manager once per command run and pass it into this function.
-		// Currently a fresh Manager is created per QueryMetrics call, bypassing its internal
-		// CounterInfoByName cache and incurring one extra vCenter round-trip per call. Also batch
-		// the VM refs so SampleByName is called once for all VMs instead of once per VM.
 		raw, err := pm.Query(ctx, specs)
 		if err != nil {
 			for _, vm := range batch {
@@ -195,51 +255,7 @@ func QueryMetrics(ctx context.Context, client *govmomi.Client, vms []VMInfo, cfg
 			continue
 		}
 
-		for _, base := range raw {
-			em, ok := base.(*types.PerfEntityMetric)
-			if !ok {
-				continue
-			}
-			moid := em.Entity.Value
-			metrics := make(map[string]MetricStats)
-			var warnings []string
-			for _, v := range em.Value {
-				series, ok := v.(*types.PerfMetricIntSeries)
-				if !ok {
-					continue
-				}
-				info, ok := countersByKey[series.Id.CounterId]
-				if !ok {
-					continue
-				}
-				name := info.Name()
-				if _, exists := metrics[name]; exists {
-					continue
-				}
-				if len(series.Value) == 0 {
-					warnings = append(warnings, fmt.Sprintf("metric %q returned no samples", name))
-					continue
-				}
-				metrics[name] = ComputeStats(series.Value)
-			}
-			if len(metrics) == 0 && len(warnings) == 0 {
-				warnings = append(warnings, "query succeeded but returned no samples")
-			}
-			results[moid] = VMReport{MOID: moid, Metrics: metrics, Warnings: warnings}
-		}
-
-		for _, vm := range batch {
-			if r, exists := results[vm.Ref.Value]; !exists {
-				results[vm.Ref.Value] = VMReport{
-					Name:     vm.Name,
-					MOID:     vm.Ref.Value,
-					Warnings: []string{"vCenter returned no data for this VM"},
-				}
-			} else {
-				r.Name = vm.Name
-				results[vm.Ref.Value] = r
-			}
-		}
+		maps.Copy(results, parseBatchResults(raw, countersByKey, batch))
 	}
 	return results, globalWarnings
 }

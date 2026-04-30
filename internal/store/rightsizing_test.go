@@ -55,14 +55,14 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("CreateReport", func() {
 		It("should insert a report and return a non-empty UUID", func() {
-			id, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 5)
+			id, _, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 5)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(id).NotTo(BeEmpty())
 		})
 
 		It("should set expected_batch_count to ceil(vmCount/batchSize)", func() {
 			// ceil(10/3) = 4
-			id, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 3)
+			id, _, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 3)
 			Expect(err).NotTo(HaveOccurred())
 
 			var expectedBatches, writtenBatches int
@@ -76,7 +76,7 @@ var _ = Describe("RightSizingStore", func() {
 
 		It("should persist vcenter and cluster_id correctly", func() {
 			r := testReport()
-			id, err := s.RightSizing().CreateReport(ctx, r, 1, 1)
+			id, _, err := s.RightSizing().CreateReport(ctx, r, 1, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			var vcenter, clusterID string
@@ -89,14 +89,14 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should return an error when batchSize is zero", func() {
-			_, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 0)
+			_, _, err := s.RightSizing().CreateReport(ctx, testReport(), 10, 0)
 			Expect(err).To(HaveOccurred())
 		})
 	})
 
 	Describe("WriteBatch", func() {
 		It("should insert metric rows for all metrics with non-zero SampleCount", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 
 			metrics := []models.RightSizingMetric{
 				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 360, Average: 500, P95: 1200, P99: 1500, Max: 2000, Latest: 450},
@@ -110,7 +110,7 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should skip metrics with zero SampleCount", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 
 			metrics := []models.RightSizingMetric{
 				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 0},
@@ -123,7 +123,7 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should return nil and insert nothing when given an empty slice", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 			Expect(s.RightSizing().WriteBatch(ctx, id, nil)).To(Succeed())
 
 			var count int
@@ -132,7 +132,7 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should be idempotent on duplicate rows", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 
 			metrics := []models.RightSizingMetric{
 				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 10, Average: 100},
@@ -148,7 +148,7 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("IncrementWrittenBatchCount", func() {
 		It("should increment written_batch_count by 1 per call", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 4, 2)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 4, 2)
 
 			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
 			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
@@ -161,7 +161,7 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("WithTx atomicity", func() {
 		It("should roll back both WriteBatch and IncrementWrittenBatchCount on error", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 
 			err := s.WithTx(ctx, func(txCtx context.Context) error {
 				metrics := []models.RightSizingMetric{
@@ -189,7 +189,7 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("UpdateExpectedBatchCount", func() {
 		It("should update expected_batch_count after VM discovery", func() {
-			id, err := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
+			id, _, err := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			// ceil(10/3) = 4
@@ -203,7 +203,7 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should return an error when batchSize is zero", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
 			Expect(s.RightSizing().UpdateExpectedBatchCount(ctx, id, 10, 0)).To(HaveOccurred())
 		})
 	})
@@ -219,7 +219,7 @@ var _ = Describe("RightSizingStore", func() {
 			WindowEnd:           time.Now().UTC(),
 			ExpectedSampleCount: 360,
 		}
-		id, err := s.RightSizing().CreateReport(ctx, r, 1, 1)
+		id, _, err := s.RightSizing().CreateReport(ctx, r, 1, 1)
 		Expect(err).NotTo(HaveOccurred())
 
 		metrics := []models.RightSizingMetric{
@@ -293,7 +293,7 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("WriteVMWarnings", func() {
 		It("should insert warning rows for VMs with no data", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)
 			warnings := []models.VMWarning{
 				{MOID: "vm-100", VMName: "vm-a", Warning: "vCenter returned no data for this VM"},
 				{MOID: "vm-200", VMName: "vm-b", Warning: "query succeeded but returned no samples"},
@@ -306,7 +306,7 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should be idempotent on duplicate (report_id, moid)", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 			w := []models.VMWarning{{MOID: "vm-100", VMName: "vm-a", Warning: "no data"}}
 			Expect(s.RightSizing().WriteVMWarnings(ctx, id, w)).To(Succeed())
 			Expect(s.RightSizing().WriteVMWarnings(ctx, id, w)).To(Succeed())
@@ -317,14 +317,14 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should return nil and insert nothing for empty input", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
 			Expect(s.RightSizing().WriteVMWarnings(ctx, id, nil)).To(Succeed())
 		})
 	})
 
 	Describe("ComputeAndStoreUtilization", func() {
 		It("should compute and store utilization rows for VMs with metrics", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
 				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usage.average",
 					SampleCount: 360, Average: 5000, P95: 8000, Max: 9000, Latest: 4500},
@@ -351,7 +351,7 @@ var _ = Describe("RightSizingStore", func() {
 		})
 
 		It("should be idempotent via ON CONFLICT DO NOTHING", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
 				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usage.average",
 					SampleCount: 1, Average: 5000, Latest: 5000},
@@ -368,7 +368,7 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("GetVMUtilization", func() {
 		It("should return utilization for a VM from the latest completed report", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 1, 1)
 			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
 				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usage.average",
 					SampleCount: 10, Average: 5000, P95: 8000, Max: 9000, Latest: 4500},
@@ -396,7 +396,7 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("GetReport merges warning-only VMs", func() {
 		It("should include VMs with no data alongside VMs with metrics", func() {
-			id, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)
 			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
 				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usagemhz.average", SampleCount: 360, Average: 500},
 			})).To(Succeed())

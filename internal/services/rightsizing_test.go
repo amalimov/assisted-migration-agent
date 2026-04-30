@@ -54,7 +54,7 @@ var _ = Describe("RightsizingService", func() {
 			WindowEnd:           time.Now().UTC(),
 			ExpectedSampleCount: 360,
 		}
-		id, err := st.RightSizing().CreateReport(ctx, r, 1, 1)
+		id, _, err := st.RightSizing().CreateReport(ctx, r, 1, 1)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(st.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{

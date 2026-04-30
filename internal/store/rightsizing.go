@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
@@ -60,13 +61,14 @@ func NewRightSizingStore(db QueryInterceptor) *RightSizingStore {
 	return &RightSizingStore{db: db}
 }
 
-// CreateReport inserts a new report record and returns its UUID.
+// CreateReport inserts a new report record and returns its UUID and creation timestamp.
 // expectedBatchCount = ceil(vmCount / batchSize).
-func (s *RightSizingStore) CreateReport(ctx context.Context, r models.RightSizingReport, vmCount, batchSize int) (string, error) {
+func (s *RightSizingStore) CreateReport(ctx context.Context, r models.RightSizingReport, vmCount, batchSize int) (string, time.Time, error) {
 	if batchSize <= 0 {
-		return "", fmt.Errorf("batchSize must be > 0, got %d", batchSize)
+		return "", time.Time{}, fmt.Errorf("batchSize must be > 0, got %d", batchSize)
 	}
 	id := uuid.New().String()
+	createdAt := time.Now().UTC()
 	expectedBatches := int(math.Ceil(float64(vmCount) / float64(batchSize)))
 
 	query, args, err := sq.Insert(rsReportsTable).
@@ -74,21 +76,23 @@ func (s *RightSizingStore) CreateReport(ctx context.Context, r models.RightSizin
 			rsReportsColID, rsReportsColVCenter, rsReportsColClusterID, rsReportsColIntervalID,
 			rsReportsColWindowStart, rsReportsColWindowEnd,
 			rsReportsColExpectedSampleCount, rsReportsColExpectedBatchCount,
+			rsReportsColCreatedAt,
 		).
 		Values(
 			id, r.VCenter, r.ClusterID, r.IntervalID,
 			r.WindowStart, r.WindowEnd,
 			r.ExpectedSampleCount, expectedBatches,
+			createdAt,
 		).
 		ToSql()
 	if err != nil {
-		return "", fmt.Errorf("building create report query: %w", err)
+		return "", time.Time{}, fmt.Errorf("building create report query: %w", err)
 	}
 
 	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
-		return "", fmt.Errorf("inserting report: %w", err)
+		return "", time.Time{}, fmt.Errorf("inserting report: %w", err)
 	}
-	return id, nil
+	return id, createdAt, nil
 }
 
 // WriteBatch inserts metric rows for a slice of RightSizingMetrics.
@@ -376,30 +380,23 @@ func (s *RightSizingStore) GetReport(ctx context.Context, id string) (*models.Ri
 	}
 
 	r.VMs = []models.RightsizingVMReport{}
-	reports := []models.RightsizingReport{r}
-	if err := s.appendMetrics(ctx, reports, map[string]int{r.ID: 0}); err != nil {
+	if err := s.appendMetrics(ctx, &r); err != nil {
 		return nil, err
 	}
-	if err := s.appendVMWarnings(ctx, reports, map[string]int{r.ID: 0}); err != nil {
+	if err := s.appendVMWarnings(ctx, &r); err != nil {
 		return nil, err
 	}
-	return &reports[0], nil
+	return &r, nil
 }
 
-// appendMetrics fetches all metric rows for the given reports (by index map)
-// and builds the nested VMs structure in place.
-func (s *RightSizingStore) appendMetrics(ctx context.Context, reports []models.RightsizingReport, idxByID map[string]int) error {
-	ids := make([]string, 0, len(idxByID))
-	for id := range idxByID {
-		ids = append(ids, id)
-	}
-
+// appendMetrics fetches all metric rows for the report and builds the nested VMs structure in place.
+func (s *RightSizingStore) appendMetrics(ctx context.Context, r *models.RightsizingReport) error {
 	query, args, err := sq.Select(
 		rsMetricsColReportID, rsMetricsColVMName, rsMetricsColMOID, rsMetricsColMetricKey,
 		rsMetricsColSampleCount, rsMetricsColAverage, rsMetricsColP95, rsMetricsColP99,
 		rsMetricsColMax, rsMetricsColLatest,
 	).From(rsMetricsTable).
-		Where(sq.Eq{rsMetricsColReportID: ids}).
+		Where(sq.Eq{rsMetricsColReportID: r.ID}).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("building metrics query: %w", err)
@@ -411,8 +408,8 @@ func (s *RightSizingStore) appendMetrics(ctx context.Context, reports []models.R
 	}
 	defer func() { _ = rows.Close() }()
 
-	// vmIdx[reportID][moid] = index in reports[rIdx].VMs
-	vmIdx := make(map[string]map[string]int)
+	// vmIdx[moid] = index in r.VMs
+	vmIdx := make(map[string]int)
 
 	for rows.Next() {
 		var reportID, vmName, moid, metricKey string
@@ -424,40 +421,29 @@ func (s *RightSizingStore) appendMetrics(ctx context.Context, reports []models.R
 			return fmt.Errorf("scanning metric row: %w", err)
 		}
 
-		rIdx := idxByID[reportID]
-		if vmIdx[reportID] == nil {
-			vmIdx[reportID] = make(map[string]int)
-		}
-
-		vIdx, ok := vmIdx[reportID][moid]
+		vIdx, ok := vmIdx[moid]
 		if !ok {
-			reports[rIdx].VMs = append(reports[rIdx].VMs, models.RightsizingVMReport{
+			r.VMs = append(r.VMs, models.RightsizingVMReport{
 				Name:    vmName,
 				MOID:    moid,
 				Metrics: map[string]models.RightsizingMetricStats{},
 			})
-			vIdx = len(reports[rIdx].VMs) - 1
-			vmIdx[reportID][moid] = vIdx
+			vIdx = len(r.VMs) - 1
+			vmIdx[moid] = vIdx
 		}
 
-		reports[rIdx].VMs[vIdx].Metrics[metricKey] = stats
+		r.VMs[vIdx].Metrics[metricKey] = stats
 	}
 
 	return rows.Err()
 }
 
-// appendVMWarnings reads warning-only VMs and merges them into reports[rIdx].VMs
-// with an empty Metrics map and populated Warnings slice.
-func (s *RightSizingStore) appendVMWarnings(ctx context.Context, reports []models.RightsizingReport, idxByID map[string]int) error {
-	ids := make([]string, 0, len(idxByID))
-	for id := range idxByID {
-		ids = append(ids, id)
-	}
-
+// appendVMWarnings reads warning-only VMs and merges them into r.VMs.
+func (s *RightSizingStore) appendVMWarnings(ctx context.Context, r *models.RightsizingReport) error {
 	query, args, err := sq.Select(
 		rsWarningsColReportID, rsWarningsColMOID, rsWarningsColVMName, rsWarningsColWarning,
 	).From(rsWarningsTable).
-		Where(sq.Eq{rsWarningsColReportID: ids}).
+		Where(sq.Eq{rsWarningsColReportID: r.ID}).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("building VM warnings query: %w", err)
@@ -474,8 +460,7 @@ func (s *RightSizingStore) appendVMWarnings(ctx context.Context, reports []model
 		if err := rows.Scan(&reportID, &moid, &vmName, &warning); err != nil {
 			return fmt.Errorf("scanning VM warning row: %w", err)
 		}
-		rIdx := idxByID[reportID]
-		reports[rIdx].VMs = append(reports[rIdx].VMs, models.RightsizingVMReport{
+		r.VMs = append(r.VMs, models.RightsizingVMReport{
 			Name:     vmName,
 			MOID:     moid,
 			Metrics:  map[string]models.RightsizingMetricStats{},
