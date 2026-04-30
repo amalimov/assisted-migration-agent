@@ -21,10 +21,19 @@ import (
 )
 
 type collectorWorkFactory struct {
-	store          *store.Store
-	eventSrv       *EventService
-	dataDir        string
-	opaPoliciesDir string
+	store                 *store.Store
+	eventSrv              *EventService
+	dataDir               string
+	opaPoliciesDir        string
+	postCollectionBuilder postCollectionBuilderFn
+}
+
+// WithPostCollectionBuilder registers extra work units to be spliced into the
+// pipeline immediately before the final "collected" event unit. Called after
+// construction so that the rightsizing service can be wired in by the manager.
+func (f *collectorWorkFactory) WithPostCollectionBuilder(fn postCollectionBuilderFn) *collectorWorkFactory {
+	f.postCollectionBuilder = fn
+	return f
 }
 
 func newCollectorWorkFactory(st *store.Store, eventSrv *EventService, dataDir, opaPoliciesDir string) *collectorWorkFactory {
@@ -37,7 +46,7 @@ func newCollectorWorkFactory(st *store.Store, eventSrv *EventService, dataDir, o
 }
 
 func (f *collectorWorkFactory) Build(creds models.Credentials) work.WorkBuilder[models.CollectorStatus, models.CollectorResult] {
-	return work.NewSliceWorkBuilder([]collectorWorkUnit{
+	units := []collectorWorkUnit{
 		{
 			Status: func() models.CollectorStatus {
 				return models.CollectorStatus{State: models.CollectorStateConnecting}
@@ -73,18 +82,25 @@ func (f *collectorWorkFactory) Build(creds models.Credentials) work.WorkBuilder[
 				return r, nil
 			},
 		},
-		{
-			Status: func() models.CollectorStatus {
-				return models.CollectorStatus{State: models.CollectorStateCollected}
-			},
-			Work: func(ctx context.Context, r models.CollectorResult) (models.CollectorResult, error) {
-				if err := f.eventSrv.AddInventoryUpdateEvent(ctx, r.Inventory); err != nil {
-					return r, err
-				}
-				return r, nil
-			},
+	}
+
+	if f.postCollectionBuilder != nil {
+		units = append(units, f.postCollectionBuilder(creds)...)
+	}
+
+	units = append(units, collectorWorkUnit{
+		Status: func() models.CollectorStatus {
+			return models.CollectorStatus{State: models.CollectorStateCollected}
+		},
+		Work: func(ctx context.Context, r models.CollectorResult) (models.CollectorResult, error) {
+			if err := f.eventSrv.AddInventoryUpdateEvent(ctx, r.Inventory); err != nil {
+				return r, err
+			}
+			return r, nil
 		},
 	})
+
+	return work.NewSliceWorkBuilder(units)
 }
 
 func (f *collectorWorkFactory) verifyCredentials(ctx context.Context, cred models.Credentials) error {
