@@ -17,6 +17,13 @@ const (
 	// CollectorStateError - error during connecting or collecting
 	CollectorStateError CollectorStateType = "error"
 
+	// Rightsizing phases — reported while the post-collection metrics run is active.
+	// All map to CollectorLegacyStateCollecting so the SaaS side sees a single in-progress state.
+	CollectorStateRightsizingConnecting  CollectorStateType = "rightsizing-connecting"
+	CollectorStateRightsizingDiscovering CollectorStateType = "rightsizing-discovering"
+	CollectorStateRightsizingQuerying    CollectorStateType = "rightsizing-querying"
+	CollectorStateRightsizingPersisting  CollectorStateType = "rightsizing-persisting"
+
 	// V1 agent status
 	CollectorLegacyStateWaitingForCredentials CollectorStateType = "waiting-for-credentials"
 	CollectorLegacyStateCollecting            CollectorStateType = "gathering-initial-inventory"
@@ -34,6 +41,11 @@ func (c CollectorStateType) ToV1() CollectorStateType {
 		return CollectorLegacyStateCollected
 	case CollectorLegacyStateError:
 		return CollectorLegacyStateError
+	case CollectorStateRightsizingConnecting,
+		CollectorStateRightsizingDiscovering,
+		CollectorStateRightsizingQuerying,
+		CollectorStateRightsizingPersisting:
+		return CollectorLegacyStateCollecting
 	default:
 		return "unknown state"
 	}

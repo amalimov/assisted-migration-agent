@@ -75,6 +75,7 @@ func (m *ServiceManager) Initialize() error {
 
 	factory := newCollectorWorkFactory(m.store, m.event, m.cfg.Agent.DataFolder, m.cfg.Agent.OpaPoliciesFolder)
 	m.collector = NewCollectorService(m.inventory, factory.Build)
+	// rightsizing is wired below after m.rightsizing is constructed
 
 	m.inspector = NewInspectorService(m.store, maxVMsPerCycle, m.cfg.Agent.DataFolder)
 
@@ -99,6 +100,12 @@ func (m *ServiceManager) Initialize() error {
 	m.vm = NewVMService(m.store)
 	m.group = NewGroupService(m.store)
 	m.rightsizing = NewRightsizingService(m.store)
+
+	factory.WithPostCollectionBuilder(m.rightsizing.BuildCollectorWorkUnits(
+		rightsizingDefaultLookbackHours,
+		rightsizingDefaultIntervalSeconds,
+		rightsizingDefaultBatchSize,
+	))
 
 	return nil
 }

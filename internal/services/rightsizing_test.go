@@ -135,6 +135,47 @@ var _ = Describe("RightsizingService", func() {
 			Expect(summaries[0].ID).To(Equal(report.ID))
 		})
 
+		It("BuildCollectorWorkUnits returns a non-empty unit slice when invoked with credentials", func() {
+			builderFn := svc.BuildCollectorWorkUnits(720, 7200, 64)
+			creds := models.Credentials{URL: "https://vc.example.com", Username: "admin", Password: "secret"}
+			units := builderFn(creds)
+			Expect(units).NotTo(BeEmpty())
+		})
+
+		It("BuildCollectorWorkUnits passes DiscoverVMs:false to TriggerCollection", func() {
+			var capturedDiscoverVMs bool
+			blockCh := make(chan struct{})
+
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+				capturedDiscoverVMs = discoverVMs
+				return &services.RightsizingCollectionHandle{
+					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
+						{
+							Status: func() models.RightsizingCollectionStatus {
+								return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateCompleted}
+							},
+							Work: func(ctx context.Context, result models.RightsizingCollectionResult) (models.RightsizingCollectionResult, error) {
+								close(blockCh)
+								return result, nil
+							},
+						},
+					}),
+					LogoutFn: func() {},
+				}
+			})
+
+			builderFn := svc.BuildCollectorWorkUnits(720, 7200, 64)
+			creds := models.Credentials{URL: "https://vc.example.com", Username: "admin", Password: "secret"}
+			units := builderFn(creds)
+			Expect(units).NotTo(BeEmpty())
+
+			// Run the work unit — it calls TriggerCollection internally.
+			_, err := units[0].Work(ctx, models.CollectorResult{})
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(blockCh).Should(BeClosed())
+			Expect(capturedDiscoverVMs).To(BeFalse())
+		})
+
 		It("should reject a second TriggerCollection while one is running", func() {
 			blockCh := make(chan struct{})
 			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {

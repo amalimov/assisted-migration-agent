@@ -340,6 +340,12 @@ func (s *RightsizingService) GetStatus() models.RightsizingCollectionStatus {
 	if state.Err != nil && !errors.Is(state.Err, work.ErrStopped) {
 		return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateError, Error: state.Err}
 	}
+	// Pipeline finished with no error — the last unit's status stays in state.State
+	// (e.g. "persisting") rather than transitioning to "completed" automatically.
+	// Check IsRunning() to detect clean completion regardless of the final unit's label.
+	if !srv.IsRunning() {
+		return models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateCompleted}
+	}
 	return state.State
 }
 
@@ -439,6 +445,52 @@ func defaultRightsizingWorkBuilder(reportID string, cfg rsig.Config, discoverVMs
 				_ = client.Logout(context.Background())
 			}
 		},
+	}
+}
+
+// BuildCollectorWorkUnits returns a postCollectionBuilderFn that can be passed
+// to collectorWorkFactory.WithPostCollectionBuilder. When the collector pipeline
+// finishes parsing inventory, the returned work unit launches a rightsizing run
+// using the same vCenter credentials and blocks until it completes.
+//
+// DiscoverVMs is always false — the point of this flow is to use the inventory
+// just built by the collector rather than querying vSphere again.
+func (s *RightsizingService) BuildCollectorWorkUnits(lookbackH, intervalID, batchSize int) postCollectionBuilderFn {
+	return func(creds models.Credentials) []collectorWorkUnit {
+		return []collectorWorkUnit{
+			{
+				Status: func() models.CollectorStatus {
+					return models.CollectorStatus{State: models.CollectorStateRightsizingConnecting}
+				},
+				Work: func(ctx context.Context, r models.CollectorResult) (models.CollectorResult, error) {
+					params := models.RightsizingParams{
+						Credentials: creds,
+						LookbackH:   lookbackH,
+						IntervalID:  intervalID,
+						BatchSize:   batchSize,
+						DiscoverVMs: false,
+					}
+					if _, err := s.TriggerCollection(ctx, params); err != nil {
+						return r, fmt.Errorf("auto rightsizing trigger: %w", err)
+					}
+					for {
+						select {
+						case <-ctx.Done():
+							return r, ctx.Err()
+						default:
+						}
+						status := s.GetStatus()
+						switch status.State {
+						case models.RightsizingCollectionStateCompleted:
+							return r, nil
+						case models.RightsizingCollectionStateError:
+							return r, status.Error
+						}
+						time.Sleep(500 * time.Millisecond)
+					}
+				},
+			},
+		}
 	}
 }
 
