@@ -199,7 +199,7 @@ func (s *RightsizingService) GetReport(ctx context.Context, id string) (*models.
 }
 
 // GetVMUtilization returns the full rightsizing utilization breakdown for a VM.
-func (s *RightsizingService) GetVMUtilization(ctx context.Context, vmID string) (*models.VmRightsizingDetails, error) {
+func (s *RightsizingService) GetVMUtilization(ctx context.Context, vmID string) (*models.VmUtilizationDetails, error) {
 	return s.store.RightSizing().GetVMUtilization(ctx, vmID)
 }
 

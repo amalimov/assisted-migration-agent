@@ -231,7 +231,7 @@ type MockRightsizingService struct {
 	GetError  error
 	LastGetID string
 
-	GetUtilizationResult *models.VmRightsizingDetails
+	GetUtilizationResult *models.VmUtilizationDetails
 	GetUtilizationError  error
 	LastUtilizationVMID  string
 }
@@ -251,7 +251,7 @@ func (m *MockRightsizingService) GetReport(ctx context.Context, id string) (*mod
 	return m.GetResult, m.GetError
 }
 
-func (m *MockRightsizingService) GetVMUtilization(ctx context.Context, vmID string) (*models.VmRightsizingDetails, error) {
+func (m *MockRightsizingService) GetVMUtilization(ctx context.Context, vmID string) (*models.VmUtilizationDetails, error) {
 	m.LastUtilizationVMID = vmID
 	return m.GetUtilizationResult, m.GetUtilizationError
 }

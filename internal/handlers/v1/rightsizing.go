@@ -88,20 +88,20 @@ func (h *Handler) TriggerRightsizingCollection(c *gin.Context) {
 	c.JSON(http.StatusAccepted, v1.NewRightsizingReportSummaryFromModel(*report))
 }
 
-// GetVMRightsizing returns rightsizing utilization details for a specific VM.
-// (GET /vms/{id}/rightsizing)
-func (h *Handler) GetVMRightsizing(c *gin.Context, id string) {
+// GetVMUtilization returns utilization details for a specific VM.
+// (GET /vms/{id}/utilization)
+func (h *Handler) GetVMUtilization(c *gin.Context, id string) {
 	details, err := h.rightsizingSrv.GetVMUtilization(c.Request.Context(), id)
 	if err != nil {
 		if srvErrors.IsResourceNotFoundError(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		zap.S().Named("rightsizing_handler").Errorw("failed to get VM rightsizing", "id", id, "error", err)
+		zap.S().Named("rightsizing_handler").Errorw("failed to get VM utilization", "id", id, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, v1.NewVmRightsizingDetailsFromModel(*details))
+	c.JSON(http.StatusOK, v1.NewVmUtilizationDetailsFromModel(*details))
 }
 
 func defaultInt(p *int, fallback int) int {

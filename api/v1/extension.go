@@ -47,10 +47,10 @@ func NewVirtualMachineFromSummary(vm models.VirtualMachineSummary) VirtualMachin
 		result.InspectionConcernCount = &vm.InspectionConcernCount
 	}
 
-	result.CpuP95Pct = vm.CpuP95Pct
-	result.MemP95Pct = vm.MemP95Pct
-	result.DiskPct = vm.DiskPct
-	result.ConfidencePct = vm.ConfidencePct
+	result.UtilizationCpuP95 = vm.UtilizationCpuP95
+	result.UtilizationMemP95 = vm.UtilizationMemP95
+	result.UtilizationDisk = vm.UtilizationDisk
+	result.UtilizationConfidence = vm.UtilizationConfidence
 
 	return result
 }
@@ -370,20 +370,20 @@ func NewRightsizingReportFromModel(r models.RightsizingReport) RightsizingReport
 	}
 }
 
-// NewVmRightsizingDetailsFromModel converts a models.VmRightsizingDetails to the API type.
-func NewVmRightsizingDetailsFromModel(d models.VmRightsizingDetails) VmRightsizingDetails {
-	return VmRightsizingDetails{
-		Moid:          d.MOID,
-		VmName:        d.VMName,
-		CpuAvgPct:     d.CpuAvgPct,
-		CpuP95Pct:     d.CpuP95Pct,
-		CpuMaxPct:     d.CpuMaxPct,
-		CpuLatestPct:  d.CpuLatestPct,
-		MemAvgPct:     d.MemAvgPct,
-		MemP95Pct:     d.MemP95Pct,
-		MemMaxPct:     d.MemMaxPct,
-		MemLatestPct:  d.MemLatestPct,
-		DiskPct:       d.DiskPct,
-		ConfidencePct: d.ConfidencePct,
+// NewVmUtilizationDetailsFromModel converts a models.VmUtilizationDetails to the API type.
+func NewVmUtilizationDetailsFromModel(d models.VmUtilizationDetails) VmUtilizationDetails {
+	return VmUtilizationDetails{
+		Moid:       d.MOID,
+		VmName:     d.VMName,
+		CpuAvg:     d.CpuAvg,
+		CpuP95:     d.CpuP95,
+		CpuMax:     d.CpuMax,
+		CpuLatest:  d.CpuLatest,
+		MemAvg:     d.MemAvg,
+		MemP95:     d.MemP95,
+		MemMax:     d.MemMax,
+		MemLatest:  d.MemLatest,
+		Disk:       d.Disk,
+		Confidence: d.Confidence,
 	}
 }

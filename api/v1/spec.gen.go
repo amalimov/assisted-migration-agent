@@ -85,9 +85,9 @@ type ServerInterface interface {
 	// Remove VirtualMachine from inspection queue
 	// (DELETE /vms/{id}/inspection)
 	RemoveVMFromInspection(c *gin.Context, id string)
-	// Get rightsizing utilization breakdown for a specific VM
-	// (GET /vms/{id}/rightsizing)
-	GetVMRightsizing(c *gin.Context, id string)
+	// Get utilization breakdown for a specific VM
+	// (GET /vms/{id}/utilization)
+	GetVMUtilization(c *gin.Context, id string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -612,8 +612,8 @@ func (siw *ServerInterfaceWrapper) RemoveVMFromInspection(c *gin.Context) {
 	siw.Handler.RemoveVMFromInspection(c, id)
 }
 
-// GetVMRightsizing operation middleware
-func (siw *ServerInterfaceWrapper) GetVMRightsizing(c *gin.Context) {
+// GetVMUtilization operation middleware
+func (siw *ServerInterfaceWrapper) GetVMUtilization(c *gin.Context) {
 
 	var err error
 
@@ -633,7 +633,7 @@ func (siw *ServerInterfaceWrapper) GetVMRightsizing(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetVMRightsizing(c, id)
+	siw.Handler.GetVMUtilization(c, id)
 }
 
 // GinServerOptions provides options for the Gin server.
@@ -687,5 +687,5 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/vms", wrapper.GetVMs)
 	router.GET(options.BaseURL+"/vms/:id", wrapper.GetVM)
 	router.DELETE(options.BaseURL+"/vms/:id/inspection", wrapper.RemoveVMFromInspection)
-	router.GET(options.BaseURL+"/vms/:id/rightsizing", wrapper.GetVMRightsizing)
+	router.GET(options.BaseURL+"/vms/:id/utilization", wrapper.GetVMUtilization)
 }

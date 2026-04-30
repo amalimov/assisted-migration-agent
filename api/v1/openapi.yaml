@@ -211,10 +211,10 @@ paths:
         '500':
           description: Internal server error
 
-  /vms/{id}/rightsizing:
+  /vms/{id}/utilization:
     get:
-      summary: Get rightsizing utilization breakdown for a specific VM
-      operationId: getVMRightsizing
+      summary: Get utilization breakdown for a specific VM
+      operationId: getVMUtilization
       parameters:
         - name: id
           in: path
@@ -224,13 +224,13 @@ paths:
             type: string
       responses:
         '200':
-          description: VM rightsizing utilization details
+          description: VM utilization details
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VmRightsizingDetails'
+                $ref: '#/components/schemas/VmUtilizationDetails'
         '404':
-          description: No rightsizing data found for this VM
+          description: No utilization data found for this VM
         '500':
           description: Internal server error
 
@@ -803,22 +803,22 @@ components:
           items:
             type: string
           description: Tags aggregated from matching groups
-        cpu_p95_pct:
+        utilization_cpu_p95:
           type: number
           format: double
-          description: CPU utilization at p95 (%); absent when no rightsizing data
-        mem_p95_pct:
+          description: CPU utilization at p95 (%); absent when no utilization data
+        utilization_mem_p95:
           type: number
           format: double
-          description: Memory utilization at p95 (%); absent when no rightsizing data
-        disk_pct:
+          description: Memory utilization at p95 (%); absent when no utilization data
+        utilization_disk:
           type: number
           format: double
-          description: Disk utilization (%); absent when no rightsizing data
-        confidence_pct:
+          description: Disk utilization (%); absent when no utilization data
+        utilization_confidence:
           type: number
           format: double
-          description: Rightsizing data confidence — sample_count / expected_sample_count × 100
+          description: Data confidence — sample_count / expected_sample_count × 100
 
     VirtualMachineDetail:
       type: object
@@ -1441,57 +1441,57 @@ components:
           type: integer
           description: Total number of stored reports
 
-    VmRightsizingDetails:
+    VmUtilizationDetails:
       type: object
       required:
         - moid
         - vm_name
-        - cpu_avg_pct
-        - cpu_p95_pct
-        - cpu_max_pct
-        - cpu_latest_pct
-        - mem_avg_pct
-        - mem_p95_pct
-        - mem_max_pct
-        - mem_latest_pct
-        - disk_pct
-        - confidence_pct
+        - cpu_avg
+        - cpu_p95
+        - cpu_max
+        - cpu_latest
+        - mem_avg
+        - mem_p95
+        - mem_max
+        - mem_latest
+        - disk
+        - confidence
       properties:
         moid:
           type: string
         vm_name:
           type: string
-        cpu_avg_pct:
+        cpu_avg:
           type: number
           format: double
           description: CPU utilization average (%)
-        cpu_p95_pct:
+        cpu_p95:
           type: number
           format: double
-        cpu_max_pct:
+        cpu_max:
           type: number
           format: double
-        cpu_latest_pct:
+        cpu_latest:
           type: number
           format: double
-        mem_avg_pct:
+        mem_avg:
           type: number
           format: double
           description: Memory utilization average (%)
-        mem_p95_pct:
+        mem_p95:
           type: number
           format: double
-        mem_max_pct:
+        mem_max:
           type: number
           format: double
-        mem_latest_pct:
+        mem_latest:
           type: number
           format: double
-        disk_pct:
+        disk:
           type: number
           format: double
           description: Disk utilization (%)
-        confidence_pct:
+        confidence:
           type: number
           format: double
           description: Data confidence — sample_count / expected_sample_count × 100

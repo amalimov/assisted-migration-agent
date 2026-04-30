@@ -406,20 +406,11 @@ type VirtualMachine struct {
 	// Cluster Cluster name
 	Cluster string `json:"cluster"`
 
-	// ConfidencePct Rightsizing data confidence — sample_count / expected_sample_count × 100
-	ConfidencePct *float64 `json:"confidence_pct,omitempty"`
-
-	// CpuP95Pct CPU utilization at p95 (%); absent when no rightsizing data
-	CpuP95Pct *float64 `json:"cpu_p95_pct,omitempty"`
-
 	// Datacenter Datacenter name
 	Datacenter string `json:"datacenter"`
 
 	// DiskSize Total disk size in MB
 	DiskSize int64 `json:"diskSize"`
-
-	// DiskPct Disk utilization (%); absent when no rightsizing data
-	DiskPct *float64 `json:"disk_pct,omitempty"`
 
 	// Id VirtualMachine ID in vCenter
 	Id string `json:"id"`
@@ -430,9 +421,6 @@ type VirtualMachine struct {
 
 	// IssueCount Number of issues found for this VirtualMachine
 	IssueCount int `json:"issueCount"`
-
-	// MemP95Pct Memory utilization at p95 (%); absent when no rightsizing data
-	MemP95Pct *float64 `json:"mem_p95_pct,omitempty"`
 
 	// Memory Memory size in MB
 	Memory int64 `json:"memory"`
@@ -448,6 +436,18 @@ type VirtualMachine struct {
 
 	// Template True if the vm is a template. False otherwise
 	Template *bool `json:"template,omitempty"`
+
+	// UtilizationConfidence Data confidence — sample_count / expected_sample_count × 100
+	UtilizationConfidence *float64 `json:"utilization_confidence,omitempty"`
+
+	// UtilizationCpuP95 CPU utilization at p95 (%); absent when no utilization data
+	UtilizationCpuP95 *float64 `json:"utilization_cpu_p95,omitempty"`
+
+	// UtilizationDisk Disk utilization (%); absent when no utilization data
+	UtilizationDisk *float64 `json:"utilization_disk,omitempty"`
+
+	// UtilizationMemP95 Memory utilization at p95 (%); absent when no utilization data
+	UtilizationMemP95 *float64 `json:"utilization_mem_p95,omitempty"`
 
 	// VCenterState vCenter state (e.g., poweredOn, poweredOff, suspended)
 	VCenterState string `json:"vCenterState"`
@@ -591,27 +591,27 @@ type VmInspectionStatus struct {
 // VmInspectionStatusState Current inspection state
 type VmInspectionStatusState string
 
-// VmRightsizingDetails defines model for VmRightsizingDetails.
-type VmRightsizingDetails struct {
-	// ConfidencePct Data confidence — sample_count / expected_sample_count × 100
-	ConfidencePct float64 `json:"confidence_pct"`
+// VmUtilizationDetails defines model for VmUtilizationDetails.
+type VmUtilizationDetails struct {
+	// Confidence Data confidence — sample_count / expected_sample_count × 100
+	Confidence float64 `json:"confidence"`
 
-	// CpuAvgPct CPU utilization average (%)
-	CpuAvgPct    float64 `json:"cpu_avg_pct"`
-	CpuLatestPct float64 `json:"cpu_latest_pct"`
-	CpuMaxPct    float64 `json:"cpu_max_pct"`
-	CpuP95Pct    float64 `json:"cpu_p95_pct"`
+	// CpuAvg CPU utilization average (%)
+	CpuAvg    float64 `json:"cpu_avg"`
+	CpuLatest float64 `json:"cpu_latest"`
+	CpuMax    float64 `json:"cpu_max"`
+	CpuP95    float64 `json:"cpu_p95"`
 
-	// DiskPct Disk utilization (%)
-	DiskPct float64 `json:"disk_pct"`
+	// Disk Disk utilization (%)
+	Disk float64 `json:"disk"`
 
-	// MemAvgPct Memory utilization average (%)
-	MemAvgPct    float64 `json:"mem_avg_pct"`
-	MemLatestPct float64 `json:"mem_latest_pct"`
-	MemMaxPct    float64 `json:"mem_max_pct"`
-	MemP95Pct    float64 `json:"mem_p95_pct"`
-	Moid         string  `json:"moid"`
-	VmName       string  `json:"vm_name"`
+	// MemAvg Memory utilization average (%)
+	MemAvg    float64 `json:"mem_avg"`
+	MemLatest float64 `json:"mem_latest"`
+	MemMax    float64 `json:"mem_max"`
+	MemP95    float64 `json:"mem_p95"`
+	Moid      string  `json:"moid"`
+	VmName    string  `json:"vm_name"`
 }
 
 // ListGroupsParams defines parameters for ListGroups.

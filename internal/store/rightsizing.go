@@ -235,7 +235,7 @@ ON CONFLICT DO NOTHING`
 // GetVMUtilization returns the full utilization breakdown for a VM from the latest
 // completed report (written_batch_count > 0). Returns ResourceNotFoundError if no
 // rightsizing data exists for this VM.
-func (s *RightSizingStore) GetVMUtilization(ctx context.Context, moid string) (*models.VmRightsizingDetails, error) {
+func (s *RightSizingStore) GetVMUtilization(ctx context.Context, moid string) (*models.VmUtilizationDetails, error) {
 	query := `
 SELECT moid, vm_name,
        cpu_avg_pct, cpu_p95_pct, cpu_max_pct, cpu_latest_pct,
@@ -249,7 +249,7 @@ WHERE moid = ?
       ORDER BY created_at DESC LIMIT 1
   )`
 
-	var d models.VmRightsizingDetails
+	var d models.VmUtilizationDetails
 	var (
 		cpuAvg, cpuP95, cpuMax, cpuLatest sql.NullFloat64
 		memAvg, memP95, memMax, memLatest sql.NullFloat64
@@ -267,16 +267,16 @@ WHERE moid = ?
 	if err != nil {
 		return nil, fmt.Errorf("scanning VM utilization: %w", err)
 	}
-	d.CpuAvgPct = cpuAvg.Float64
-	d.CpuP95Pct = cpuP95.Float64
-	d.CpuMaxPct = cpuMax.Float64
-	d.CpuLatestPct = cpuLatest.Float64
-	d.MemAvgPct = memAvg.Float64
-	d.MemP95Pct = memP95.Float64
-	d.MemMaxPct = memMax.Float64
-	d.MemLatestPct = memLatest.Float64
-	d.DiskPct = disk.Float64
-	d.ConfidencePct = confidence.Float64
+	d.CpuAvg = cpuAvg.Float64
+	d.CpuP95 = cpuP95.Float64
+	d.CpuMax = cpuMax.Float64
+	d.CpuLatest = cpuLatest.Float64
+	d.MemAvg = memAvg.Float64
+	d.MemP95 = memP95.Float64
+	d.MemMax = memMax.Float64
+	d.MemLatest = memLatest.Float64
+	d.Disk = disk.Float64
+	d.Confidence = confidence.Float64
 	return &d, nil
 }
 

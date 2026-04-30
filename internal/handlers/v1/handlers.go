@@ -65,7 +65,7 @@ type RightsizingService interface {
 	TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReportSummary, error)
 	ListReports(ctx context.Context) ([]models.RightsizingReportSummary, error)
 	GetReport(ctx context.Context, id string) (*models.RightsizingReport, error)
-	GetVMUtilization(ctx context.Context, vmID string) (*models.VmRightsizingDetails, error)
+	GetVMUtilization(ctx context.Context, vmID string) (*models.VmUtilizationDetails, error)
 }
 
 type Handler struct {

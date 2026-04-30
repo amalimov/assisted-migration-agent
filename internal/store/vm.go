@@ -93,10 +93,10 @@ func (s *VMStore) List(ctx context.Context, filters []sq.Sqlizer, opts ...ListOp
 			&sqlErr,
 			&inspectionConcernCount,
 			&tags,
-			&vm.CpuP95Pct,
-			&vm.MemP95Pct,
-			&vm.DiskPct,
-			&vm.ConfidencePct,
+			&vm.UtilizationCpuP95,
+			&vm.UtilizationMemP95,
+			&vm.UtilizationDisk,
+			&vm.UtilizationConfidence,
 		)
 		if err != nil {
 			return nil, err

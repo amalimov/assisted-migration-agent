@@ -383,8 +383,8 @@ var _ = Describe("RightSizingStore", func() {
 			d, err := s.RightSizing().GetVMUtilization(ctx, "vm-100")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(d.MOID).To(Equal("vm-100"))
-			Expect(d.CpuP95Pct).To(BeNumerically("~", 80.0, 0.01))
-			Expect(d.DiskPct).To(BeNumerically("~", 50.0, 0.01))
+			Expect(d.CpuP95).To(BeNumerically("~", 80.0, 0.01))
+			Expect(d.Disk).To(BeNumerically("~", 50.0, 0.01))
 		})
 
 		It("should return ResourceNotFoundError when no data exists", func() {
