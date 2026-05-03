@@ -394,6 +394,53 @@ var _ = Describe("RightSizingStore", func() {
 		})
 	})
 
+	Describe("ListClusterUtilization", func() {
+		It("should return empty when no utilization data exists", func() {
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
+			_ = s.RightSizing().IncrementWrittenBatchCount(ctx, id)
+
+			clusters, err := s.RightSizing().ListClusterUtilization(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clusters).To(BeEmpty())
+		})
+
+		It("should aggregate cluster utilization weighted by provisioned resources", func() {
+			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)
+			Expect(s.RightSizing().WriteBatch(ctx, id, []models.RightSizingMetric{
+				{VMName: "vm-a", MOID: "vm-100", MetricKey: "cpu.usage.average",
+					SampleCount: 10, Average: 8000, P95: 8000, Max: 8000, Latest: 8000},
+				{VMName: "vm-b", MOID: "vm-200", MetricKey: "cpu.usage.average",
+					SampleCount: 10, Average: 2000, P95: 2000, Max: 2000, Latest: 2000},
+			})).To(Succeed())
+			Expect(s.RightSizing().IncrementWrittenBatchCount(ctx, id)).To(Succeed())
+			Expect(s.RightSizing().ComputeAndStoreUtilization(ctx, id)).To(Succeed())
+
+			// Seed cluster_id and provisioned_cpus directly (vinfo is empty in test DB).
+			_, err := db.Exec(`
+                UPDATE rightsizing_vm_utilization
+                SET cluster_id = 'cluster-1', provisioned_cpus = 4
+                WHERE report_id = ?`, id)
+			Expect(err).NotTo(HaveOccurred())
+
+			clusters, err := s.RightSizing().ListClusterUtilization(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clusters).To(HaveLen(1))
+			Expect(clusters[0].ClusterID).To(Equal("cluster-1"))
+			Expect(clusters[0].VMCount).To(Equal(2))
+			// Weighted avg CPU: (8000/100 * 4 + 2000/100 * 4) / (4+4) = (320 + 80) / 8 = 50%
+			Expect(clusters[0].CpuAvg).To(BeNumerically("~", 50.0, 0.01))
+		})
+	})
+
+	Describe("ListLatestClusterUtilization", func() {
+		It("should return empty when no completed report exists", func() {
+			reportID, clusters, err := s.RightSizing().ListLatestClusterUtilization(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reportID).To(BeEmpty())
+			Expect(clusters).To(BeEmpty())
+		})
+	})
+
 	Describe("GetReport merges warning-only VMs", func() {
 		It("should include VMs with no data alongside VMs with metrics", func() {
 			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 2, 1)

@@ -19,6 +19,12 @@ type ServerInterface interface {
 	// Change agent mode
 	// (POST /agent)
 	SetAgentMode(c *gin.Context)
+	// Get cluster-level utilization aggregates for the latest completed report
+	// (GET /cluster_rightsizing)
+	GetLatestRightsizingClusters(c *gin.Context)
+	// Get cluster-level utilization aggregates for a specific report
+	// (GET /cluster_rightsizing/{report_id})
+	GetRightsizingReportClusters(c *gin.Context, reportId string)
 	// Stop collection
 	// (DELETE /collector)
 	StopCollector(c *gin.Context)
@@ -153,6 +159,43 @@ func (siw *ServerInterfaceWrapper) SetAgentMode(c *gin.Context) {
 	}
 
 	siw.Handler.SetAgentMode(c)
+}
+
+// GetLatestRightsizingClusters operation middleware
+func (siw *ServerInterfaceWrapper) GetLatestRightsizingClusters(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetLatestRightsizingClusters(c)
+}
+
+// GetRightsizingReportClusters operation middleware
+func (siw *ServerInterfaceWrapper) GetRightsizingReportClusters(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "report_id" -------------
+	var reportId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "report_id", c.Param("report_id"), &reportId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter report_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetRightsizingReportClusters(c, reportId)
 }
 
 // StopCollector operation middleware
@@ -880,6 +923,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 
 	router.GET(options.BaseURL+"/agent", wrapper.GetAgentStatus)
 	router.POST(options.BaseURL+"/agent", wrapper.SetAgentMode)
+	router.GET(options.BaseURL+"/cluster_rightsizing", wrapper.GetLatestRightsizingClusters)
+	router.GET(options.BaseURL+"/cluster_rightsizing/:report_id", wrapper.GetRightsizingReportClusters)
 	router.DELETE(options.BaseURL+"/collector", wrapper.StopCollector)
 	router.GET(options.BaseURL+"/collector", wrapper.GetCollectorStatus)
 	router.POST(options.BaseURL+"/collector", wrapper.StartCollector)

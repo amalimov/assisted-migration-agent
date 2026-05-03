@@ -128,11 +128,36 @@ type RightsizingReport struct {
 	CreatedAt           time.Time
 }
 
+// RightsizingClusterUtilization holds weighted utilization aggregates for a single cluster.
+// Utilization formula: SUM(allocated × utilization) / SUM(allocated)
+// Confidence formula:  SUM(vCPUs × confidence) / SUM(vCPUs)
+// p95/max are weighted summaries of per-VM peaks, not true cluster-wide percentiles.
+type RightsizingClusterUtilization struct {
+	ClusterID                string
+	VMCount                  int
+	CpuAvg                   float64
+	CpuP95                   float64
+	CpuMax                   float64
+	MemAvg                   float64
+	MemP95                   float64
+	MemMax                   float64
+	Disk                     float64
+	Confidence               float64
+	TotalProvisionedCpus     int64
+	TotalProvisionedMemoryMb int64
+	TotalProvisionedDiskKb   float64
+}
+
 // VmUtilizationDetails holds the full utilization breakdown for a single VM.
 // Returned by GET /vms/{id}/utilization.
 type VmUtilizationDetails struct {
-	MOID       string
-	VMName     string
+	MOID   string
+	VMName string
+	// Provisioned resources — denominators for the utilization percentages below.
+	ProvisionedCpus     int
+	ProvisionedMemoryMb int
+	ProvisionedDiskKb   float64
+	// Utilization percentages.
 	CpuAvg     float64
 	CpuP95     float64
 	CpuMax     float64

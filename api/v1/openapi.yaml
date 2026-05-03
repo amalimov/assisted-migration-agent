@@ -571,6 +571,45 @@ paths:
         '500':
           description: Internal server error
 
+  /cluster_rightsizing:
+    get:
+      summary: Get cluster-level utilization aggregates for the latest completed report
+      operationId: getLatestRightsizingClusters
+      responses:
+        '200':
+          description: Cluster utilization aggregates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RightsizingClusterListResponse'
+        '404':
+          description: No completed rightsizing report found
+        '500':
+          description: Internal server error
+
+  /cluster_rightsizing/{report_id}:
+    get:
+      summary: Get cluster-level utilization aggregates for a specific report
+      operationId: getRightsizingReportClusters
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          description: Rightsizing report UUID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cluster utilization aggregates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RightsizingClusterListResponse'
+        '404':
+          description: Report not found
+        '500':
+          description: Internal server error
+
   /rightsizing/{id}:
     get:
       summary: Get a specific rightsizing report with full VM metrics
@@ -1682,6 +1721,9 @@ components:
       required:
         - moid
         - vm_name
+        - provisioned_cpus
+        - provisioned_memory_mb
+        - provisioned_disk_kb
         - cpu_avg
         - cpu_p95
         - cpu_max
@@ -1697,6 +1739,16 @@ components:
           type: string
         vm_name:
           type: string
+        provisioned_cpus:
+          type: integer
+          description: Number of vCPUs provisioned for this VM
+        provisioned_memory_mb:
+          type: integer
+          description: Provisioned RAM (MB)
+        provisioned_disk_kb:
+          type: number
+          format: double
+          description: Provisioned disk (KB)
         cpu_avg:
           type: number
           format: double
@@ -1731,6 +1783,90 @@ components:
           type: number
           format: double
           description: Data confidence — sample_count / expected_sample_count × 100
+
+    RightsizingClusterUtilization:
+      type: object
+      required:
+        - cluster_id
+        - vm_count
+        - cpu_avg
+        - cpu_p95
+        - cpu_max
+        - mem_avg
+        - mem_p95
+        - mem_max
+        - disk
+        - confidence
+        - total_provisioned_cpus
+        - total_provisioned_memory_mb
+        - total_provisioned_disk_kb
+      properties:
+        cluster_id:
+          type: string
+        vm_count:
+          type: integer
+          description: Number of VMs with utilization data in this cluster
+        cpu_avg:
+          type: number
+          format: double
+          description: "SUM(vCPUs × cpu_avg%) / SUM(vCPUs) — weighted average CPU utilization (%)"
+        cpu_p95:
+          type: number
+          format: double
+          description: >
+            SUM(vCPUs × vm_p95%) / SUM(vCPUs).
+            Weighted summary of per-VM p95 values — not a true cluster-wide p95
+            (which would require time-aligned samples).
+        cpu_max:
+          type: number
+          format: double
+          description: Weighted summary of per-VM max values (see cpu_p95 note)
+        mem_avg:
+          type: number
+          format: double
+          description: "SUM(provisionedMB × mem_avg%) / SUM(provisionedMB) — weighted average memory utilization (%)"
+        mem_p95:
+          type: number
+          format: double
+          description: Weighted summary of per-VM memory p95 values (see cpu_p95 note)
+        mem_max:
+          type: number
+          format: double
+          description: Weighted summary of per-VM memory max values (see cpu_p95 note)
+        disk:
+          type: number
+          format: double
+          description: "SUM(provisionedKB × disk%) / SUM(provisionedKB) — weighted average disk utilization (%)"
+        confidence:
+          type: number
+          format: double
+          description: >
+            SUM(vCPUs × confidence%) / SUM(vCPUs).
+            vCPU-weighted data coverage (0–100 %). Interpret utilization cautiously when low.
+        total_provisioned_cpus:
+          type: integer
+          description: Sum of vCPU counts across all VMs in the cluster
+        total_provisioned_memory_mb:
+          type: integer
+          description: Sum of provisioned RAM (MB) across all VMs in the cluster
+        total_provisioned_disk_kb:
+          type: number
+          format: double
+          description: Sum of provisioned disk (KB) across all VMs in the cluster
+
+    RightsizingClusterListResponse:
+      type: object
+      required:
+        - report_id
+        - clusters
+      properties:
+        report_id:
+          type: string
+          description: The report ID this data was aggregated from
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/RightsizingClusterUtilization'
 
     # --- Forecaster schemas ---
 

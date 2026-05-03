@@ -205,7 +205,8 @@ INSERT INTO rightsizing_vm_utilization
     (report_id, moid, vm_name,
      cpu_avg_pct, cpu_p95_pct, cpu_max_pct, cpu_latest_pct,
      mem_avg_pct, mem_p95_pct, mem_max_pct, mem_latest_pct,
-     disk_pct, confidence_pct)
+     disk_pct, confidence_pct,
+     cluster_id, provisioned_cpus, provisioned_memory_mb, provisioned_disk_kb)
 SELECT
     rm.report_id,
     rm.moid,
@@ -222,12 +223,16 @@ SELECT
       / NULLIF(MAX(CASE WHEN rm.metric_key = 'disk.provisioned.latest' THEN rm.latest END), 0)
       * 100.0 AS disk_pct,
     MAX(CASE WHEN rm.metric_key = 'cpu.usage.average' THEN rm.sample_count END)
-      * 100.0 / NULLIF(r.expected_sample_count, 0) AS confidence_pct
+      * 100.0 / NULLIF(r.expected_sample_count, 0) AS confidence_pct,
+    v."Cluster"                                                                   AS cluster_id,
+    CAST(v."CPUs" AS INTEGER)                                                     AS provisioned_cpus,
+    CAST(v."Memory" AS INTEGER)                                                   AS provisioned_memory_mb,
+    MAX(CASE WHEN rm.metric_key = 'disk.provisioned.latest' THEN rm.latest END)  AS provisioned_disk_kb
 FROM rightsizing_metrics rm
 LEFT JOIN vinfo v ON v."VM ID" = rm.moid
 JOIN rightsizing_reports r ON r.id = rm.report_id
 WHERE rm.report_id = ?
-GROUP BY rm.report_id, rm.moid, r.expected_sample_count
+GROUP BY rm.report_id, rm.moid, r.expected_sample_count, v."Cluster", v."CPUs", v."Memory"
 ON CONFLICT DO NOTHING`
 
 	if _, err := s.db.ExecContext(ctx, query, reportID); err != nil {
@@ -236,12 +241,97 @@ ON CONFLICT DO NOTHING`
 	return nil
 }
 
+// clusterUtilizationRows executes the cluster aggregation query and scans results.
+// Utilization uses pure weighted averages (no confidence multiplier).
+// Confidence is reported separately as a vCPU-weighted score.
+// NULLIF guards prevent division-by-zero when provisioned resource data is absent.
+func (s *RightSizingStore) clusterUtilizationRows(ctx context.Context, reportIDExpr string, args ...any) ([]models.RightsizingClusterUtilization, error) {
+	query := `
+SELECT
+    cluster_id,
+    COUNT(*) AS vm_count,
+    SUM(cpu_avg_pct * provisioned_cpus) / NULLIF(SUM(provisioned_cpus), 0) AS cpu_avg,
+    SUM(cpu_p95_pct * provisioned_cpus) / NULLIF(SUM(provisioned_cpus), 0) AS cpu_p95,
+    SUM(cpu_max_pct * provisioned_cpus) / NULLIF(SUM(provisioned_cpus), 0) AS cpu_max,
+    SUM(mem_avg_pct * provisioned_memory_mb) / NULLIF(SUM(provisioned_memory_mb), 0) AS mem_avg,
+    SUM(mem_p95_pct * provisioned_memory_mb) / NULLIF(SUM(provisioned_memory_mb), 0) AS mem_p95,
+    SUM(mem_max_pct * provisioned_memory_mb) / NULLIF(SUM(provisioned_memory_mb), 0) AS mem_max,
+    SUM(disk_pct * provisioned_disk_kb) / NULLIF(SUM(provisioned_disk_kb), 0) AS disk,
+    SUM(confidence_pct * provisioned_cpus) / NULLIF(SUM(provisioned_cpus), 0) AS confidence,
+    COALESCE(SUM(provisioned_cpus), 0)      AS total_provisioned_cpus,
+    COALESCE(SUM(provisioned_memory_mb), 0) AS total_provisioned_memory_mb,
+    COALESCE(SUM(provisioned_disk_kb), 0)   AS total_provisioned_disk_kb
+FROM rightsizing_vm_utilization
+WHERE report_id = ` + reportIDExpr + `
+  AND cluster_id IS NOT NULL
+GROUP BY cluster_id
+ORDER BY cluster_id`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("executing cluster utilization query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var result []models.RightsizingClusterUtilization
+	for rows.Next() {
+		var c models.RightsizingClusterUtilization
+		var (
+			cpuAvg, cpuP95, cpuMax sql.NullFloat64
+			memAvg, memP95, memMax sql.NullFloat64
+			disk, confidence       sql.NullFloat64
+		)
+		if err := rows.Scan(
+			&c.ClusterID, &c.VMCount,
+			&cpuAvg, &cpuP95, &cpuMax,
+			&memAvg, &memP95, &memMax,
+			&disk, &confidence,
+			&c.TotalProvisionedCpus, &c.TotalProvisionedMemoryMb, &c.TotalProvisionedDiskKb,
+		); err != nil {
+			return nil, fmt.Errorf("scanning cluster utilization row: %w", err)
+		}
+		c.CpuAvg = cpuAvg.Float64
+		c.CpuP95 = cpuP95.Float64
+		c.CpuMax = cpuMax.Float64
+		c.MemAvg = memAvg.Float64
+		c.MemP95 = memP95.Float64
+		c.MemMax = memMax.Float64
+		c.Disk = disk.Float64
+		c.Confidence = confidence.Float64
+		result = append(result, c)
+	}
+	return result, rows.Err()
+}
+
+// ListClusterUtilization returns weighted cluster utilization aggregates for a specific report.
+func (s *RightSizingStore) ListClusterUtilization(ctx context.Context, reportID string) ([]models.RightsizingClusterUtilization, error) {
+	return s.clusterUtilizationRows(ctx, "?", reportID)
+}
+
+// ListLatestClusterUtilization returns weighted cluster utilization for the latest completed
+// report, along with that report's ID so callers can include it in responses.
+func (s *RightSizingStore) ListLatestClusterUtilization(ctx context.Context) (string, []models.RightsizingClusterUtilization, error) {
+	var reportID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM rightsizing_reports WHERE written_batch_count > 0 ORDER BY created_at DESC LIMIT 1`,
+	).Scan(&reportID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil, nil
+		}
+		return "", nil, fmt.Errorf("finding latest report: %w", err)
+	}
+	clusters, err := s.clusterUtilizationRows(ctx, "?", reportID)
+	return reportID, clusters, err
+}
+
 // GetVMUtilization returns the full utilization breakdown for a VM from the latest
 // completed report (written_batch_count > 0). Returns ResourceNotFoundError if no
 // rightsizing data exists for this VM.
 func (s *RightSizingStore) GetVMUtilization(ctx context.Context, moid string) (*models.VmUtilizationDetails, error) {
 	query := `
 SELECT moid, vm_name,
+       provisioned_cpus, provisioned_memory_mb, provisioned_disk_kb,
        cpu_avg_pct, cpu_p95_pct, cpu_max_pct, cpu_latest_pct,
        mem_avg_pct, mem_p95_pct, mem_max_pct, mem_latest_pct,
        disk_pct, confidence_pct
@@ -255,12 +345,16 @@ WHERE moid = ?
 
 	var d models.VmUtilizationDetails
 	var (
+		provCpus                          sql.NullInt64
+		provMemMb                         sql.NullInt64
+		provDiskKb                        sql.NullFloat64
 		cpuAvg, cpuP95, cpuMax, cpuLatest sql.NullFloat64
 		memAvg, memP95, memMax, memLatest sql.NullFloat64
 		disk, confidence                  sql.NullFloat64
 	)
 	err := s.db.QueryRowContext(ctx, query, moid).Scan(
 		&d.MOID, &d.VMName,
+		&provCpus, &provMemMb, &provDiskKb,
 		&cpuAvg, &cpuP95, &cpuMax, &cpuLatest,
 		&memAvg, &memP95, &memMax, &memLatest,
 		&disk, &confidence,
@@ -271,6 +365,9 @@ WHERE moid = ?
 	if err != nil {
 		return nil, fmt.Errorf("scanning VM utilization: %w", err)
 	}
+	d.ProvisionedCpus = int(provCpus.Int64)
+	d.ProvisionedMemoryMb = int(provMemMb.Int64)
+	d.ProvisionedDiskKb = provDiskKb.Float64
 	d.CpuAvg = cpuAvg.Float64
 	d.CpuP95 = cpuP95.Float64
 	d.CpuMax = cpuMax.Float64

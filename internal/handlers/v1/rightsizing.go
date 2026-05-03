@@ -104,6 +104,61 @@ func (h *Handler) GetVMUtilization(c *gin.Context, id string) {
 	c.JSON(http.StatusOK, v1.NewVmUtilizationDetailsFromModel(*details))
 }
 
+// GetLatestRightsizingClusters returns cluster utilization from the latest completed report.
+// (GET /rightsizing/clusters)
+func (h *Handler) GetLatestRightsizingClusters(c *gin.Context) {
+	reportID, clusters, err := h.rightsizingSrv.ListLatestClusterUtilization(c.Request.Context())
+	if err != nil {
+		zap.S().Named("rightsizing_handler").Errorw("failed to list latest cluster utilization", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if reportID == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no completed rightsizing report found"})
+		return
+	}
+
+	apiClusters := make([]v1.RightsizingClusterUtilization, 0, len(clusters))
+	for _, cl := range clusters {
+		apiClusters = append(apiClusters, v1.NewRightsizingClusterUtilizationFromModel(cl))
+	}
+	c.JSON(http.StatusOK, v1.RightsizingClusterListResponse{
+		ReportId: reportID,
+		Clusters: apiClusters,
+	})
+}
+
+// GetRightsizingReportClusters returns cluster utilization for a specific report.
+// (GET /rightsizing/{report_id}/clusters)
+func (h *Handler) GetRightsizingReportClusters(c *gin.Context, reportId string) {
+	// Validate report exists first.
+	if _, err := h.rightsizingSrv.GetReport(c.Request.Context(), reportId); err != nil {
+		if srvErrors.IsResourceNotFoundError(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		zap.S().Named("rightsizing_handler").Errorw("failed to get report", "report_id", reportId, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	clusters, err := h.rightsizingSrv.ListClusterUtilization(c.Request.Context(), reportId)
+	if err != nil {
+		zap.S().Named("rightsizing_handler").Errorw("failed to list cluster utilization", "report_id", reportId, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	apiClusters := make([]v1.RightsizingClusterUtilization, 0, len(clusters))
+	for _, cl := range clusters {
+		apiClusters = append(apiClusters, v1.NewRightsizingClusterUtilizationFromModel(cl))
+	}
+	c.JSON(http.StatusOK, v1.RightsizingClusterListResponse{
+		ReportId: reportId,
+		Clusters: apiClusters,
+	})
+}
+
 func defaultInt(p *int, fallback int) int {
 	if p != nil {
 		return *p

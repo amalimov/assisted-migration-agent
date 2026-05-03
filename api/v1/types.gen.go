@@ -411,6 +411,55 @@ type PairCapabilityRequest struct {
 	Pairs       []DatastorePair     `json:"pairs"`
 }
 
+// RightsizingClusterListResponse defines model for RightsizingClusterListResponse.
+type RightsizingClusterListResponse struct {
+	Clusters []RightsizingClusterUtilization `json:"clusters"`
+
+	// ReportId The report ID this data was aggregated from
+	ReportId string `json:"report_id"`
+}
+
+// RightsizingClusterUtilization defines model for RightsizingClusterUtilization.
+type RightsizingClusterUtilization struct {
+	ClusterId string `json:"cluster_id"`
+
+	// Confidence SUM(vCPUs × confidence%) / SUM(vCPUs). vCPU-weighted data coverage (0–100 %). Interpret utilization cautiously when low.
+	Confidence float64 `json:"confidence"`
+
+	// CpuAvg SUM(vCPUs × cpu_avg%) / SUM(vCPUs) — weighted average CPU utilization (%)
+	CpuAvg float64 `json:"cpu_avg"`
+
+	// CpuMax Weighted summary of per-VM max values (see cpu_p95 note)
+	CpuMax float64 `json:"cpu_max"`
+
+	// CpuP95 SUM(vCPUs × vm_p95%) / SUM(vCPUs). Weighted summary of per-VM p95 values — not a true cluster-wide p95 (which would require time-aligned samples).
+	CpuP95 float64 `json:"cpu_p95"`
+
+	// Disk SUM(provisionedKB × disk%) / SUM(provisionedKB) — weighted average disk utilization (%)
+	Disk float64 `json:"disk"`
+
+	// MemAvg SUM(provisionedMB × mem_avg%) / SUM(provisionedMB) — weighted average memory utilization (%)
+	MemAvg float64 `json:"mem_avg"`
+
+	// MemMax Weighted summary of per-VM memory max values (see cpu_p95 note)
+	MemMax float64 `json:"mem_max"`
+
+	// MemP95 Weighted summary of per-VM memory p95 values (see cpu_p95 note)
+	MemP95 float64 `json:"mem_p95"`
+
+	// TotalProvisionedCpus Sum of vCPU counts across all VMs in the cluster
+	TotalProvisionedCpus int `json:"total_provisioned_cpus"`
+
+	// TotalProvisionedDiskKb Sum of provisioned disk (KB) across all VMs in the cluster
+	TotalProvisionedDiskKb float64 `json:"total_provisioned_disk_kb"`
+
+	// TotalProvisionedMemoryMb Sum of provisioned RAM (MB) across all VMs in the cluster
+	TotalProvisionedMemoryMb int `json:"total_provisioned_memory_mb"`
+
+	// VmCount Number of VMs with utilization data in this cluster
+	VmCount int `json:"vm_count"`
+}
+
 // RightsizingCollectRequest defines model for RightsizingCollectRequest.
 type RightsizingCollectRequest struct {
 	// BatchSize Number of VMs per QueryPerf round-trip
@@ -816,7 +865,16 @@ type VmUtilizationDetails struct {
 	MemMax    float64 `json:"mem_max"`
 	MemP95    float64 `json:"mem_p95"`
 	Moid      string  `json:"moid"`
-	VmName    string  `json:"vm_name"`
+
+	// ProvisionedCpus Number of vCPUs provisioned for this VM
+	ProvisionedCpus int `json:"provisioned_cpus"`
+
+	// ProvisionedDiskKb Provisioned disk (KB)
+	ProvisionedDiskKb float64 `json:"provisioned_disk_kb"`
+
+	// ProvisionedMemoryMb Provisioned RAM (MB)
+	ProvisionedMemoryMb int    `json:"provisioned_memory_mb"`
+	VmName              string `json:"vm_name"`
 }
 
 // GetForecasterRunsParams defines parameters for GetForecasterRuns.

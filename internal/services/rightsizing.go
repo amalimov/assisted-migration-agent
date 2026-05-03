@@ -209,6 +209,16 @@ func (s *RightsizingService) GetVMUtilization(ctx context.Context, vmID string) 
 	return s.store.RightSizing().GetVMUtilization(ctx, vmID)
 }
 
+// ListClusterUtilization returns weighted cluster utilization for a specific report.
+func (s *RightsizingService) ListClusterUtilization(ctx context.Context, reportID string) ([]models.RightsizingClusterUtilization, error) {
+	return s.store.RightSizing().ListClusterUtilization(ctx, reportID)
+}
+
+// ListLatestClusterUtilization returns weighted cluster utilization for the latest completed report.
+func (s *RightsizingService) ListLatestClusterUtilization(ctx context.Context) (string, []models.RightsizingClusterUtilization, error) {
+	return s.store.RightSizing().ListLatestClusterUtilization(ctx)
+}
+
 // applyCollectionDefaults fills zero-value params with package defaults.
 func applyCollectionDefaults(p *models.RightsizingParams) {
 	if p.LookbackH <= 0 {
