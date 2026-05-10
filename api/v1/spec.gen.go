@@ -107,8 +107,14 @@ type ServerInterface interface {
 	// (POST /rightsizing)
 	TriggerRightsizingCollection(c *gin.Context)
 	// Get a specific rightsizing report with full VM metrics
-	// (GET /rightsizing/{id})
-	GetRightsizingReport(c *gin.Context, id string)
+	// (GET /rightsizing/{report_id})
+	GetRightsizingReport(c *gin.Context, reportId string)
+	// Get cluster-level utilization aggregates for a specific report
+	// (GET /rightsizing/{report_id}/clusters)
+	ListRightsizingReportClusters(c *gin.Context, reportId string, params ListRightsizingReportClustersParams)
+	// Get utilization for a specific cluster from a specific report
+	// (GET /rightsizing/{report_id}/clusters/{cluster_id})
+	GetRightsizingReportCluster(c *gin.Context, reportId string, clusterId string)
 	// Get agent version information
 	// (GET /version)
 	GetVersion(c *gin.Context)
@@ -759,12 +765,12 @@ func (siw *ServerInterfaceWrapper) GetRightsizingReport(c *gin.Context) {
 
 	var err error
 
-	// ------------- Path parameter "id" -------------
-	var id string
+	// ------------- Path parameter "report_id" -------------
+	var reportId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "report_id", c.Param("report_id"), &reportId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter report_id: %w", err), http.StatusBadRequest)
 		return
 	}
 
@@ -775,7 +781,75 @@ func (siw *ServerInterfaceWrapper) GetRightsizingReport(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetRightsizingReport(c, id)
+	siw.Handler.GetRightsizingReport(c, reportId)
+}
+
+// ListRightsizingReportClusters operation middleware
+func (siw *ServerInterfaceWrapper) ListRightsizingReportClusters(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "report_id" -------------
+	var reportId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "report_id", c.Param("report_id"), &reportId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter report_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRightsizingReportClustersParams
+
+	// ------------- Optional query parameter "byExpression" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "byExpression", c.Request.URL.Query(), &params.ByExpression)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter byExpression: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListRightsizingReportClusters(c, reportId, params)
+}
+
+// GetRightsizingReportCluster operation middleware
+func (siw *ServerInterfaceWrapper) GetRightsizingReportCluster(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "report_id" -------------
+	var reportId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "report_id", c.Param("report_id"), &reportId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter report_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Path parameter "cluster_id" -------------
+	var clusterId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "cluster_id", c.Param("cluster_id"), &clusterId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter cluster_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetRightsizingReportCluster(c, reportId, clusterId)
 }
 
 // GetVersion operation middleware
@@ -995,7 +1069,9 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/inventory", wrapper.GetInventory)
 	router.GET(options.BaseURL+"/rightsizing", wrapper.ListRightsizingReports)
 	router.POST(options.BaseURL+"/rightsizing", wrapper.TriggerRightsizingCollection)
-	router.GET(options.BaseURL+"/rightsizing/:id", wrapper.GetRightsizingReport)
+	router.GET(options.BaseURL+"/rightsizing/:report_id", wrapper.GetRightsizingReport)
+	router.GET(options.BaseURL+"/rightsizing/:report_id/clusters", wrapper.ListRightsizingReportClusters)
+	router.GET(options.BaseURL+"/rightsizing/:report_id/clusters/:cluster_id", wrapper.GetRightsizingReportCluster)
 	router.GET(options.BaseURL+"/version", wrapper.GetVersion)
 	router.GET(options.BaseURL+"/vms", wrapper.GetVMs)
 	router.GET(options.BaseURL+"/vms/:id", wrapper.GetVM)

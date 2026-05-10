@@ -410,6 +410,14 @@ type RightsizingClusterListResponse struct {
 	ReportId string `json:"report_id"`
 }
 
+// RightsizingClusterResponse defines model for RightsizingClusterResponse.
+type RightsizingClusterResponse struct {
+	Cluster RightsizingClusterUtilization `json:"cluster"`
+
+	// ReportId The report ID this data was aggregated from
+	ReportId string `json:"report_id"`
+}
+
 // RightsizingClusterUtilization defines model for RightsizingClusterUtilization.
 type RightsizingClusterUtilization struct {
 	// ClusterId vSphere MoRef of the ClusterComputeResource (e.g. "domain-c123").
@@ -958,6 +966,12 @@ type GetInventoryParams struct {
 
 	// GroupId Filter inventory to VMs matching this group's filter expression
 	GroupId *string `form:"group_id,omitempty" json:"group_id,omitempty"`
+}
+
+// ListRightsizingReportClustersParams defines parameters for ListRightsizingReportClusters.
+type ListRightsizingReportClustersParams struct {
+	// ByExpression Filter DSL expression (e.g. "cluster_id = 'domain-c123'"). Omit to return all clusters.
+	ByExpression *string `form:"byExpression,omitempty" json:"byExpression,omitempty"`
 }
 
 // GetVMsParams defines parameters for GetVMs.

@@ -34,10 +34,16 @@ var _ = Describe("Rightsizing Handlers", func() {
 		handler = handlers.NewHandler(config.Configuration{}).WithRightsizingService(mockSvc)
 		router = gin.New()
 		router.GET("/rightsizing", handler.ListRightsizingReports)
-		router.GET("/rightsizing/:id", func(c *gin.Context) {
-			handler.GetRightsizingReport(c, c.Param("id"))
+		router.GET("/rightsizing/:report_id", func(c *gin.Context) {
+			handler.GetRightsizingReport(c, c.Param("report_id"))
 		})
 		router.POST("/rightsizing", handler.TriggerRightsizingCollection)
+		router.GET("/rightsizing/:report_id/clusters", func(c *gin.Context) {
+			handler.ListRightsizingReportClusters(c, c.Param("report_id"), v1.ListRightsizingReportClustersParams{})
+		})
+		router.GET("/rightsizing/:report_id/clusters/:cluster_id", func(c *gin.Context) {
+			handler.GetRightsizingReportCluster(c, c.Param("report_id"), c.Param("cluster_id"))
+		})
 	})
 
 	Describe("ListRightsizingReports", func() {
@@ -242,6 +248,64 @@ var _ = Describe("Rightsizing Handlers", func() {
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+		})
+	})
+
+	Describe("ListRightsizingReportClusters", func() {
+		It("should return 404 when report does not exist", func() {
+			mockSvc.GetError = srvErrors.NewResourceNotFoundError("rightsizing report", "no-such-id")
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/rightsizing/no-such-id/clusters", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("should return 200 with cluster list when found", func() {
+			mockSvc.ClusterUtilizationResult = []models.RightsizingClusterUtilization{
+				{ClusterID: "domain-c1", ClusterName: "prod-cluster", VMCount: 3},
+			}
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/rightsizing/report-123/clusters", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+			var resp v1.RightsizingClusterListResponse
+			Expect(json.Unmarshal(w.Body.Bytes(), &resp)).To(Succeed())
+			Expect(resp.ReportId).To(Equal("report-123"))
+			Expect(resp.Clusters).To(HaveLen(1))
+			Expect(resp.Clusters[0].ClusterId).To(Equal("domain-c1"))
+		})
+	})
+
+	Describe("GetRightsizingReportCluster", func() {
+		It("should return 404 when report does not exist", func() {
+			mockSvc.GetError = srvErrors.NewResourceNotFoundError("rightsizing report", "no-such-id")
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/rightsizing/no-such-id/clusters/domain-c1", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("should return 404 when cluster is not found in the report", func() {
+			mockSvc.ClusterUtilizationResult = []models.RightsizingClusterUtilization{}
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/rightsizing/report-123/clusters/domain-c1", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("should return 200 with the cluster when found", func() {
+			mockSvc.ClusterUtilizationResult = []models.RightsizingClusterUtilization{
+				{ClusterID: "domain-c1", ClusterName: "prod-cluster", VMCount: 3},
+			}
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/rightsizing/report-123/clusters/domain-c1", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+			var resp v1.RightsizingClusterResponse
+			Expect(json.Unmarshal(w.Body.Bytes(), &resp)).To(Succeed())
+			Expect(resp.ReportId).To(Equal("report-123"))
+			Expect(resp.Cluster.ClusterId).To(Equal("domain-c1"))
+			Expect(resp.Cluster.VmCount).To(Equal(3))
 		})
 	})
 })

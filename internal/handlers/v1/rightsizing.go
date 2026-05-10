@@ -3,6 +3,7 @@ package v1
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -12,6 +13,8 @@ import (
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
+
+var clusterIDPattern = regexp.MustCompile(`^(domain-c\d+|cluster-[0-9a-f]{16})$`)
 
 // ListRightsizingReports returns all stored rightsizing reports.
 // (GET /rightsizing)
@@ -35,15 +38,15 @@ func (h *Handler) ListRightsizingReports(c *gin.Context) {
 }
 
 // GetRightsizingReport returns a single rightsizing report by ID.
-// (GET /rightsizing/{id})
-func (h *Handler) GetRightsizingReport(c *gin.Context, id string) {
-	report, err := h.rightsizingSrv.GetReport(c.Request.Context(), id)
+// (GET /rightsizing/{report_id})
+func (h *Handler) GetRightsizingReport(c *gin.Context, reportId string) {
+	report, err := h.rightsizingSrv.GetReport(c.Request.Context(), reportId)
 	if err != nil {
 		if srvErrors.IsResourceNotFoundError(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		zap.S().Named("rightsizing_handler").Errorw("failed to get report", "id", id, "error", err)
+		zap.S().Named("rightsizing_handler").Errorw("failed to get report", "id", reportId, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -139,7 +142,8 @@ func (h *Handler) GetLatestRightsizingClusters(c *gin.Context, params v1.GetLate
 }
 
 // GetRightsizingReportClusters returns cluster utilization for a specific report.
-// (GET /rightsizing/{report_id}/clusters)
+// Deprecated: use ListRightsizingReportClusters (GET /rightsizing/{report_id}/clusters).
+// (GET /cluster_rightsizing/{report_id})
 func (h *Handler) GetRightsizingReportClusters(c *gin.Context, reportId string, params v1.GetRightsizingReportClustersParams) {
 	// Validate report exists first.
 	if _, err := h.rightsizingSrv.GetReport(c.Request.Context(), reportId); err != nil {
@@ -182,4 +186,76 @@ func defaultInt(p *int, fallback int) int {
 		return *p
 	}
 	return fallback
+}
+
+// ListRightsizingReportClusters returns cluster utilization for a specific report.
+// (GET /rightsizing/{report_id}/clusters)
+func (h *Handler) ListRightsizingReportClusters(c *gin.Context, reportId string, params v1.ListRightsizingReportClustersParams) {
+	if _, err := h.rightsizingSrv.GetReport(c.Request.Context(), reportId); err != nil {
+		if srvErrors.IsResourceNotFoundError(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		zap.S().Named("rightsizing_handler").Errorw("failed to get report", "report_id", reportId, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	filterExpr := ""
+	if params.ByExpression != nil {
+		if _, err := filter.ParseWithClusterMap([]byte(*params.ByExpression)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("expression filter is invalid: %v", err)})
+			return
+		}
+		filterExpr = *params.ByExpression
+	}
+	clusters, err := h.rightsizingSrv.ListClusterUtilization(c.Request.Context(), reportId, filterExpr)
+	if err != nil {
+		zap.S().Named("rightsizing_handler").Errorw("failed to list cluster utilization", "report_id", reportId, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	apiClusters := make([]v1.RightsizingClusterUtilization, 0, len(clusters))
+	for _, cl := range clusters {
+		apiClusters = append(apiClusters, v1.NewRightsizingClusterUtilizationFromModel(cl))
+	}
+	c.JSON(http.StatusOK, v1.RightsizingClusterListResponse{
+		ReportId: reportId,
+		Clusters: apiClusters,
+	})
+}
+
+// GetRightsizingReportCluster returns utilization for a specific cluster from a specific report.
+// (GET /rightsizing/{report_id}/clusters/{cluster_id})
+func (h *Handler) GetRightsizingReportCluster(c *gin.Context, reportId string, clusterId string) {
+	if !clusterIDPattern.MatchString(clusterId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid cluster_id format: %q", clusterId)})
+		return
+	}
+	if _, err := h.rightsizingSrv.GetReport(c.Request.Context(), reportId); err != nil {
+		if srvErrors.IsResourceNotFoundError(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		zap.S().Named("rightsizing_handler").Errorw("failed to get report", "report_id", reportId, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	filterExpr := fmt.Sprintf("cluster_id = '%s'", clusterId)
+	clusters, err := h.rightsizingSrv.ListClusterUtilization(c.Request.Context(), reportId, filterExpr)
+	if err != nil {
+		zap.S().Named("rightsizing_handler").Errorw("failed to get cluster utilization", "report_id", reportId, "cluster_id", clusterId, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(clusters) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "cluster not found in report"})
+		return
+	}
+	c.JSON(http.StatusOK, v1.RightsizingClusterResponse{
+		ReportId: reportId,
+		Cluster:  v1.NewRightsizingClusterUtilizationFromModel(clusters[0]),
+	})
 }

@@ -594,6 +594,7 @@ paths:
 
   /cluster_rightsizing:
     get:
+      deprecated: true
       summary: Get cluster-level utilization aggregates for the latest completed report
       operationId: getLatestRightsizingClusters
       parameters:
@@ -617,6 +618,7 @@ paths:
 
   /cluster_rightsizing/{report_id}:
     get:
+      deprecated: true
       summary: Get cluster-level utilization aggregates for a specific report
       operationId: getRightsizingReportClusters
       parameters:
@@ -644,12 +646,12 @@ paths:
         '500':
           description: Internal server error
 
-  /rightsizing/{id}:
+  /rightsizing/{report_id}:
     get:
       summary: Get a specific rightsizing report with full VM metrics
       operationId: getRightsizingReport
       parameters:
-        - name: id
+        - name: report_id
           in: path
           required: true
           description: Report UUID
@@ -664,6 +666,65 @@ paths:
                 $ref: '#/components/schemas/RightsizingReport'
         '404':
           description: Report not found
+        '500':
+          description: Internal server error
+
+  /rightsizing/{report_id}/clusters:
+    get:
+      summary: Get cluster-level utilization aggregates for a specific report
+      operationId: listRightsizingReportClusters
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          description: Rightsizing report UUID
+          schema:
+            type: string
+        - name: byExpression
+          in: query
+          required: false
+          description: Filter DSL expression (e.g. "cluster_id = 'domain-c123'"). Omit to return all clusters.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cluster utilization aggregates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RightsizingClusterListResponse'
+        '404':
+          description: Report not found
+        '500':
+          description: Internal server error
+
+  /rightsizing/{report_id}/clusters/{cluster_id}:
+    get:
+      summary: Get utilization for a specific cluster from a specific report
+      operationId: getRightsizingReportCluster
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          description: Rightsizing report UUID
+          schema:
+            type: string
+        - name: cluster_id
+          in: path
+          required: true
+          description: vSphere MoRef (e.g. "domain-c123") or generated cluster ID (e.g. "cluster-a3f7b2c1d4e89012")
+          schema:
+            type: string
+            pattern: '^(domain-c\d+|cluster-[0-9a-f]{16})$'
+      responses:
+        '200':
+          description: Cluster utilization data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RightsizingClusterResponse'
+        '404':
+          description: Report not found, or cluster not found in report
         '500':
           description: Internal server error
 
@@ -1902,6 +1963,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RightsizingClusterUtilization'
+
+    RightsizingClusterResponse:
+      type: object
+      required:
+        - report_id
+        - cluster
+      properties:
+        report_id:
+          type: string
+          description: The report ID this data was aggregated from
+        cluster:
+          $ref: '#/components/schemas/RightsizingClusterUtilization'
 
     VirtualMachineUpdateRequest:
       type: object
