@@ -33,6 +33,8 @@ func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOptio
 		Columns(
 			`u.cpu_p95_pct AS cpu_p95_pct`,
 			`u.mem_p95_pct AS mem_p95_pct`,
+			`u.cpu_max_pct AS cpu_max_pct`,
+			`u.mem_max_pct AS mem_max_pct`,
 			`u.disk_pct    AS disk_pct`,
 			`u.confidence_pct AS confidence_pct`,
 		).
@@ -97,6 +99,8 @@ func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOptio
 			&labels,
 			&vm.UtilizationCpuP95,
 			&vm.UtilizationMemP95,
+			&vm.UtilizationCpuMax,
+			&vm.UtilizationMemMax,
 			&vm.UtilizationDisk,
 			&vm.UtilizationConfidence,
 		)

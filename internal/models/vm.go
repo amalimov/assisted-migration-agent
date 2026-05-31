@@ -17,6 +17,8 @@ type VirtualMachineSummary struct {
 	Groups                 []string
 	UtilizationCpuP95      *float64 // CPU utilization at p95 (%); nil when no utilization data
 	UtilizationMemP95      *float64 // Memory utilization at p95 (%); nil when no utilization data
+	UtilizationCpuMax      *float64 // CPU utilization at max (%); nil when no utilization data
+	UtilizationMemMax      *float64 // Memory utilization at max (%); nil when no utilization data
 	UtilizationDisk        *float64 // Disk utilization (%); nil when no utilization data
 	UtilizationConfidence  *float64 // Data confidence (%); nil when no utilization data
 	MigrationExcluded      bool

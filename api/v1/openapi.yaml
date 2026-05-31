@@ -1277,6 +1277,14 @@ components:
           type: number
           format: double
           description: Memory utilization at p95 (%); absent when no utilization data
+        utilization_cpu_max:
+          type: number
+          format: double
+          description: CPU utilization at max (%); absent when no utilization data
+        utilization_mem_max:
+          type: number
+          format: double
+          description: Memory utilization at max (%); absent when no utilization data
         utilization_disk:
           type: number
           format: double

@@ -53,6 +53,8 @@ func NewVirtualMachineFromSummary(vm models.VirtualMachineSummary) VirtualMachin
 
 	result.UtilizationCpuP95 = vm.UtilizationCpuP95
 	result.UtilizationMemP95 = vm.UtilizationMemP95
+	result.UtilizationCpuMax = vm.UtilizationCpuMax
+	result.UtilizationMemMax = vm.UtilizationMemMax
 	result.UtilizationDisk = vm.UtilizationDisk
 	result.UtilizationConfidence = vm.UtilizationConfidence
 

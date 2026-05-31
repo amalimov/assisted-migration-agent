@@ -738,11 +738,17 @@ type VirtualMachine struct {
 	// UtilizationConfidence Data confidence — sample_count / expected_sample_count × 100
 	UtilizationConfidence *float64 `json:"utilization_confidence,omitempty"`
 
+	// UtilizationCpuMax CPU utilization at max (%); absent when no utilization data
+	UtilizationCpuMax *float64 `json:"utilization_cpu_max,omitempty"`
+
 	// UtilizationCpuP95 CPU utilization at p95 (%); absent when no utilization data
 	UtilizationCpuP95 *float64 `json:"utilization_cpu_p95,omitempty"`
 
 	// UtilizationDisk Disk utilization (%); absent when no utilization data
 	UtilizationDisk *float64 `json:"utilization_disk,omitempty"`
+
+	// UtilizationMemMax Memory utilization at max (%); absent when no utilization data
+	UtilizationMemMax *float64 `json:"utilization_mem_max,omitempty"`
 
 	// UtilizationMemP95 Memory utilization at p95 (%); absent when no utilization data
 	UtilizationMemP95 *float64 `json:"utilization_mem_p95,omitempty"`
