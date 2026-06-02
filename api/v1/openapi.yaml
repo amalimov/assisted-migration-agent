@@ -810,6 +810,32 @@ paths:
         '500':
           description: Internal server error
 
+  /clusters/{cluster_id}/utilization:
+    get:
+      summary: Get latest cluster utilization by cluster ID
+      operationId: getClusterUtilization
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: vSphere MoRef (e.g. "domain-c123") or generated cluster ID (e.g. "cluster-a3f7b2c1d4e89012")
+          schema:
+            type: string
+            pattern: '^(domain-c\d+|cluster-[0-9a-f]{16})$'
+      responses:
+        '200':
+          description: Cluster utilization data from the latest completed rightsizing report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RightsizingClusterResponse'
+        '400':
+          description: Invalid cluster_id format
+        '404':
+          description: No completed rightsizing report found, or cluster not found in report
+        '500':
+          description: Internal server error
+
   /forecaster:
     post:
       summary: Start benchmark

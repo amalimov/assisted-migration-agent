@@ -25,6 +25,9 @@ type ServerInterface interface {
 	// Get cluster-level utilization aggregates for a specific report
 	// (GET /cluster_rightsizing/{report_id})
 	GetRightsizingReportClusters(c *gin.Context, reportId string, params GetRightsizingReportClustersParams)
+	// Get latest cluster utilization by cluster ID
+	// (GET /clusters/{cluster_id}/utilization)
+	GetClusterUtilization(c *gin.Context, clusterId string)
 	// Stop collection
 	// (DELETE /collector)
 	StopCollector(c *gin.Context)
@@ -241,6 +244,30 @@ func (siw *ServerInterfaceWrapper) GetRightsizingReportClusters(c *gin.Context) 
 	}
 
 	siw.Handler.GetRightsizingReportClusters(c, reportId, params)
+}
+
+// GetClusterUtilization operation middleware
+func (siw *ServerInterfaceWrapper) GetClusterUtilization(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "cluster_id" -------------
+	var clusterId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "cluster_id", c.Param("cluster_id"), &clusterId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter cluster_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetClusterUtilization(c, clusterId)
 }
 
 // StopCollector operation middleware
@@ -1128,6 +1155,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/agent", wrapper.SetAgentMode)
 	router.GET(options.BaseURL+"/cluster_rightsizing", wrapper.GetLatestRightsizingClusters)
 	router.GET(options.BaseURL+"/cluster_rightsizing/:report_id", wrapper.GetRightsizingReportClusters)
+	router.GET(options.BaseURL+"/clusters/:cluster_id/utilization", wrapper.GetClusterUtilization)
 	router.DELETE(options.BaseURL+"/collector", wrapper.StopCollector)
 	router.GET(options.BaseURL+"/collector", wrapper.GetCollectorStatus)
 	router.POST(options.BaseURL+"/collector", wrapper.StartCollector)

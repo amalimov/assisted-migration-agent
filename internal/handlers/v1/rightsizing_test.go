@@ -44,6 +44,9 @@ var _ = Describe("Rightsizing Handlers", func() {
 		router.GET("/rightsizing/:report_id/clusters/:cluster_id", func(c *gin.Context) {
 			handler.GetRightsizingReportCluster(c, c.Param("report_id"), c.Param("cluster_id"))
 		})
+		router.GET("/clusters/:cluster_id/utilization", func(c *gin.Context) {
+			handler.GetClusterUtilization(c, c.Param("cluster_id"))
+		})
 	})
 
 	Describe("ListRightsizingReports", func() {
@@ -306,6 +309,93 @@ var _ = Describe("Rightsizing Handlers", func() {
 			Expect(resp.ReportId).To(Equal("report-123"))
 			Expect(resp.Cluster.ClusterId).To(Equal("domain-c1"))
 			Expect(resp.Cluster.VmCount).To(Equal(3))
+		})
+	})
+
+	Describe("GetClusterUtilization", func() {
+		It("should return 400 for an invalid cluster_id format", func() {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/clusters/invalid-id/utilization", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+			var body map[string]any
+			Expect(json.Unmarshal(w.Body.Bytes(), &body)).To(Succeed())
+			Expect(body["error"]).To(ContainSubstring("invalid cluster_id format"))
+		})
+
+		It("should return 404 when no completed report exists", func() {
+			mockSvc.LatestClusterUtilizationReportID = ""
+			mockSvc.LatestClusterUtilizationResult = nil
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/clusters/domain-c1/utilization", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+			var body map[string]any
+			Expect(json.Unmarshal(w.Body.Bytes(), &body)).To(Succeed())
+			Expect(body["error"]).To(Equal("no completed rightsizing report found"))
+		})
+
+		It("should return 404 when cluster is not found in the latest report", func() {
+			mockSvc.LatestClusterUtilizationReportID = "report-abc"
+			mockSvc.LatestClusterUtilizationResult = []models.RightsizingClusterUtilization{}
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/clusters/domain-c99/utilization", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+			var body map[string]any
+			Expect(json.Unmarshal(w.Body.Bytes(), &body)).To(Succeed())
+			Expect(body["error"]).To(Equal("cluster not found in report"))
+		})
+
+		It("should return 500 when the service returns an error", func() {
+			mockSvc.LatestClusterUtilizationError = errors.New("db failure")
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/clusters/domain-c1/utilization", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			var body map[string]any
+			Expect(json.Unmarshal(w.Body.Bytes(), &body)).To(Succeed())
+			Expect(body["error"]).To(Equal("db failure"))
+			Expect(mockSvc.LastLatestClusterFilterExpr).To(Equal("cluster_id = 'domain-c1'"))
+		})
+
+		It("should return 200 with cluster utilization from the latest report", func() {
+			mockSvc.LatestClusterUtilizationReportID = "report-latest"
+			mockSvc.LatestClusterUtilizationResult = []models.RightsizingClusterUtilization{
+				{ClusterID: "domain-c1", ClusterName: "prod-cluster", VMCount: 5,
+					CpuAvg: 42.5, CpuP95: 78.3, CpuMax: 91.0,
+					MemAvg: 55.2, MemP95: 80.1, MemMax: 95.0,
+					Disk: 60.0, Confidence: 88.5,
+					TotalProvisionedCpus: 40, TotalProvisionedMemoryMb: 163840, TotalProvisionedDiskKb: 204800000},
+			}
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/clusters/domain-c1/utilization", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+			var resp v1.RightsizingClusterResponse
+			Expect(json.Unmarshal(w.Body.Bytes(), &resp)).To(Succeed())
+			Expect(resp.ReportId).To(Equal("report-latest"))
+			Expect(resp.Cluster.ClusterId).To(Equal("domain-c1"))
+			Expect(resp.Cluster.ClusterName).To(Equal("prod-cluster"))
+			Expect(resp.Cluster.VmCount).To(Equal(5))
+			Expect(resp.Cluster.CpuAvg).To(BeNumerically("~", 42.5, 0.01))
+			Expect(resp.Cluster.CpuP95).To(BeNumerically("~", 78.3, 0.01))
+			Expect(mockSvc.LastLatestClusterFilterExpr).To(Equal("cluster_id = 'domain-c1'"))
+		})
+
+		It("should accept a valid cluster-[hex] ID and return 200", func() {
+			mockSvc.LatestClusterUtilizationReportID = "report-latest"
+			mockSvc.LatestClusterUtilizationResult = []models.RightsizingClusterUtilization{
+				{ClusterID: "cluster-a3f7b2c1d4e89012", ClusterName: "hex-cluster", VMCount: 2},
+			}
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/clusters/cluster-a3f7b2c1d4e89012/utilization", nil)
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+			var resp v1.RightsizingClusterResponse
+			Expect(json.Unmarshal(w.Body.Bytes(), &resp)).To(Succeed())
+			Expect(resp.Cluster.ClusterId).To(Equal("cluster-a3f7b2c1d4e89012"))
+			Expect(mockSvc.LastLatestClusterFilterExpr).To(Equal("cluster_id = 'cluster-a3f7b2c1d4e89012'"))
 		})
 	})
 })

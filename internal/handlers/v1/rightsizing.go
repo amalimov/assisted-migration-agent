@@ -226,6 +226,35 @@ func (h *Handler) ListRightsizingReportClusters(c *gin.Context, reportId string,
 	})
 }
 
+// GetClusterUtilization returns utilization for a specific cluster from the latest completed report.
+// (GET /clusters/{cluster_id}/utilization)
+func (h *Handler) GetClusterUtilization(c *gin.Context, clusterId string) {
+	if !clusterIDPattern.MatchString(clusterId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid cluster_id format: %q", clusterId)})
+		return
+	}
+
+	filterExpr := fmt.Sprintf("cluster_id = '%s'", clusterId)
+	reportID, clusters, err := h.rightsizingSrv.ListLatestClusterUtilization(c.Request.Context(), filterExpr)
+	if err != nil {
+		zap.S().Named("rightsizing_handler").Errorw("failed to get latest cluster utilization", "cluster_id", clusterId, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if reportID == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no completed rightsizing report found"})
+		return
+	}
+	if len(clusters) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "cluster not found in report"})
+		return
+	}
+	c.JSON(http.StatusOK, v1.RightsizingClusterResponse{
+		ReportId: reportID,
+		Cluster:  v1.NewRightsizingClusterUtilizationFromModel(clusters[0]),
+	})
+}
+
 // GetRightsizingReportCluster returns utilization for a specific cluster from a specific report.
 // (GET /rightsizing/{report_id}/clusters/{cluster_id})
 func (h *Handler) GetRightsizingReportCluster(c *gin.Context, reportId string, clusterId string) {

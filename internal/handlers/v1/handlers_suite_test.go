@@ -281,6 +281,7 @@ type MockRightsizingService struct {
 	LatestClusterUtilizationReportID string
 	LatestClusterUtilizationResult   []models.RightsizingClusterUtilization
 	LatestClusterUtilizationError    error
+	LastLatestClusterFilterExpr      string
 }
 
 func (m *MockRightsizingService) TriggerCollection(ctx context.Context, params models.RightsizingParams) (*models.RightsizingReportSummary, error) {
@@ -308,5 +309,6 @@ func (m *MockRightsizingService) ListClusterUtilization(ctx context.Context, rep
 }
 
 func (m *MockRightsizingService) ListLatestClusterUtilization(ctx context.Context, filterExpr string) (string, []models.RightsizingClusterUtilization, error) {
+	m.LastLatestClusterFilterExpr = filterExpr
 	return m.LatestClusterUtilizationReportID, m.LatestClusterUtilizationResult, m.LatestClusterUtilizationError
 }
