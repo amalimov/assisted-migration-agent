@@ -689,6 +689,58 @@ var _ = Describe("NewVirtualMachineDetailFromModel", func() {
 			Expect(*nic2.Network).To(Equal("Production"))
 			Expect(*nic2.Index).To(Equal(1))
 		})
+
+		It("should include ipv4Address and ipv6Address when set on a NIC", func() {
+			vm := models.VM{
+				ID:              "vm-nic-ips",
+				Name:            "NIC IP VM",
+				PowerState:      "poweredOn",
+				ConnectionState: "connected",
+				NICs: []models.NIC{
+					{MAC: "00:50:56:01:02:03", Network: "VM Network", Index: 0, IPv4Address: "10.0.0.1", IPv6Address: "fe80::1"},
+					{MAC: "00:50:56:04:05:06", Network: "Production", Index: 1, IPv4Address: "10.0.0.2", IPv6Address: ""},
+					{MAC: "00:50:56:07:08:09", Network: "Management", Index: 2, IPv4Address: "", IPv6Address: "fe80::3"},
+				},
+			}
+
+			details := v1.NewVirtualMachineDetailFromModel(vm)
+
+			Expect(details.Nics).To(HaveLen(3))
+
+			nic0 := details.Nics[0]
+			Expect(nic0.Ipv4Address).NotTo(BeNil())
+			Expect(*nic0.Ipv4Address).To(Equal("10.0.0.1"))
+			Expect(nic0.Ipv6Address).NotTo(BeNil())
+			Expect(*nic0.Ipv6Address).To(Equal("fe80::1"))
+
+			nic1 := details.Nics[1]
+			Expect(nic1.Ipv4Address).NotTo(BeNil())
+			Expect(*nic1.Ipv4Address).To(Equal("10.0.0.2"))
+			Expect(nic1.Ipv6Address).To(BeNil())
+
+			nic2 := details.Nics[2]
+			Expect(nic2.Ipv4Address).To(BeNil())
+			Expect(nic2.Ipv6Address).NotTo(BeNil())
+			Expect(*nic2.Ipv6Address).To(Equal("fe80::3"))
+		})
+
+		It("should omit ip fields when NIC has no IP addresses", func() {
+			vm := models.VM{
+				ID:              "vm-no-ip-nic",
+				Name:            "No IP NIC VM",
+				PowerState:      "poweredOff",
+				ConnectionState: "connected",
+				NICs: []models.NIC{
+					{MAC: "00:50:56:aa:bb:cc", Network: "VM Network", Index: 0},
+				},
+			}
+
+			details := v1.NewVirtualMachineDetailFromModel(vm)
+
+			Expect(details.Nics).To(HaveLen(1))
+			Expect(details.Nics[0].Ipv4Address).To(BeNil())
+			Expect(details.Nics[0].Ipv6Address).To(BeNil())
+		})
 	})
 
 	Context("issues", func() {

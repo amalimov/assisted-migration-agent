@@ -295,9 +295,11 @@ func fromDB(pvm duckdb_models.VM) models.VM {
 	nics := make([]models.NIC, 0, len(pvm.NICs))
 	for i, n := range pvm.NICs {
 		nics = append(nics, models.NIC{
-			MAC:     n.MAC,
-			Network: n.Network.ID,
-			Index:   i,
+			MAC:         n.MAC,
+			Network:     n.Network.ID,
+			Index:       i,
+			IPv4Address: n.IPv4Address,
+			IPv6Address: n.IPv6Address,
 		})
 	}
 

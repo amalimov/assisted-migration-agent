@@ -907,4 +907,45 @@ var _ = Describe("VMStore", func() {
 			})
 		})
 	})
+
+	Context("NIC IP addresses", func() {
+		BeforeEach(func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template")
+				VALUES ('vm-ips', 'IP Test VM', 'poweredOn', 'cluster1', 4096, false)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO vnetwork ("VM ID", "Network", "Mac Address", "IPv4 Address", "IPv6 Address")
+				VALUES ('vm-ips', 'VM Network', '00:50:56:aa:bb:cc', '10.0.0.5', 'fe80::1')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return IPv4 and IPv6 addresses on each NIC", func() {
+			vm, err := s.VM().Get(ctx, "vm-ips")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vm.NICs).To(HaveLen(1))
+			Expect(vm.NICs[0].IPv4Address).To(Equal("10.0.0.5"))
+			Expect(vm.NICs[0].IPv6Address).To(Equal("fe80::1"))
+		})
+
+		It("should return empty string for NICs with no IP", func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vnetwork ("VM ID", "Network", "Mac Address")
+				VALUES ('vm-ips', 'Management', '00:50:56:ff:ff:ff')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			vm, err := s.VM().Get(ctx, "vm-ips")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vm.NICs).To(HaveLen(2))
+			noIpNic := vm.NICs[1]
+			Expect(noIpNic.IPv4Address).To(Equal(""))
+			Expect(noIpNic.IPv6Address).To(Equal(""))
+		})
+	})
 })

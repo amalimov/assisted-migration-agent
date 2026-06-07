@@ -653,6 +653,12 @@ type VMNIC struct {
 	// Index Index of the NIC within the VirtualMachine
 	Index *int `json:"index,omitempty"`
 
+	// Ipv4Address IPv4 address of this NIC as reported by VMware Tools
+	Ipv4Address *string `json:"ipv4Address,omitempty"`
+
+	// Ipv6Address IPv6 address of this NIC as reported by VMware Tools
+	Ipv6Address *string `json:"ipv6Address,omitempty"`
+
 	// Mac MAC address of the virtual NIC
 	Mac *string `json:"mac,omitempty"`
 

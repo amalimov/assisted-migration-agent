@@ -195,6 +195,12 @@ func NewVirtualMachineDetailFromModel(vm models.VM) VirtualMachineDetail {
 			Network: &n.Network,
 			Index:   &n.Index,
 		}
+		if n.IPv4Address != "" {
+			nic.Ipv4Address = &n.IPv4Address
+		}
+		if n.IPv6Address != "" {
+			nic.Ipv6Address = &n.IPv6Address
+		}
 		details.Nics = append(details.Nics, nic)
 	}
 

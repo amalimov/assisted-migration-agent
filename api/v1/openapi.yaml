@@ -1498,6 +1498,12 @@ components:
         index:
           type: integer
           description: Index of the NIC within the VirtualMachine
+        ipv4Address:
+          type: string
+          description: IPv4 address of this NIC as reported by VMware Tools
+        ipv6Address:
+          type: string
+          description: IPv6 address of this NIC as reported by VMware Tools
 
     VMDevice:
       type: object

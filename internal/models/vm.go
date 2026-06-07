@@ -94,9 +94,11 @@ type Disk struct {
 }
 
 type NIC struct {
-	MAC     string
-	Network string
-	Index   int
+	MAC         string
+	Network     string
+	Index       int
+	IPv4Address string
+	IPv6Address string
 }
 
 type Device struct {
