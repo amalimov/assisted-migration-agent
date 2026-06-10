@@ -134,6 +134,22 @@ var Concerns = []Concern{
 	{"vm-007", "concern-006", "Storage warning", "Information", "VM storage usage is at 75%. Monitor storage capacity and consider expansion if needed."},
 }
 
+// Utilization holds rightsizing utilization fixture data.
+type Utilization struct {
+	VMID      string
+	CpuMaxPct float64
+	MemMaxPct float64
+	DiskPct   float64
+}
+
+// Utilizations provides three VMs with known utilization values for sort testing.
+// vm-001: low CPU/mem/disk; vm-003: high CPU/mem/disk; vm-005: mid values; others have no data.
+var Utilizations = []Utilization{
+	{"vm-001", 10.0, 20.0, 15.0},
+	{"vm-003", 80.0, 70.0, 60.0},
+	{"vm-005", 45.0, 50.0, 40.0},
+}
+
 // InsertVMs inserts all test VM data into the database.
 func InsertVMs(ctx context.Context, db *sql.DB) error {
 	for _, vm := range VMs {
@@ -230,6 +246,35 @@ func InsertVMInspections(ctx context.Context, db *sql.DB) error {
 			INSERT INTO vm_inspection_status ("VM ID", status, error)
 			VALUES (?, ?, ?)
 		`, ins.VMID, ins.Status, ins.Error)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// InsertVMUtilization inserts a completed rightsizing report and per-VM utilization rows.
+// Only VMs in the Utilizations slice get data; the rest will have NULL utilization columns.
+func InsertVMUtilization(ctx context.Context, db *sql.DB) error {
+	reportID := "report-001"
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO rightsizing_reports
+			(id, vcenter, cluster_id, interval_id, window_start, window_end,
+			 expected_sample_count, expected_batch_count, written_batch_count)
+		VALUES (?, 'vcenter-test', '', 1,
+			'2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00',
+			288, 1, 1)
+	`, reportID)
+	if err != nil {
+		return err
+	}
+
+	for _, u := range Utilizations {
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO rightsizing_vm_utilization
+				(report_id, moid, vm_name, cpu_max_pct, mem_max_pct, disk_pct)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, reportID, u.VMID, u.VMID, u.CpuMaxPct, u.MemMaxPct, u.DiskPct)
 		if err != nil {
 			return err
 		}

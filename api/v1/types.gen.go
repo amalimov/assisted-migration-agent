@@ -1014,7 +1014,7 @@ type ListGroupsParams struct {
 
 // GetGroupParams defines parameters for GetGroup.
 type GetGroupParams struct {
-	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues.
+	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
 	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
 
 	// Page Page number for pagination
@@ -1062,7 +1062,7 @@ type GetVMsParams struct {
 	// ByExpression Filter by expression (matches VMs with the provided expression)
 	ByExpression *string `form:"byExpression,omitempty" json:"byExpression,omitempty"`
 
-	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues.
+	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
 	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
 
 	// Page Page number for pagination

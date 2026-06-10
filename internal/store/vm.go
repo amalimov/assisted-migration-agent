@@ -443,6 +443,20 @@ func WithSort(sorts []SortParam) ListOption {
 		"diskSize":     "disk_size",
 		"memory":       "memory",
 		"issues":       "issue_count",
+		"cpuUsage":     "cpu_max_pct",
+		"ramUsage":     "mem_max_pct",
+		"diskUsage":    "disk_pct",
+		"cpuAvg":       "cpu_avg_pct",
+		"memAvg":       "mem_avg_pct",
+	}
+
+	// Utilization columns are nullable: always sort NULLs last regardless of direction.
+	nullsLastColumns := map[string]bool{
+		"cpu_max_pct": true,
+		"mem_max_pct": true,
+		"disk_pct":    true,
+		"cpu_avg_pct": true,
+		"mem_avg_pct": true,
 	}
 
 	return func(b sq.SelectBuilder) sq.SelectBuilder {
@@ -452,11 +466,15 @@ func WithSort(sorts []SortParam) ListOption {
 			if !ok {
 				continue
 			}
+			dir := "ASC"
 			if s.Desc {
-				orderClauses = append(orderClauses, col+" DESC")
-			} else {
-				orderClauses = append(orderClauses, col+" ASC")
+				dir = "DESC"
 			}
+			clause := col + " " + dir
+			if nullsLastColumns[col] {
+				clause += " NULLS LAST"
+			}
+			orderClauses = append(orderClauses, clause)
 		}
 		orderClauses = append(orderClauses, "id")
 		return b.OrderBy(orderClauses...)

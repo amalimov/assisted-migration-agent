@@ -246,6 +246,85 @@ var _ = Describe("VMs Handlers", func() {
 			Expect(mockVM.LastListParams.Sort[1].Desc).To(BeTrue())
 		})
 
+		// Given valid utilization sort fields
+		// Then the handler should accept them without returning 400
+		It("should accept utilization sort fields", func() {
+			// Arrange
+			mockVM.ListResult = []models.VirtualMachineSummary{}
+			mockVM.ListTotal = 0
+
+			for _, field := range []string{"cpuUsage", "diskUsage", "ramUsage"} {
+				req := httptest.NewRequest(http.MethodGet, "/vms?sort="+field+":asc", nil)
+				w := httptest.NewRecorder()
+
+				// Act
+				router.ServeHTTP(w, req)
+
+				// Assert
+				Expect(w.Code).To(Equal(http.StatusOK), "field %q should be accepted", field)
+			}
+		})
+
+		// Given utilization sort fields in descending direction
+		// Then the handler should propagate them to the service layer correctly
+		It("should accept utilization sort fields descending", func() {
+			mockVM.ListResult = []models.VirtualMachineSummary{}
+			mockVM.ListTotal = 0
+
+			req := httptest.NewRequest(http.MethodGet, "/vms?sort=cpuUsage:desc&sort=diskUsage:asc&sort=ramUsage:desc", nil)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(mockVM.LastListParams.Sort).To(HaveLen(3))
+			Expect(mockVM.LastListParams.Sort[0].Field).To(Equal("cpuUsage"))
+			Expect(mockVM.LastListParams.Sort[0].Desc).To(BeTrue())
+			Expect(mockVM.LastListParams.Sort[1].Field).To(Equal("diskUsage"))
+			Expect(mockVM.LastListParams.Sort[1].Desc).To(BeFalse())
+			Expect(mockVM.LastListParams.Sort[2].Field).To(Equal("ramUsage"))
+			Expect(mockVM.LastListParams.Sort[2].Desc).To(BeTrue())
+		})
+
+		// Given cpuAvg and memAvg sort fields
+		// Then the handler should accept them without returning 400
+		It("should accept cpuAvg and memAvg sort fields", func() {
+			mockVM.ListResult = []models.VirtualMachineSummary{}
+			mockVM.ListTotal = 0
+
+			for _, field := range []string{"cpuAvg", "memAvg"} {
+				req := httptest.NewRequest(http.MethodGet, "/vms?sort="+field+":asc", nil)
+				w := httptest.NewRecorder()
+
+				router.ServeHTTP(w, req)
+
+				Expect(w.Code).To(Equal(http.StatusOK), "field %q should be accepted", field)
+			}
+		})
+
+		// Given cpuAvg desc and memAvg asc
+		// Then the handler should propagate both to the service layer correctly
+		It("should propagate cpuAvg and memAvg sort params to service", func() {
+			mockVM.ListResult = []models.VirtualMachineSummary{}
+			mockVM.ListTotal = 0
+
+			req := httptest.NewRequest(
+				http.MethodGet,
+				"/vms?sort=cpuAvg:desc&sort=memAvg:asc",
+				nil,
+			)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(mockVM.LastListParams.Sort).To(HaveLen(2))
+			Expect(mockVM.LastListParams.Sort[0].Field).To(Equal("cpuAvg"))
+			Expect(mockVM.LastListParams.Sort[0].Desc).To(BeTrue())
+			Expect(mockVM.LastListParams.Sort[1].Field).To(Equal("memAvg"))
+			Expect(mockVM.LastListParams.Sort[1].Desc).To(BeFalse())
+		})
+
 		// Given a service error occurs
 		// When we request the VM list
 		// Then it should return 500 Internal Server Error

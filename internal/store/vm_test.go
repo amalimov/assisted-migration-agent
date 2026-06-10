@@ -327,6 +327,262 @@ var _ = Describe("VMStore", func() {
 				Expect(vms).To(HaveLen(5))
 				Expect(vms[0].IssueCount).To(Equal(2)) // vm-3 has 2 issues
 			})
+
+			// Given VMs with known CPU utilization values
+			// When we sort by cpuUsage descending
+			// Then VMs with highest CPU come first and VMs without data come last
+			It("should sort by cpuUsage descending (NULLs last)", func() {
+				// IDs are chosen so alphabetical order conflicts with the expected utilization order,
+				// ensuring the test fails without implementation (not just coincidentally passes).
+				// Alphabetical: vm-cpu-a < vm-cpu-b < vm-cpu-c
+				// Expected CPU DESC order: vm-cpu-c (80%) < vm-cpu-b (30%) < vm-cpu-a (NULL)
+				insertVM("vm-cpu-a", "cpu-none", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-cpu-b", "cpu-low", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-cpu-c", "cpu-high", "poweredOn", "cluster-a", 2048)
+
+				_, err := db.ExecContext(ctx, `
+					INSERT INTO rightsizing_reports
+						(id, vcenter, cluster_id, interval_id, window_start, window_end,
+						 expected_sample_count, expected_batch_count, written_batch_count)
+					VALUES ('r-sort-cpu', 'vc', '', 1,
+						'2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00', 288, 1, 1)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				// vm-cpu-c: 80%, vm-cpu-b: 30%, vm-cpu-a: no data
+				_, err = db.ExecContext(ctx, `
+					INSERT INTO rightsizing_vm_utilization (report_id, moid, vm_name, cpu_max_pct)
+					VALUES ('r-sort-cpu', 'vm-cpu-c', 'cpu-high', 80.0),
+					       ('r-sort-cpu', 'vm-cpu-b', 'cpu-low', 30.0)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Act
+				vms, err := s.VM().List(ctx, nil, store.WithSort([]store.SortParam{{Field: "cpuUsage", Desc: true}}))
+				Expect(err).NotTo(HaveOccurred())
+
+				// Find positions of the three test VMs
+				posHigh, posLow, posNone := -1, -1, -1
+				for i, vm := range vms {
+					switch vm.ID {
+					case "vm-cpu-c":
+						posHigh = i
+					case "vm-cpu-b":
+						posLow = i
+					case "vm-cpu-a":
+						posNone = i
+					}
+				}
+				Expect(posHigh).NotTo(Equal(-1), "vm-cpu-c not found")
+				Expect(posLow).NotTo(Equal(-1), "vm-cpu-b not found")
+				Expect(posNone).NotTo(Equal(-1), "vm-cpu-a not found")
+
+				// 80% before 30% before NULL
+				Expect(posHigh).To(BeNumerically("<", posLow), "vm-cpu-c (80%%) should come before vm-cpu-b (30%%)")
+				Expect(posLow).To(BeNumerically("<", posNone), "vm-cpu-b (30%%) should come before vm-cpu-a (NULL)")
+			})
+
+			// Given VMs with known disk utilization values
+			// When we sort by diskUsage ascending
+			// Then VMs are ordered from lowest to highest disk usage, NULLs last
+			It("should sort by diskUsage ascending (NULLs last)", func() {
+				// Alphabetical: vm-disk-a < vm-disk-b < vm-disk-c
+				// Expected disk ASC order: vm-disk-c (10%) < vm-disk-b (90%) < vm-disk-a (NULL)
+				// Conflicts with alphabetical, so test fails without implementation.
+				insertVM("vm-disk-a", "disk-none", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-disk-b", "disk-high", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-disk-c", "disk-low", "poweredOn", "cluster-a", 2048)
+
+				_, err := db.ExecContext(ctx, `
+					INSERT INTO rightsizing_reports
+						(id, vcenter, cluster_id, interval_id, window_start, window_end,
+						 expected_sample_count, expected_batch_count, written_batch_count)
+					VALUES ('r-sort-disk', 'vc', '', 1,
+						'2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00', 288, 1, 1)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				// vm-disk-c: 10%, vm-disk-b: 90%, vm-disk-a: no data
+				_, err = db.ExecContext(ctx, `
+					INSERT INTO rightsizing_vm_utilization (report_id, moid, vm_name, disk_pct)
+					VALUES ('r-sort-disk', 'vm-disk-c', 'disk-low', 10.0),
+					       ('r-sort-disk', 'vm-disk-b', 'disk-high', 90.0)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Act
+				vms, err := s.VM().List(ctx, nil, store.WithSort([]store.SortParam{{Field: "diskUsage", Desc: false}}))
+				Expect(err).NotTo(HaveOccurred())
+
+				posLow, posHigh, posNone := -1, -1, -1
+				for i, vm := range vms {
+					switch vm.ID {
+					case "vm-disk-c":
+						posLow = i
+					case "vm-disk-b":
+						posHigh = i
+					case "vm-disk-a":
+						posNone = i
+					}
+				}
+				Expect(posLow).NotTo(Equal(-1))
+				Expect(posHigh).NotTo(Equal(-1))
+				Expect(posNone).NotTo(Equal(-1))
+
+				// 10% before 90% before NULL
+				Expect(posLow).To(BeNumerically("<", posHigh), "low disk (10%%) should come before high disk (90%%)")
+				Expect(posHigh).To(BeNumerically("<", posNone), "high disk (90%%) should come before NULL disk")
+			})
+
+			// Given VMs with known memory utilization values
+			// When we sort by ramUsage descending
+			// Then VMs are ordered from highest to lowest mem usage, NULLs last
+			It("should sort by ramUsage descending (NULLs last)", func() {
+				// Alphabetical: vm-ram-a < vm-ram-b < vm-ram-c
+				// Expected RAM DESC order: vm-ram-c (85%) < vm-ram-b (25%) < vm-ram-a (NULL)
+				// Conflicts with alphabetical, so test fails without implementation.
+				insertVM("vm-ram-a", "ram-none", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-ram-b", "ram-low", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-ram-c", "ram-high", "poweredOn", "cluster-a", 2048)
+
+				_, err := db.ExecContext(ctx, `
+					INSERT INTO rightsizing_reports
+						(id, vcenter, cluster_id, interval_id, window_start, window_end,
+						 expected_sample_count, expected_batch_count, written_batch_count)
+					VALUES ('r-sort-ram', 'vc', '', 1,
+						'2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00', 288, 1, 1)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				// vm-ram-c: 85%, vm-ram-b: 25%, vm-ram-a: no data
+				_, err = db.ExecContext(ctx, `
+					INSERT INTO rightsizing_vm_utilization (report_id, moid, vm_name, mem_max_pct)
+					VALUES ('r-sort-ram', 'vm-ram-c', 'ram-high', 85.0),
+					       ('r-sort-ram', 'vm-ram-b', 'ram-low', 25.0)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Act
+				vms, err := s.VM().List(ctx, nil, store.WithSort([]store.SortParam{{Field: "ramUsage", Desc: true}}))
+				Expect(err).NotTo(HaveOccurred())
+
+				posHigh, posLow, posNone := -1, -1, -1
+				for i, vm := range vms {
+					switch vm.ID {
+					case "vm-ram-c":
+						posHigh = i
+					case "vm-ram-b":
+						posLow = i
+					case "vm-ram-a":
+						posNone = i
+					}
+				}
+				Expect(posHigh).NotTo(Equal(-1))
+				Expect(posLow).NotTo(Equal(-1))
+				Expect(posNone).NotTo(Equal(-1))
+
+				// 85% before 25% before NULL
+				Expect(posHigh).To(BeNumerically("<", posLow), "vm-ram-c (85%%) should come before vm-ram-b (25%%)")
+				Expect(posLow).To(BeNumerically("<", posNone), "vm-ram-b (25%%) should come before vm-ram-a (NULL)")
+			})
+
+			// Given VMs with known cpu_avg_pct values
+			// When we sort by cpuAvg descending
+			// Then VMs with highest average CPU come first and VMs without data come last
+			It("should sort by cpuAvg descending (NULLs last)", func() {
+				// Alphabetical: vm-cavg-a < vm-cavg-b < vm-cavg-c
+				// Expected cpuAvg DESC: vm-cavg-c (75%) then vm-cavg-b (25%) then vm-cavg-a (NULL)
+				// Conflicts with alphabetical — test cannot pass accidentally.
+				insertVM("vm-cavg-a", "cavg-none", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-cavg-b", "cavg-low", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-cavg-c", "cavg-high", "poweredOn", "cluster-a", 2048)
+
+				_, err := db.ExecContext(ctx, `
+					INSERT INTO rightsizing_reports
+						(id, vcenter, cluster_id, interval_id, window_start, window_end,
+						 expected_sample_count, expected_batch_count, written_batch_count)
+					VALUES ('r-sort-cavg', 'vc', '', 1,
+						'2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00', 288, 1, 1)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = db.ExecContext(ctx, `
+					INSERT INTO rightsizing_vm_utilization (report_id, moid, vm_name, cpu_avg_pct)
+					VALUES ('r-sort-cavg', 'vm-cavg-c', 'cavg-high', 75.0),
+					       ('r-sort-cavg', 'vm-cavg-b', 'cavg-low',  25.0)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				vms, err := s.VM().List(ctx, nil, store.WithSort([]store.SortParam{{Field: "cpuAvg", Desc: true}}))
+				Expect(err).NotTo(HaveOccurred())
+
+				posHigh, posLow, posNone := -1, -1, -1
+				for i, vm := range vms {
+					switch vm.ID {
+					case "vm-cavg-c":
+						posHigh = i
+					case "vm-cavg-b":
+						posLow = i
+					case "vm-cavg-a":
+						posNone = i
+					}
+				}
+				Expect(posHigh).NotTo(Equal(-1), "vm-cavg-c not found")
+				Expect(posLow).NotTo(Equal(-1), "vm-cavg-b not found")
+				Expect(posNone).NotTo(Equal(-1), "vm-cavg-a not found")
+
+				Expect(posHigh).To(BeNumerically("<", posLow), "75%% should come before 25%%")
+				Expect(posLow).To(BeNumerically("<", posNone), "25%% should come before NULL")
+			})
+
+			// Given VMs with known mem_avg_pct values
+			// When we sort by memAvg ascending
+			// Then VMs are ordered from lowest to highest average memory, NULLs last
+			It("should sort by memAvg ascending (NULLs last)", func() {
+				// Alphabetical: vm-mavg-a < vm-mavg-b < vm-mavg-c
+				// Expected memAvg ASC: vm-mavg-c (8%) then vm-mavg-b (92%) then vm-mavg-a (NULL)
+				// Conflicts with alphabetical — test cannot pass accidentally.
+				insertVM("vm-mavg-a", "mavg-none", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-mavg-b", "mavg-high", "poweredOn", "cluster-a", 2048)
+				insertVM("vm-mavg-c", "mavg-low", "poweredOn", "cluster-a", 2048)
+
+				_, err := db.ExecContext(ctx, `
+					INSERT INTO rightsizing_reports
+						(id, vcenter, cluster_id, interval_id, window_start, window_end,
+						 expected_sample_count, expected_batch_count, written_batch_count)
+					VALUES ('r-sort-mavg', 'vc', '', 1,
+						'2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00', 288, 1, 1)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = db.ExecContext(ctx, `
+					INSERT INTO rightsizing_vm_utilization (report_id, moid, vm_name, mem_avg_pct)
+					VALUES ('r-sort-mavg', 'vm-mavg-c', 'mavg-low',  8.0),
+					       ('r-sort-mavg', 'vm-mavg-b', 'mavg-high', 92.0)
+				`)
+				Expect(err).NotTo(HaveOccurred())
+
+				vms, err := s.VM().List(ctx, nil, store.WithSort([]store.SortParam{{Field: "memAvg", Desc: false}}))
+				Expect(err).NotTo(HaveOccurred())
+
+				posLow, posHigh, posNone := -1, -1, -1
+				for i, vm := range vms {
+					switch vm.ID {
+					case "vm-mavg-c":
+						posLow = i
+					case "vm-mavg-b":
+						posHigh = i
+					case "vm-mavg-a":
+						posNone = i
+					}
+				}
+				Expect(posLow).NotTo(Equal(-1), "vm-mavg-c not found")
+				Expect(posHigh).NotTo(Equal(-1), "vm-mavg-b not found")
+				Expect(posNone).NotTo(Equal(-1), "vm-mavg-a not found")
+
+				Expect(posLow).To(BeNumerically("<", posHigh), "8%% should come before 92%%")
+				Expect(posHigh).To(BeNumerically("<", posNone), "92%% should come before NULL")
+			})
 		})
 
 		Context("combined filters", func() {

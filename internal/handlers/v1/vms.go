@@ -21,6 +21,11 @@ var validSortFields = map[string]bool{
 	"diskSize":     true,
 	"memory":       true,
 	"issues":       true,
+	"cpuUsage":     true,
+	"diskUsage":    true,
+	"ramUsage":     true,
+	"cpuAvg":       true,
+	"memAvg":       true,
 }
 
 const (
