@@ -87,13 +87,24 @@ func defaultInspectionBuilderFactory(s *store.Store, operator vmware.VMOperator,
 							return result, nil
 						}
 
-						log.Infow("validating VM privileges", "vmId", id)
-						if err := operator.ValidatePrivileges(ctx, id, models.InspectorRequiredPrivileges); err != nil {
+						// Resolve the hash VM ID to its vSphere MOID before any vCenter API calls.
+						// The hash is the stable per-collection identifier used for all DB operations;
+						// the MOID is what vCenter understands.
+						vmMoid, err := s.VM().GetVmMoid(ctx, id)
+						if err != nil {
+							log.Errorw("failed to resolve vmmoid for VM", "vmId", id, "error", err)
+							result.Err = err
+							return result, nil
+						}
+
+						log.Infow("validating VM privileges", "vmId", id, "vmMoid", vmMoid)
+						if err := operator.ValidatePrivileges(ctx, vmMoid, models.InspectorRequiredPrivileges); err != nil {
 							log.Errorw("privilege validation failed", "vmId", id, "error", err)
 							result.Err = err
 							return result, nil
 						}
 						log.Infow("privilege validation passed", "vmId", id)
+						result.VmMoid = vmMoid
 						return result, nil
 					},
 				},
@@ -108,7 +119,7 @@ func defaultInspectionBuilderFactory(s *store.Store, operator vmware.VMOperator,
 					Work: func(ctx context.Context, result models.InspectionResult) (models.InspectionResult, error) {
 						log.Infow("creating VM snapshot", "vmId", id)
 						snapID, err := operator.CreateSnapshot(ctx, vmware.CreateSnapshotRequest{
-							VmId:         id,
+							VmId:         result.VmMoid,
 							SnapshotName: models.InspectionSnapshotName,
 						})
 						if err != nil {
@@ -134,7 +145,7 @@ func defaultInspectionBuilderFactory(s *store.Store, operator vmware.VMOperator,
 						log.Infow("running deep inspection", "vmId", id, "snapshotId", result.SnapshotID)
 						detectResult, err := detector.Detect(vmdetect.DetectParams{
 							Ctx:           ctx,
-							VMMoref:       id,
+							VMMoref:       result.VmMoid,
 							SnapshotMoref: result.SnapshotID,
 						})
 						if err != nil {

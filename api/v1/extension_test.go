@@ -71,6 +71,7 @@ var _ = Describe("NewVirtualMachineFromSummary", func() {
 			Memory:     4096,
 			DiskSize:   102400,
 			IssueCount: 3,
+			VmMoid:     "vm-456",
 		}
 
 		vm := v1.NewVirtualMachineFromSummary(summary)
@@ -83,6 +84,8 @@ var _ = Describe("NewVirtualMachineFromSummary", func() {
 		Expect(vm.Memory).To(Equal(int64(4096)))
 		Expect(vm.DiskSize).To(Equal(int64(102400)))
 		Expect(vm.IssueCount).To(Equal(3))
+		Expect(vm.VmMoid).NotTo(BeNil())
+		Expect(*vm.VmMoid).To(Equal("vm-456"))
 	})
 
 	It("should not return inspection when not started", func() {

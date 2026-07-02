@@ -1174,5 +1174,17 @@ var _ = Describe("SQL Generation", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
+
+		Context("vmmoid field parsing", func() {
+			It("should parse vmmoid filter expression", func() {
+				_, err := ParseWithDefaultMap([]byte(`vmmoid = 'vm-123'`))
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should parse vmmoid with other fields", func() {
+				_, err := ParseWithDefaultMap([]byte(`vmmoid = 'vm-123' and name = 'test'`))
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
 	})
 })

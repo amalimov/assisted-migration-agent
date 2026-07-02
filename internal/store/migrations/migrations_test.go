@@ -55,15 +55,41 @@ var _ = Describe("Migrations", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should create inventory table", func() {
+		It("should create collection-versioned inventory table", func() {
 			err := migrations.Run(ctx, db)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify inventory table exists by inserting data
+			// First we need a collection row so the FK is satisfied.
 			_, err = db.ExecContext(ctx, `
-				INSERT INTO inventory (id, data)
-				VALUES (1, 'test data')
+				INSERT INTO collections (vcenter_id, state, active)
+				VALUES ('default', 'done', true)
 			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			var colID int64
+			err = db.QueryRowContext(ctx, `SELECT id FROM collections WHERE vcenter_id = 'default' LIMIT 1`).Scan(&colID)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = db.ExecContext(ctx, `INSERT INTO inventory (collection_id, data) VALUES (?, 'blob')`, colID)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should create group_inventory table", func() {
+			err := migrations.Run(ctx, db)
+			Expect(err).NotTo(HaveOccurred())
+
+			var groupID string
+			err = db.QueryRowContext(ctx, `
+				INSERT INTO groups (id, name, filter, created_at, updated_at)
+				VALUES (gen_random_uuid(), 'g1', 'memory >= 1', now(), now())
+				RETURNING id::VARCHAR
+			`).Scan(&groupID)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO group_inventory (group_id, collection_id, inventory_data)
+				VALUES (?, 1, NULL)
+			`, groupID)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -177,6 +203,37 @@ var _ = Describe("Migrations", func() {
 			err = db.QueryRowContext(ctx, `SELECT id FROM collections WHERE vcenter_id = 'default'`).Scan(&id)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(id).To(BeNumerically(">", 0))
+		})
+
+		It("should add vmmoid and collection_id to vinfo", func() {
+			err := migrations.Run(ctx, db)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", vmmoid, collection_id)
+				VALUES ('hash-abc123', 'Test VM', 'vm-123', 1)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should rebuild group_matches with composite PK", func() {
+			err := migrations.Run(ctx, db)
+			Expect(err).NotTo(HaveOccurred())
+
+			var groupID string
+			err = db.QueryRowContext(ctx, `
+				INSERT INTO groups (id, name, filter, created_at, updated_at)
+				VALUES (gen_random_uuid(), 'gm-test', 'memory >= 1', now(), now())
+				RETURNING id::VARCHAR
+			`).Scan(&groupID)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Composite PK: same group_id, different collection_ids should both insert.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO group_matches (group_id, collection_id, vm_ids)
+				VALUES (?, 1, ['vm-a']), (?, 2, ['vm-b'])
+			`, groupID, groupID)
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 	})

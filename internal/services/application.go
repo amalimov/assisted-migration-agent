@@ -53,7 +53,10 @@ func (s *ApplicationService) BuildCollectorWorkUnits() postCollectionBuilderFn {
 				Work: func(ctx context.Context, r models.CollectorResult) (models.CollectorResult, error) {
 					zap.S().Named("application_service").Info("detecting applications from guest apps")
 
-					guestApps, err := s.store.VM().GetGuestApps(ctx)
+					// Use r.CollectionID (the new running collection) rather than
+					// activeCollectionIDFromStore, which would return the old active
+					// collection since the new one isn't published yet at this point.
+					guestApps, err := s.store.VM().GetGuestApps(ctx, r.CollectionID)
 					if err != nil {
 						return r, fmt.Errorf("fetching guest apps for application detection: %w", err)
 					}

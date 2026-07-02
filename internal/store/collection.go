@@ -59,10 +59,14 @@ var collectionSelectColumns = []string{
 
 // CollectionCounters holds the VM/cluster count fields updated after a collection run.
 type CollectionCounters struct {
-	VMCountMigratable    int
-	VMCountNonMigratable int
-	VMCountTotal         int
-	ClusterCountTotal    int
+	VMCountMigratable                   int
+	VMCountNonMigratable                int
+	VMCountTotal                        int
+	ClusterCountTotal                   int
+	VMCountNewSincePrevious             int
+	VMCountMissingSincePrevious         int
+	VMCountDeltaSincePrevious           int
+	VMCountMigratableDeltaSincePrevious int
 }
 
 type CollectionStore struct {
@@ -182,6 +186,10 @@ func (s *CollectionStore) UpdateCounters(ctx context.Context, id int64, counters
 		Set(colColVMCountNonMigratable, counters.VMCountNonMigratable).
 		Set(colColVMCountTotal, counters.VMCountTotal).
 		Set(colColClusterCountTotal, counters.ClusterCountTotal).
+		Set(colColVMCountNewSincePrevious, counters.VMCountNewSincePrevious).
+		Set(colColVMCountMissingSincePrevious, counters.VMCountMissingSincePrevious).
+		Set(colColVMCountDeltaSincePrevious, counters.VMCountDeltaSincePrevious).
+		Set(colColVMCountMigDeltaSincePrevious, counters.VMCountMigratableDeltaSincePrevious).
 		Set(colColUpdatedAt, sq.Expr("now()")).
 		Where(sq.Eq{colColID: id}).
 		ToSql()

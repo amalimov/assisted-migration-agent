@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,25 +11,23 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	"github.com/kubev2v/migration-planner/pkg/inventory"
-
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 )
 
 const (
-	groupTable            = "groups"
-	groupColID            = "id"
-	groupColName          = "name"
-	groupColDescription   = "description"
-	groupColFilter        = "filter"
-	groupColInventoryData = "inventory_data"
-	groupColCreatedAt     = "created_at"
-	groupColUpdatedAt     = "updated_at"
+	groupTable          = "groups"
+	groupColID          = "id"
+	groupColName        = "name"
+	groupColDescription = "description"
+	groupColFilter      = "filter"
+	groupColCreatedAt   = "created_at"
+	groupColUpdatedAt   = "updated_at"
 
-	groupMatchesTable      = "group_matches"
-	groupMatchesColGroupID = "group_id"
-	groupMatchesColVMIDs   = "vm_ids"
+	groupMatchesTable           = "group_matches"
+	groupMatchesColGroupID      = "group_id"
+	groupMatchesColVMIDs        = "vm_ids"
+	groupMatchesColCollectionID = "collection_id"
 )
 
 var (
@@ -39,13 +36,12 @@ var (
 		groupColName,
 		groupColDescription,
 		groupColFilter,
-		groupColInventoryData,
 		groupColCreatedAt,
 		groupColUpdatedAt).
 		From(groupTable)
 
-	returningSuffix = fmt.Sprintf("RETURNING %s, %s, %s, %s, %s, %s, %s",
-		groupColID, groupColName, groupColDescription, groupColFilter, groupColInventoryData, groupColCreatedAt, groupColUpdatedAt)
+	returningSuffix = fmt.Sprintf("RETURNING %s, %s, %s, %s, %s, %s",
+		groupColID, groupColName, groupColDescription, groupColFilter, groupColCreatedAt, groupColUpdatedAt)
 )
 
 type GroupStore struct {
@@ -84,15 +80,9 @@ func (s *GroupStore) List(ctx context.Context, filters []sq.Sqlizer, limit, offs
 	var groups []models.Group
 	for rows.Next() {
 		var g models.Group
-		var inventoryData []byte
-		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &inventoryData, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scanning group row: %w", err)
 		}
-		inv, err := unmarshalInventory(inventoryData)
-		if err != nil {
-			return nil, fmt.Errorf("unmarshaling inventory for group %s: %w", g.ID, err)
-		}
-		g.Inventory = inv
 		groups = append(groups, g)
 	}
 
@@ -133,20 +123,13 @@ func (s *GroupStore) Get(ctx context.Context, id uuid.UUID) (*models.Group, erro
 
 	row := s.db.QueryRowContext(ctx, query, args...)
 	var g models.Group
-	var inventoryData []byte
-	err = row.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &inventoryData, &g.CreatedAt, &g.UpdatedAt)
+	err = row.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &g.CreatedAt, &g.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srvErrors.NewResourceNotFoundError("group", id.String())
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scanning group: %w", err)
 	}
-
-	inv, err := unmarshalInventory(inventoryData)
-	if err != nil {
-		return nil, fmt.Errorf("unmarshaling inventory for group %s: %w", id, err)
-	}
-	g.Inventory = inv
 
 	return &g, nil
 }
@@ -158,14 +141,9 @@ func (s *GroupStore) Create(ctx context.Context, group models.Group) (*models.Gr
 	// Generate UUID for new group
 	group.ID = uuid.New()
 
-	inventoryData, err := marshalInventory(group.Inventory)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling inventory: %w", err)
-	}
-
 	query, args, err := sq.Insert(groupTable).
-		Columns(groupColID, groupColName, groupColDescription, groupColFilter, groupColInventoryData, groupColCreatedAt, groupColUpdatedAt).
-		Values(group.ID, group.Name, group.Description, group.Filter, inventoryData, now, now).
+		Columns(groupColID, groupColName, groupColDescription, groupColFilter, groupColCreatedAt, groupColUpdatedAt).
+		Values(group.ID, group.Name, group.Description, group.Filter, now, now).
 		Suffix(returningSuffix).
 		ToSql()
 	if err != nil {
@@ -175,20 +153,13 @@ func (s *GroupStore) Create(ctx context.Context, group models.Group) (*models.Gr
 	row := s.db.QueryRowContext(ctx, query, args...)
 
 	var g models.Group
-	var returnedInventoryData []byte
-	err = row.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &returnedInventoryData, &g.CreatedAt, &g.UpdatedAt)
+	err = row.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		if isUniqueConstraintError(err) {
 			return nil, srvErrors.NewDuplicateResourceError("group", "name", group.Name)
 		}
 		return nil, fmt.Errorf("creating group: %w", err)
 	}
-
-	inv, err := unmarshalInventory(returnedInventoryData)
-	if err != nil {
-		return nil, fmt.Errorf("unmarshaling returned inventory: %w", err)
-	}
-	g.Inventory = inv
 
 	return &g, nil
 }
@@ -209,8 +180,7 @@ func (s *GroupStore) Update(ctx context.Context, id uuid.UUID, group models.Grou
 
 	row := s.db.QueryRowContext(ctx, query, args...)
 	var g models.Group
-	var inventoryData []byte
-	err = row.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &inventoryData, &g.CreatedAt, &g.UpdatedAt)
+	err = row.Scan(&g.ID, &g.Name, &g.Description, &g.Filter, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, srvErrors.NewResourceNotFoundError("group", id.String())
@@ -220,12 +190,6 @@ func (s *GroupStore) Update(ctx context.Context, id uuid.UUID, group models.Grou
 		}
 		return nil, fmt.Errorf("updating group: %w", err)
 	}
-
-	inv, err := unmarshalInventory(inventoryData)
-	if err != nil {
-		return nil, fmt.Errorf("unmarshaling inventory for updated group: %w", err)
-	}
-	g.Inventory = inv
 
 	return &g, nil
 }
@@ -261,10 +225,11 @@ func isUniqueConstraintError(err error) bool {
 		strings.Contains(err.Error(), "Duplicate key")
 }
 
-// RefreshMatches rebuilds group_matches rows by evaluating each group's filter
-// against the VM data. When groupIDs are provided, only those groups are
-// refreshed. When none are provided, all groups are refreshed.
-func (s *GroupStore) RefreshMatches(ctx context.Context, groupIDs ...uuid.UUID) error {
+// RefreshMatches rebuilds group_matches rows for the given collectionID by
+// evaluating each group's filter against vinfo rows for that collection.
+// When groupIDs are provided only those groups are refreshed; when none are
+// provided all groups are refreshed.
+func (s *GroupStore) RefreshMatches(ctx context.Context, collectionID int64, groupIDs ...uuid.UUID) error {
 	var groups []models.Group
 
 	if len(groupIDs) == 0 {
@@ -273,13 +238,15 @@ func (s *GroupStore) RefreshMatches(ctx context.Context, groupIDs ...uuid.UUID) 
 		if err != nil {
 			return fmt.Errorf("fetching groups: %w", err)
 		}
-
-		delQuery, _, err := sq.Delete(groupMatchesTable).ToSql()
+		// Delete all existing matches for this collection only.
+		delQuery, delArgs, err := sq.Delete(groupMatchesTable).
+			Where(sq.Eq{groupMatchesColCollectionID: collectionID}).
+			ToSql()
 		if err != nil {
 			return fmt.Errorf("building delete query: %w", err)
 		}
-		if _, err := s.db.ExecContext(ctx, delQuery); err != nil {
-			return fmt.Errorf("clearing group_matches: %w", err)
+		if _, err := s.db.ExecContext(ctx, delQuery, delArgs...); err != nil {
+			return fmt.Errorf("clearing group_matches for collection %d: %w", collectionID, err)
 		}
 	} else {
 		for _, id := range groupIDs {
@@ -289,15 +256,14 @@ func (s *GroupStore) RefreshMatches(ctx context.Context, groupIDs ...uuid.UUID) 
 			}
 			groups = append(groups, *g)
 		}
-
 		delQuery, delArgs, err := sq.Delete(groupMatchesTable).
-			Where(sq.Eq{groupMatchesColGroupID: groupIDs}).
+			Where(sq.Eq{groupMatchesColGroupID: groupIDs, groupMatchesColCollectionID: collectionID}).
 			ToSql()
 		if err != nil {
 			return fmt.Errorf("building delete query: %w", err)
 		}
 		if _, err := s.db.ExecContext(ctx, delQuery, delArgs...); err != nil {
-			return fmt.Errorf("clearing group_matches for ids: %w", err)
+			return fmt.Errorf("clearing group_matches for groups in collection %d: %w", collectionID, err)
 		}
 	}
 
@@ -307,15 +273,18 @@ func (s *GroupStore) RefreshMatches(ctx context.Context, groupIDs ...uuid.UUID) 
 			continue
 		}
 
-		subquery := vmFilterSubquery.Where(filterSQL)
+		// Scope the filter subquery to vinfo rows for this collection only.
+		subquery := vmFilterSubquery.
+			Where(filterSQL).
+			Where(sq.Eq{`v."collection_id"`: collectionID})
 		subSQL, subArgs, err := subquery.ToSql()
 		if err != nil {
 			return fmt.Errorf("building filter query for group %s: %w", g.ID, err)
 		}
 
 		insertQuery, insertArgs, err := sq.Insert(groupMatchesTable).
-			Columns(groupMatchesColGroupID, groupMatchesColVMIDs).
-			Values(g.ID, sq.Expr(fmt.Sprintf(`(SELECT list("VM ID") FROM (%s))`, subSQL), subArgs...)).
+			Columns(groupMatchesColGroupID, groupMatchesColCollectionID, groupMatchesColVMIDs).
+			Values(g.ID, collectionID, sq.Expr(fmt.Sprintf(`(SELECT list("VM ID") FROM (%s))`, subSQL), subArgs...)).
 			ToSql()
 		if err != nil {
 			return fmt.Errorf("building insert query for group %s: %w", g.ID, err)
@@ -327,6 +296,18 @@ func (s *GroupStore) RefreshMatches(ctx context.Context, groupIDs ...uuid.UUID) 
 	}
 
 	return nil
+}
+
+// DeleteMatchesForCollection removes all group_matches rows for a collection (used during retention).
+func (s *GroupStore) DeleteMatchesForCollection(ctx context.Context, collectionID int64) error {
+	query, args, err := sq.Delete(groupMatchesTable).
+		Where(sq.Eq{groupMatchesColCollectionID: collectionID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building delete query: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
 }
 
 // DeleteMatches removes the group_matches row for a given group ID.
@@ -401,56 +382,72 @@ func (s *GroupStore) GetGroupsContainingVM(ctx context.Context, vmID string) ([]
 	return groupIDs, nil
 }
 
-// UpdateInventory updates the inventory_data for a group by ID.
-func (s *GroupStore) UpdateInventory(ctx context.Context, id uuid.UUID, inv *inventory.Inventory) error {
-	inventoryData, err := marshalInventory(inv)
-	if err != nil {
-		return fmt.Errorf("marshaling inventory: %w", err)
-	}
-
-	query, args, err := sq.Update(groupTable).
-		Set(groupColInventoryData, inventoryData).
-		Set(groupColUpdatedAt, time.Now()).
-		Where(sq.Eq{groupColID: id}).
+// GetGroupInventory returns the inventory blob for a group+collection pair.
+// Returns nil, nil when no row exists.
+func (s *GroupStore) GetGroupInventory(ctx context.Context, groupID uuid.UUID, collectionID int64) ([]byte, error) {
+	query, args, err := sq.Select("inventory_data").
+		From("group_inventory").
+		Where(sq.Eq{"group_id": groupID, "collection_id": collectionID}).
 		ToSql()
 	if err != nil {
-		return fmt.Errorf("building update inventory query: %w", err)
+		return nil, err
 	}
+	var data []byte
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&data); errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("fetching group inventory: %w", err)
+	}
+	return data, nil
+}
 
+// SaveGroupInventory upserts the inventory blob for a group+collection pair.
+func (s *GroupStore) SaveGroupInventory(ctx context.Context, groupID uuid.UUID, collectionID int64, data []byte) error {
+	query, args, err := sq.Insert("group_inventory").
+		Columns("group_id", "collection_id", "inventory_data", "updated_at").
+		Values(groupID, collectionID, data, sq.Expr("now()")).
+		Suffix("ON CONFLICT (group_id, collection_id) DO UPDATE SET inventory_data = EXCLUDED.inventory_data, updated_at = now()").
+		ToSql()
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+// TouchUpdatedAt bumps the updated_at timestamp on a group row without changing any other fields.
+// Used when group_inventory changes but the group definition itself has not been edited.
+func (s *GroupStore) TouchUpdatedAt(ctx context.Context, groupID uuid.UUID) error {
+	query, args, err := sq.Update(groupTable).
+		Set(groupColUpdatedAt, time.Now()).
+		Where(sq.Eq{groupColID: groupID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building touch query: %w", err)
+	}
 	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("updating inventory: %w", err)
+		return err
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
+		return fmt.Errorf("getting rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return srvErrors.NewResourceNotFoundError("group", id.String())
+		return srvErrors.NewResourceNotFoundError("group", groupID.String())
 	}
 
 	return nil
 }
 
-// marshalInventory converts an inventory model to JSON bytes for DB storage.
-// Stores the internal format (not API format).
-func marshalInventory(inv *inventory.Inventory) ([]byte, error) {
-	if inv == nil {
-		return nil, nil
+// DeleteGroupInventoryForCollection removes all group_inventory rows for a collection (retention).
+func (s *GroupStore) DeleteGroupInventoryForCollection(ctx context.Context, collectionID int64) error {
+	query, args, err := sq.Delete("group_inventory").Where(sq.Eq{"collection_id": collectionID}).ToSql()
+	if err != nil {
+		return err
 	}
-	return json.Marshal(inv)
-}
-
-// unmarshalInventory converts JSON bytes from DB to inventory model.
-func unmarshalInventory(data []byte) (*inventory.Inventory, error) {
-	if len(data) == 0 {
-		return nil, nil
-	}
-	var inv inventory.Inventory
-	if err := json.Unmarshal(data, &inv); err != nil {
-		return nil, fmt.Errorf("unmarshaling inventory: %w", err)
-	}
-	return &inv, nil
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
 }

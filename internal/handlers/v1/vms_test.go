@@ -325,6 +325,26 @@ var _ = Describe("VMs Handlers", func() {
 			Expect(mockVM.LastListParams.Sort[1].Desc).To(BeFalse())
 		})
 
+		// Given vmMoid sort field
+		// Then the handler should accept it without returning 400
+		It("should accept vmMoid sort field", func() {
+			// Arrange
+			mockVM.ListResult = []models.VirtualMachineSummary{}
+			mockVM.ListTotal = 0
+
+			req := httptest.NewRequest(http.MethodGet, "/vms?sort=vmMoid:asc", nil)
+			w := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(w, req)
+
+			// Assert
+			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(mockVM.LastListParams.Sort).To(HaveLen(1))
+			Expect(mockVM.LastListParams.Sort[0].Field).To(Equal("vmMoid"))
+			Expect(mockVM.LastListParams.Sort[0].Desc).To(BeFalse())
+		})
+
 		// Given a service error occurs
 		// When we request the VM list
 		// Then it should return 500 Internal Server Error

@@ -101,7 +101,7 @@ var _ = Describe("RightsizingService", func() {
 
 	Describe("TriggerCollection", func() {
 		It("should create a report shell in DuckDB and return it immediately", func() {
-			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, collectionID int64, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
 				return &services.RightsizingCollectionHandle{
 					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
 						{
@@ -146,7 +146,7 @@ var _ = Describe("RightsizingService", func() {
 			var capturedDiscoverVMs bool
 			blockCh := make(chan struct{})
 
-			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, collectionID int64, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
 				capturedDiscoverVMs = discoverVMs
 				return &services.RightsizingCollectionHandle{
 					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
@@ -178,7 +178,7 @@ var _ = Describe("RightsizingService", func() {
 
 		It("should reject a second TriggerCollection while one is running", func() {
 			blockCh := make(chan struct{})
-			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
+			svc.WithWorkBuilder(func(reportID string, cfg rsig.Config, discoverVMs bool, collectionID int64, st *store.Store, start, end time.Time) *services.RightsizingCollectionHandle {
 				return &services.RightsizingCollectionHandle{
 					Builder: work.NewSliceWorkBuilder([]work.WorkUnit[models.RightsizingCollectionStatus, models.RightsizingCollectionResult]{
 						{

@@ -392,7 +392,15 @@ var _ = Describe("GroupService", func() {
 
 	Context("ListVirtualMachines", func() {
 		BeforeEach(func() {
-			Expect(test.InsertVMs(ctx, db)).To(Succeed())
+			// Create an active collection so RefreshMatches can be called in Create/Update
+			// Do this BEFORE inserting VMs so they get the correct collection_id
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO collections (vcenter_id, vcenter, state, active)
+				VALUES ('default', 'vcenter.local', 'done', true)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+			// Insert VMs with the created collection's ID (should be 1)
+			Expect(test.InsertVMsForCollection(ctx, db, 1)).To(Succeed())
 		})
 
 		// Given a group with filter "cluster = 'production'" and VMs in production
@@ -517,8 +525,16 @@ var _ = Describe("GroupService", func() {
 			`)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Insert VMs for BuildInventory to process
-			Expect(test.InsertVMs(ctx, db)).To(Succeed())
+			// Create an active collection so RefreshMatches can be called in Create/Update
+			// Do this BEFORE inserting VMs so they get the correct collection_id
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO collections (vcenter_id, vcenter, state, active)
+				VALUES ('default', 'vcenter.local', 'done', true)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Insert VMs for BuildInventory to process with the created collection's ID (should be 1)
+			Expect(test.InsertVMsForCollection(ctx, db, 1)).To(Succeed())
 
 			// Create service with REAL Parser (no mock inventory builder)
 			// This will use Parser.BuildInventory which needs the DB connection

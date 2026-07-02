@@ -57,6 +57,7 @@ func NewVirtualMachineFromSummary(vm models.VirtualMachineSummary) VirtualMachin
 		Memory:            int64(vm.Memory),
 		VCenterState:      vm.PowerState,
 		IssueCount:        vm.IssueCount,
+		VmMoid:            &vm.VmMoid,
 		Migratable:        &vm.IsMigratable,
 		Template:          &vm.IsTemplate,
 		MigrationExcluded: &vm.MigrationExcluded,

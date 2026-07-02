@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/vim25/types"
 	"go.uber.org/zap"
@@ -39,7 +40,7 @@ type (
 
 	// rightsizingWorkBuilderFunc builds the work pipeline for a single collection run.
 	// Swappable via WithWorkBuilder for tests.
-	rightsizingWorkBuilderFunc func(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *RightsizingCollectionHandle
+	rightsizingWorkBuilderFunc func(reportID string, cfg rsig.Config, discoverVMs bool, collectionID int64, st *store.Store, start, end time.Time) *RightsizingCollectionHandle
 )
 
 // rightsizingWorkBuilder is a custom WorkBuilder that emits three static stages
@@ -194,6 +195,12 @@ func (s *RightsizingService) WithWorkBuilder(fn rightsizingWorkBuilderFunc) *Rig
 	return s
 }
 
+// activeCollectionID returns the ID of the currently active collection for the
+// default vCenter, or 0 if none is active yet.
+func (s *RightsizingService) activeCollectionID(ctx context.Context) (int64, error) {
+	return activeCollectionIDFromStore(ctx, s.store)
+}
+
 // ListReports returns metadata for all rightsizing reports (no VM metrics).
 func (s *RightsizingService) ListReports(ctx context.Context) ([]models.RightsizingReportSummary, error) {
 	return s.store.RightSizing().ListReports(ctx)
@@ -212,13 +219,35 @@ func (s *RightsizingService) GetVMUtilization(ctx context.Context, vmID string) 
 // ListClusterUtilization returns weighted cluster utilization for a specific report.
 // filterExpr is an optional filter DSL expression (e.g. "cluster_id = 'domain-c123'"); empty means no filter.
 func (s *RightsizingService) ListClusterUtilization(ctx context.Context, reportID, filterExpr string) ([]models.RightsizingClusterUtilization, error) {
-	return s.store.RightSizing().ListClusterUtilization(ctx, reportID, filterExpr)
+	colID, err := s.activeCollectionID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("finding active collection: %w", err)
+	}
+	return s.store.RightSizing().ListClusterUtilization(ctx, reportID, filterExpr, colID)
 }
 
 // ListLatestClusterUtilization returns weighted cluster utilization for the latest completed report.
 // filterExpr is an optional filter DSL expression (e.g. "cluster_id = 'domain-c123'"); empty means no filter.
 func (s *RightsizingService) ListLatestClusterUtilization(ctx context.Context, filterExpr string) (string, []models.RightsizingClusterUtilization, error) {
-	return s.store.RightSizing().ListLatestClusterUtilization(ctx, filterExpr)
+	colID, err := s.activeCollectionID(ctx)
+	if err != nil {
+		return "", nil, fmt.Errorf("finding active collection: %w", err)
+	}
+	return s.store.RightSizing().ListLatestClusterUtilization(ctx, filterExpr, colID)
+}
+
+// activeCollectionIDFromStore is a package-level helper that resolves the active
+// collection ID for the default vCenter using a plain *store.Store reference.
+// Returns 0 (safe fallback) when no active collection exists.
+func activeCollectionIDFromStore(ctx context.Context, st *store.Store) (int64, error) {
+	cols, err := st.Collection().List(ctx, sq.Eq{"vcenter_id": defaultVCenterID, "active": true})
+	if err != nil {
+		return 0, err
+	}
+	if len(cols) == 0 {
+		return 0, nil
+	}
+	return cols[0].ID, nil
 }
 
 // applyCollectionDefaults fills zero-value params with package defaults.
@@ -277,9 +306,24 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 
 	windowStart, windowEnd, expectedSamples, lookback := computeCollectionWindow(params)
 
+	// Use the collection ID from params when provided (post-collection builder path,
+	// where the new collection is still running and not yet active in the DB).
+	// Fall back to the active collection lookup for manual POST /rightsizing calls.
+	var colID int64
+	if params.CollectionID != 0 {
+		colID = params.CollectionID
+	} else {
+		var err error
+		colID, err = s.activeCollectionID(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("finding active collection for rightsizing report: %w", err)
+		}
+	}
+
 	// Persist a shell report before launching the pipeline so the ID exists immediately.
 	// vmCount=0 here; UpdateExpectedBatchCount corrects it after VM discovery.
 	storeReport := models.RightSizingReport{
+		CollectionID:        colID,
 		VCenter:             params.URL,
 		ClusterID:           params.ClusterID,
 		IntervalID:          params.IntervalID,
@@ -293,7 +337,7 @@ func (s *RightsizingService) TriggerCollection(ctx context.Context, params model
 	}
 
 	cfg := buildVSphereConfig(params, lookback)
-	handle := s.buildFn(reportID, cfg, params.DiscoverVMs, s.store, windowStart, windowEnd)
+	handle := s.buildFn(reportID, cfg, params.DiscoverVMs, colID, s.store, windowStart, windowEnd)
 	srv := work.NewService(
 		models.RightsizingCollectionStatus{State: models.RightsizingCollectionStateConnecting},
 		handle.Builder,
@@ -367,7 +411,7 @@ func (s *RightsizingService) Stop() {
 
 // defaultRightsizingWorkBuilder constructs the real four-stage govmomi pipeline.
 // Stages: connect → discover → query → [batch-1 … batch-N] (dynamic).
-func defaultRightsizingWorkBuilder(reportID string, cfg rsig.Config, discoverVMs bool, st *store.Store, start, end time.Time) *RightsizingCollectionHandle {
+func defaultRightsizingWorkBuilder(reportID string, cfg rsig.Config, discoverVMs bool, collectionID int64, st *store.Store, start, end time.Time) *RightsizingCollectionHandle {
 	var client *govmomi.Client
 	var vms []rsig.VMInfo
 	var vmResults map[string]rsig.VMReport
@@ -408,7 +452,10 @@ func defaultRightsizingWorkBuilder(reportID string, cfg rsig.Config, discoverVMs
 					vms = discovered
 				} else {
 					// Inventory-based discovery from local DB (default).
-					inventoryVMs, err := st.RightSizing().ListInventoryVMs(ctx)
+					// Use the collectionID threaded from TriggerCollection — this is the
+					// new running collection when called post-collection, or the active
+					// collection when called manually.
+					inventoryVMs, err := st.RightSizing().ListInventoryVMs(ctx, collectionID)
 					if err != nil {
 						return result, fmt.Errorf("reading VMs from inventory: %w", err)
 					}
@@ -470,11 +517,12 @@ func (s *RightsizingService) BuildCollectorWorkUnits(lookbackH, intervalID, batc
 				},
 				Work: func(ctx context.Context, r models.CollectorResult) (models.CollectorResult, error) {
 					params := models.RightsizingParams{
-						Credentials: creds,
-						LookbackH:   lookbackH,
-						IntervalID:  intervalID,
-						BatchSize:   batchSize,
-						DiscoverVMs: false,
+						Credentials:  creds,
+						LookbackH:    lookbackH,
+						IntervalID:   intervalID,
+						BatchSize:    batchSize,
+						DiscoverVMs:  false,
+						CollectionID: r.CollectionID, // stamp the new (running) collection, not the old active one
 					}
 					if _, err := s.TriggerCollection(ctx, params); err != nil {
 						return r, fmt.Errorf("auto rightsizing trigger: %w", err)

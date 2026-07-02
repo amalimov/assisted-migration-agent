@@ -22,14 +22,6 @@ var (
 )
 
 func main() {
-	rootCmd := &cobra.Command{
-		Use:   "agent",
-		Short: "Assisted Migration Agent",
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		},
-	}
-
-	// default configuration
 	cfg := config.NewConfigurationWithOptionsAndDefaults(
 		config.WithServer(config.Server{
 			HTTPPort:   8000,
@@ -42,23 +34,28 @@ func main() {
 			Mode:                "disconnected",
 			UpdateInterval:      5 * time.Second,
 			LegacyStatusEnabled: true,
+			RetainCollections:   1,
 		}),
 		config.WithAuth(config.Authentication{Enabled: false}),
 		config.WithLogFormat("console"),
 		config.WithLogLevel("debug"),
 	)
-	registerLoggingFlags(rootCmd, cfg)
 
-	if err := validateConfig(cfg); err != nil {
-		fmt.Printf("%s", err)
-		os.Exit(1)
+	rootCmd := &cobra.Command{
+		Use:   "agent",
+		Short: "Assisted Migration Agent",
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// PersistentPreRun fires after Cobra parses flags, so cfg.LogLevel and
+			// cfg.LogFormat already reflect any --log-level / --log-format overrides.
+			if err := validateConfig(cfg); err != nil {
+				fmt.Printf("%s", err)
+				os.Exit(1)
+			}
+			l := logger.Init(cfg.LogFormat, cfg.LogLevel)
+			zap.ReplaceGlobals(l) //nolint:errcheck
+		},
 	}
-
-	logger := logger.Init(cfg.LogFormat, cfg.LogLevel)
-	defer func() { _ = logger.Sync() }()
-
-	undo := zap.ReplaceGlobals(logger)
-	defer undo()
+	registerLoggingFlags(rootCmd, cfg)
 
 	rootCmd.AddCommand(cmd.NewRunCommand(cfg))
 	rootCmd.AddCommand(cmd.NewVersionCommand(cfg))

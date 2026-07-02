@@ -39,8 +39,8 @@ func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOptio
 			`u.disk_pct    AS disk_pct`,
 			`u.confidence_pct AS confidence_pct`,
 		).
-		LeftJoin(`rightsizing_vm_utilization u ON u.moid = v."VM ID" AND u.report_id = (` +
-			`SELECT id FROM rightsizing_reports WHERE written_batch_count > 0 ORDER BY created_at DESC LIMIT 1` +
+		LeftJoin(`rightsizing_vm_utilization u ON u.moid = v."vmmoid" AND u.report_id = (` +
+			`SELECT id FROM rightsizing_reports WHERE collection_id = v."collection_id" ORDER BY id DESC LIMIT 1` +
 			`)`)
 
 	// Apply external filters via subquery (filters reference table aliases in vmFilterSubquery)
@@ -99,6 +99,7 @@ func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOptio
 			&groups,
 			&migrationExcluded,
 			&labels,
+			&vm.VmMoid,
 			&vm.UtilizationCpuP95,
 			&vm.UtilizationMemP95,
 			&vm.UtilizationCpuMax,
@@ -123,7 +124,7 @@ func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOptio
 }
 
 // Count returns the total number of VMs matching the filters.
-func (s *VMStore) Count(ctx context.Context, filter sq.Sqlizer) (int, error) {
+func (s *VMStore) Count(ctx context.Context, filter sq.Sqlizer, opts ...ListOption) (int, error) {
 	builder := sq.Select("COUNT(*)").From("vinfo v")
 
 	if filter != nil {
@@ -133,6 +134,10 @@ func (s *VMStore) Count(ctx context.Context, filter sq.Sqlizer) (int, error) {
 			return 0, err
 		}
 		builder = builder.Where(sq.Expr(fmt.Sprintf(`v."VM ID" IN (%s)`, subSQL), subArgs...))
+	}
+
+	for _, opt := range opts {
+		builder = opt(builder)
 	}
 
 	query, args, err := builder.ToSql()
@@ -225,8 +230,10 @@ func (s *VMStore) Get(ctx context.Context, id string) (*models.VM, error) {
 }
 
 // GetFilterOptions returns the distinct values available for VM filtering.
-func (s *VMStore) GetFilterOptions(ctx context.Context) (models.VMFilterOptions, error) {
-	row := s.db.QueryRowContext(ctx, vmFilterOptionsQuery)
+// When collectionID is 0 the query is unscoped (returns data across all collections).
+func (s *VMStore) GetFilterOptions(ctx context.Context, collectionID int64) (models.VMFilterOptions, error) {
+	query, args := buildVMFilterOptionsQuery(collectionID)
+	row := s.db.QueryRowContext(ctx, query, args...)
 
 	var clusters, datacenters, concernLabels, concernCategories, applications StringArray
 	if err := row.Scan(&clusters, &datacenters, &concernLabels, &concernCategories, &applications); err != nil {
@@ -243,12 +250,19 @@ func (s *VMStore) GetFilterOptions(ctx context.Context) (models.VMFilterOptions,
 }
 
 // GetGuestApps returns all VMs with their guest application names.
-func (s *VMStore) GetGuestApps(ctx context.Context) ([]models.VMGuestApps, error) {
-	query, args, err := sq.Select(
+// When collectionID is 0 the query is unscoped (returns data across all collections).
+func (s *VMStore) GetGuestApps(ctx context.Context, collectionID int64) ([]models.VMGuestApps, error) {
+	b := sq.Select(
 		`v."VM ID"`,
 		`v."VM"`,
 		`COALESCE(v."guest_apps", '[]')`,
-	).From("vinfo v").ToSql()
+	).From("vinfo v")
+
+	if collectionID != 0 {
+		b = b.Where(sq.Eq{`v."collection_id"`: collectionID})
+	}
+
+	query, args, err := b.ToSql()
 	if err != nil {
 		return nil, err
 	}
@@ -414,13 +428,6 @@ func WithVMIDs(ids []string) ListOption {
 	}
 }
 
-// WithLimit sets the LIMIT clause.
-func WithLimit(limit uint64) ListOption {
-	return func(b sq.SelectBuilder) sq.SelectBuilder {
-		return b.Limit(limit)
-	}
-}
-
 // WithOffset sets the OFFSET clause.
 func WithOffset(offset uint64) ListOption {
 	return func(b sq.SelectBuilder) sq.SelectBuilder {
@@ -449,6 +456,7 @@ func WithSort(sorts []SortParam) ListOption {
 		"diskUsage":    "disk_pct",
 		"cpuAvg":       "cpu_avg_pct",
 		"memAvg":       "mem_avg_pct",
+		"vmMoid":       "vmmoid",
 	}
 
 	// Utilization columns are nullable: always sort NULLs last regardless of direction.
@@ -483,14 +491,20 @@ func WithSort(sorts []SortParam) ListOption {
 }
 
 // GetFolders returns a list of distinct folders from the vinfo table.
-func (s *VMStore) GetFolders(ctx context.Context) ([]models.Folder, error) {
+// When collectionID is 0 the query is unscoped (returns data across all collections).
+func (s *VMStore) GetFolders(ctx context.Context, collectionID int64) ([]models.Folder, error) {
 	builder := sq.Select(
 		`COALESCE("Folder ID", '') AS id`,
 		`COALESCE("Folder", '') AS name`,
 	).Distinct().
 		From("vinfo").
-		Where(`COALESCE("Folder ID", "Folder", '') != ''`).
-		OrderBy("name")
+		Where(`COALESCE("Folder ID", "Folder", '') != ''`)
+
+	if collectionID != 0 {
+		builder = builder.Where(sq.Eq{`"collection_id"`: collectionID})
+	}
+
+	builder = builder.OrderBy("name")
 
 	query, args, err := builder.ToSql()
 	if err != nil {
@@ -582,11 +596,16 @@ func (s *VMStore) UpdateLabels(ctx context.Context, vmID string, labels []string
 
 // GetAllLabels returns all distinct labels in use across VMs along with their counts.
 // The labels and counts are returned in the same order (sorted alphabetically by label).
-func (s *VMStore) GetAllLabels(ctx context.Context) ([]string, []int, error) {
+// When collectionID is 0 the query is unscoped (returns data across all collections).
+func (s *VMStore) GetAllLabels(ctx context.Context, collectionID int64) ([]string, []int, error) {
 	// Build subquery for unnesting labels
 	subquery := sq.Select(`unnest(CAST(v."labels" AS VARCHAR[])) AS label`).
 		From("vinfo v").
 		Where(sq.NotEq{`v."labels"`: "[]"})
+
+	if collectionID != 0 {
+		subquery = subquery.Where(sq.Eq{`v."collection_id"`: collectionID})
+	}
 
 	// Build main query with COUNT grouped by label
 	query, args, err := sq.Select("label", "COUNT(*) as count").
@@ -679,13 +698,19 @@ func (s *VMStore) RemoveLabel(ctx context.Context, vmID string, label string) er
 }
 
 // RemoveLabelGlobally removes a label from all VMs that have it.
-func (s *VMStore) RemoveLabelGlobally(ctx context.Context, label string) (int, error) {
+// When collectionID is 0 the update is unscoped (affects all collections).
+func (s *VMStore) RemoveLabelGlobally(ctx context.Context, label string, collectionID int64) (int, error) {
 	// Update all VMs that have the label
 	// WHERE clause with list_contains optimizes to only update relevant VMs
-	query, args, err := sq.Update("vinfo").
+	builder := sq.Update("vinfo").
 		Set(`"labels"`, sq.Expr("list_filter(CAST(\"labels\" AS VARCHAR[]), x -> x != ?)", label)).
-		Where(sq.Expr("list_contains(CAST(\"labels\" AS VARCHAR[]), ?)", label)).
-		ToSql()
+		Where(sq.Expr("list_contains(CAST(\"labels\" AS VARCHAR[]), ?)", label))
+
+	if collectionID != 0 {
+		builder = builder.Where(sq.Eq{`"collection_id"`: collectionID})
+	}
+
+	query, args, err := builder.ToSql()
 	if err != nil {
 		return 0, err
 	}
@@ -701,6 +726,22 @@ func (s *VMStore) RemoveLabelGlobally(ctx context.Context, label string) (int, e
 	}
 
 	return int(rows), nil
+}
+
+// GetVmMoid resolves a hashed VM ID back to its original vSphere MOID (vmmoid).
+// Used by the inspection pipeline, which needs the MOID to call vCenter APIs.
+func (s *VMStore) GetVmMoid(ctx context.Context, vmID string) (string, error) {
+	var vmMoid string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT vmmoid FROM vinfo WHERE "VM ID" = ? LIMIT 1`, vmID,
+	).Scan(&vmMoid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", srvErrors.NewResourceNotFoundError("vm", vmID)
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolving vmmoid for VM %s: %w", vmID, err)
+	}
+	return vmMoid, nil
 }
 
 // validateVMsExist checks if all provided VM IDs exist in the database.

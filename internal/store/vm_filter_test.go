@@ -367,7 +367,7 @@ var _ = Describe("VMStore cross-table filters", func() {
 				Filter: "concern.category = 'Critical'",
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Group().RefreshMatches(ctx, g.ID)).To(Succeed())
+			Expect(s.Group().RefreshMatches(ctx, 0, g.ID)).To(Succeed())
 
 			svc := services.NewGroupService(s)
 			vms, total, err := svc.ListVirtualMachines(ctx, g.ID, services.GroupGetParams{})
@@ -383,7 +383,7 @@ var _ = Describe("VMStore cross-table filters", func() {
 				Filter: "disk.controller = 'NVME'",
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Group().RefreshMatches(ctx, g.ID)).To(Succeed())
+			Expect(s.Group().RefreshMatches(ctx, 0, g.ID)).To(Succeed())
 
 			svc := services.NewGroupService(s)
 			vms, total, err := svc.ListVirtualMachines(ctx, g.ID, services.GroupGetParams{})
@@ -404,7 +404,7 @@ var _ = Describe("VMStore cross-table filters", func() {
 				Filter: "concern.category = 'Warning'",
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Group().RefreshMatches(ctx, g.ID)).To(Succeed())
+			Expect(s.Group().RefreshMatches(ctx, 0, g.ID)).To(Succeed())
 
 			svc := services.NewGroupService(s)
 			vms, total, err := svc.ListVirtualMachines(ctx, g.ID, services.GroupGetParams{

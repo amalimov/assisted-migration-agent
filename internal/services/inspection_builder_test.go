@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -11,9 +13,54 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
+	"github.com/kubev2v/assisted-migration-agent/pkg/vmware"
 	"github.com/kubev2v/assisted-migration-agent/pkg/work"
 	"github.com/kubev2v/assisted-migration-agent/test"
 )
+
+// recordingVMOperator is a simple VMOperator stub that captures call arguments
+// and returns configurable responses. It does not use testify/mock.
+type recordingVMOperator struct {
+	validatePrivilegesCalledWith []string
+	createSnapshotCalledWith     []vmware.CreateSnapshotRequest
+	createSnapshotErr            error
+}
+
+func (r *recordingVMOperator) ValidatePrivileges(_ context.Context, vmId string, _ []string) error {
+	r.validatePrivilegesCalledWith = append(r.validatePrivilegesCalledWith, vmId)
+	return nil
+}
+
+func (r *recordingVMOperator) CreateSnapshot(_ context.Context, req vmware.CreateSnapshotRequest) (string, error) {
+	r.createSnapshotCalledWith = append(r.createSnapshotCalledWith, req)
+	return "", r.createSnapshotErr
+}
+
+func (r *recordingVMOperator) RemoveSnapshot(_ context.Context, _ vmware.RemoveSnapshotRequest) error {
+	return nil
+}
+
+// runInspectionWork executes the inspection pipeline (produced by defaultInspectionBuilderFactory)
+// for a single VM and blocks until the pipeline completes naturally (all work units finish).
+// The nil detector means execution will panic if the deep-inspection step is reached;
+// callers should configure the operator such that CreateSnapshot returns an error to stop
+// the pipeline before the detector step.
+//
+// Must be called from within a Ginkgo/Gomega test as it uses Eventually.
+func runInspectionWork(_ context.Context, s *store.Store, operator vmware.VMOperator, vmID string) error {
+	factory := defaultInspectionBuilderFactory(s, operator, nil)
+	builders := map[string]work.WorkBuilder2[models.InspectionStatus, models.InspectionResult]{
+		vmID: factory(vmID),
+	}
+	pool := work.NewPool2(builders).WithWorkers(1, 0)
+	if err := pool.Start(); err != nil {
+		return err
+	}
+	// Wait for the pipeline to finish naturally before cleaning up.
+	// Calling Stop() without waiting first would cancel in-progress work.
+	Eventually(pool.IsRunning).Should(BeFalse())
+	return pool.Stop()
+}
 
 var _ = Describe("inspectionBuilder", func() {
 	var (
@@ -342,5 +389,64 @@ var _ = Describe("inspectionBuilder", func() {
 			Expect(getInspectionStatus("vm-1")).To(Equal(models.InspectionStateCompleted))
 			Expect(getInspectionStatus("vm-2")).To(Equal(models.InspectionStateCompleted))
 		})
+	})
+})
+
+var _ = Describe("Inspect", func() {
+	var (
+		ctx context.Context
+		db  *sql.DB
+		st  *store.Store
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+
+		var err error
+		db, err = store.NewDB(nil, ":memory:")
+		Expect(err).NotTo(HaveOccurred())
+
+		err = migrations.Run(ctx, db)
+		Expect(err).NotTo(HaveOccurred())
+
+		st = store.NewStore(db, test.NewMockValidator())
+	})
+
+	AfterEach(func() {
+		if db != nil {
+			_ = db.Close()
+		}
+	})
+
+	It("resolves the hash VM ID to vmmoid before calling vCenter", func() {
+		collectionID := int64(1)
+		vmMoid := "vm-real-moid"
+		hashID := fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprintf("%d_%s", collectionID, vmMoid))))
+
+		// Insert a vinfo row where "VM ID" is the hash but vmmoid is the MOID.
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO vinfo ("VM ID", "VM", vmmoid, collection_id)
+			VALUES (?, 'Test VM', ?, ?)
+		`, hashID, vmMoid, collectionID)
+		Expect(err).NotTo(HaveOccurred())
+
+		// The operator captures which IDs are passed to each vCenter call.
+		// CreateSnapshot returns an error to stop the pipeline before the
+		// deep-inspection step (which requires a real vCenter-backed detector).
+		op := &recordingVMOperator{
+			createSnapshotErr: errors.New("stopped-after-snapshot-for-test"),
+		}
+
+		// Run the inspection work for the hash VM ID.
+		_ = runInspectionWork(ctx, st, op, hashID)
+
+		// ValidatePrivileges must have been called with the MOID, not the hash.
+		Expect(op.validatePrivilegesCalledWith).To(ConsistOf(vmMoid),
+			"ValidatePrivileges should receive the vSphere MOID, not the hash VM ID")
+
+		// CreateSnapshot must have been called with the MOID, not the hash.
+		Expect(op.createSnapshotCalledWith).To(HaveLen(1))
+		Expect(op.createSnapshotCalledWith[0].VmId).To(Equal(vmMoid),
+			"CreateSnapshot should receive the vSphere MOID, not the hash VM ID")
 	})
 })

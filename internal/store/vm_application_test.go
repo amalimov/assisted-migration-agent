@@ -51,7 +51,7 @@ var _ = Describe("VMStore Application Methods", func() {
 			insertVMWithApps("vm-1", "db-01", `[{"name":"postgres"},{"name":"nginx"}]`)
 			insertVMWithApps("vm-2", "web-01", `[{"name":"apache"}]`)
 
-			result, err := s.VM().GetGuestApps(ctx)
+			result, err := s.VM().GetGuestApps(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(2))
 
@@ -70,7 +70,7 @@ var _ = Describe("VMStore Application Methods", func() {
 		It("should return empty app names for VMs with no guest apps", func() {
 			insertVMWithApps("vm-1", "empty-vm", `[]`)
 
-			result, err := s.VM().GetGuestApps(ctx)
+			result, err := s.VM().GetGuestApps(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].AppNames).To(BeEmpty())
@@ -83,7 +83,7 @@ var _ = Describe("VMStore Application Methods", func() {
 			`)
 			Expect(err).NotTo(HaveOccurred())
 
-			result, err := s.VM().GetGuestApps(ctx)
+			result, err := s.VM().GetGuestApps(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].AppNames).To(BeEmpty())
@@ -92,14 +92,14 @@ var _ = Describe("VMStore Application Methods", func() {
 		It("should filter out entries with empty names", func() {
 			insertVMWithApps("vm-1", "mixed-vm", `[{"name":"postgres"},{"name":""},{"name":"nginx"}]`)
 
-			result, err := s.VM().GetGuestApps(ctx)
+			result, err := s.VM().GetGuestApps(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].AppNames).To(ConsistOf("postgres", "nginx"))
 		})
 
 		It("should return empty result for empty table", func() {
-			result, err := s.VM().GetGuestApps(ctx)
+			result, err := s.VM().GetGuestApps(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeNil())
 		})
@@ -121,13 +121,13 @@ var _ = Describe("VMStore Application Methods", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			opts, err := s.VM().GetFilterOptions(ctx)
+			opts, err := s.VM().GetFilterOptions(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(opts.Applications).To(ConsistOf("Apache", "PostgreSQL"))
 		})
 
 		It("should return empty applications when vm_applications is empty", func() {
-			opts, err := s.VM().GetFilterOptions(ctx)
+			opts, err := s.VM().GetFilterOptions(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(opts.Applications).To(BeEmpty())
 		})

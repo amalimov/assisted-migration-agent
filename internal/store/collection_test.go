@@ -260,6 +260,25 @@ var _ = Describe("CollectionStore", func() {
 			Expect(results[0].ID).To(Equal(activeCreated.ID))
 		})
 
+		It("should honour WithLimit", func() {
+			now := time.Now()
+			for i := 0; i < 3; i++ {
+				_, err := s.Collection().Create(ctx, models.Collection{
+					VCenterID: "default",
+					State:     models.CollectionStateDone,
+					StartedAt: &now,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			results, err := s.Collection().List(ctx, sq.Eq{"vcenter_id": "default"},
+				store.WithOrderBy("id DESC"),
+				store.WithLimit(1),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+		})
+
 		// Given no filter (nil)
 		// When List is called with nil filter
 		// Then all collections for any vcenter are returned

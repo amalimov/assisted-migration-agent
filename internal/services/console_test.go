@@ -1002,7 +1002,7 @@ var _ = Describe("Console Service", func() {
 			client, err := console.NewConsoleClient(server.URL, "")
 			Expect(err).NotTo(HaveOccurred())
 
-			err = st.Inventory().Save(context.Background(), []byte(`{"vms": [{"name": "vm1"}]}`))
+			err = st.Inventory().Save(context.Background(), 0, []byte(`{"vms": [{"name": "vm1"}]}`))
 			Expect(err).NotTo(HaveOccurred())
 
 			consoleSrv, err := services.NewConsoleService(cfg, client, collector, st, eventSrv)

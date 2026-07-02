@@ -51,7 +51,7 @@ func mockCollectorBuilder(st *store.Store, eventSrv *services.EventService, conn
 						return r, processErr
 					}
 					r.Inventory = []byte(`{"vms":[]}`)
-					return r, st.Inventory().Save(ctx, r.Inventory)
+					return r, st.Inventory().Save(ctx, 0, r.Inventory)
 				},
 			},
 			{
@@ -96,7 +96,6 @@ var _ = Describe("CollectorService", func() {
 		st       *store.Store
 		srv      *services.CollectorService
 		eventSrv *services.EventService
-		invSrv   *services.InventoryService
 		credsSvc *services.CredentialsService
 	)
 
@@ -111,7 +110,6 @@ var _ = Describe("CollectorService", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		st = store.NewStore(db, test.NewMockValidator())
-		invSrv = services.NewInventoryService(st)
 		eventSrv = services.NewEventService(st)
 
 		// Set up a CredentialsService with stored test credentials
@@ -126,7 +124,7 @@ var _ = Describe("CollectorService", func() {
 		err = credsSvc.Save(ctx, km.Key(), "credentials", creds)
 		Expect(err).NotTo(HaveOccurred())
 
-		srv = services.NewCollectorService(invSrv, mockCollectorBuilder(st, eventSrv, nil, nil, nil), credsSvc)
+		srv = services.NewCollectorService(st, mockCollectorBuilder(st, eventSrv, nil, nil, nil), credsSvc)
 	})
 
 	AfterEach(func() {
@@ -193,7 +191,7 @@ var _ = Describe("CollectorService", func() {
 				return srv.GetStatus().State
 			}).Should(Equal(models.CollectorStateCollected))
 
-			inv, err := st.Inventory().Get(context.TODO())
+			inv, err := st.Inventory().GetByCollectionID(context.TODO(), 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inv).ToNot(BeNil())
 		})
@@ -223,7 +221,7 @@ var _ = Describe("CollectorService", func() {
 		// Then the state should transition to error with the connect error message
 		It("should set error state when connection fails", func() {
 			// Arrange
-			srv = services.NewCollectorService(invSrv,
+			srv = services.NewCollectorService(st,
 				mockCollectorBuilder(st, eventSrv, errors.New("connection failed"), nil, nil), credsSvc)
 
 			// Act
@@ -245,7 +243,7 @@ var _ = Describe("CollectorService", func() {
 		// Then the state should transition to error with the collection error message
 		It("should set error state when collection fails", func() {
 			// Arrange
-			srv = services.NewCollectorService(invSrv,
+			srv = services.NewCollectorService(st,
 				mockCollectorBuilder(st, eventSrv, nil, errors.New("collection failed"), nil), credsSvc)
 
 			// Act
@@ -267,7 +265,7 @@ var _ = Describe("CollectorService", func() {
 		// Then the state should transition to error with the processing error message
 		It("should set error state when processor fails", func() {
 			// Arrange
-			srv = services.NewCollectorService(invSrv,
+			srv = services.NewCollectorService(st,
 				mockCollectorBuilder(st, eventSrv, nil, nil, errors.New("processing failed")), credsSvc)
 
 			// Act
@@ -292,7 +290,7 @@ var _ = Describe("CollectorService", func() {
 			gate := make(chan struct{})
 			defer close(gate)
 
-			srv = services.NewCollectorService(invSrv,
+			srv = services.NewCollectorService(st,
 				blockingCollectorBuilder(gate), credsSvc)
 			Expect(srv.Start(ctx)).To(Succeed())
 
@@ -304,10 +302,10 @@ var _ = Describe("CollectorService", func() {
 		})
 
 		// Given a collector service that has already collected successfully
-		// When Start is called again
-		// Then it should be a no-op and remain in collected state
-		It("should be a no-op when already in collected state", func() {
-			// Arrange
+		// When Start is called again (refresh)
+		// Then it should start a new collection run (no-op guard removed)
+		It("should start a new collection when called after a completed collection", func() {
+			// Arrange: run first collection to completion
 			err := srv.Start(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -315,26 +313,26 @@ var _ = Describe("CollectorService", func() {
 				return srv.GetStatus().State
 			}).Should(Equal(models.CollectorStateCollected))
 
-			// Act
+			// Act: start again (refresh)
 			err = srv.Start(ctx)
 
-			// Assert
+			// Assert: no error; the pipeline restarts
 			Expect(err).NotTo(HaveOccurred())
-			Expect(srv.GetStatus().State).To(Equal(models.CollectorStateCollected))
 		})
 	})
 
 	Context("NewCollectorService with existing inventory", func() {
-		// Given a store that already has inventory data
+		// Given a store that already has inventory data for the active collection
 		// When a new CollectorService is created
 		// Then it should start in collected state
 		It("should start in collected state when inventory exists", func() {
-			// Arrange
-			err := st.Inventory().Save(ctx, []byte(`{"vms":[]}`))
+			// Arrange: create an active collection and save inventory against it.
+			activeColID := createActiveCollection(ctx, st)
+			err := st.Inventory().Save(ctx, activeColID, []byte(`{"vms":[]}`))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			collectorSrv := services.NewCollectorService(invSrv, nil, credsSvc)
+			collectorSrv := services.NewCollectorService(st, nil, credsSvc)
 
 			// Assert
 			Expect(collectorSrv.GetStatus().State).To(Equal(models.CollectorStateCollected))
@@ -348,7 +346,7 @@ var _ = Describe("CollectorService", func() {
 		It("should cancel running collection and return to ready", func() {
 			// Arrange
 			gate := make(chan struct{})
-			srv = services.NewCollectorService(invSrv,
+			srv = services.NewCollectorService(st,
 				blockingCollectorBuilder(gate), credsSvc)
 			err := srv.Start(ctx)
 			Expect(err).NotTo(HaveOccurred())

@@ -43,7 +43,6 @@ const (
 	rsMetricsColLatest      = "latest"
 
 	vinfoTable   = "vinfo"
-	vinfoColVMID = "VM ID"
 	vinfoColName = "VM"
 
 	rsWarningsTable       = "rightsizing_vm_warnings"
@@ -79,13 +78,13 @@ func (s *RightSizingStore) CreateReport(ctx context.Context, r models.RightSizin
 			rsReportsColID, rsReportsColVCenter, rsReportsColClusterID, rsReportsColIntervalID,
 			rsReportsColWindowStart, rsReportsColWindowEnd,
 			rsReportsColExpectedSampleCount, rsReportsColExpectedBatchCount,
-			rsReportsColCreatedAt,
+			rsReportsColCreatedAt, "collection_id",
 		).
 		Values(
 			id, r.VCenter, r.ClusterID, r.IntervalID,
 			r.WindowStart, r.WindowEnd,
 			r.ExpectedSampleCount, expectedBatches,
-			createdAt,
+			createdAt, r.CollectionID,
 		).
 		ToSql()
 	if err != nil {
@@ -251,7 +250,8 @@ ON CONFLICT DO NOTHING`
 // Utilization uses pure weighted averages (no confidence multiplier).
 // Confidence is reported separately as a vCPU-weighted score.
 // NULLIF guards prevent division-by-zero when provisioned resource data is absent.
-func (s *RightSizingStore) clusterUtilizationRows(ctx context.Context, reportID, filterExpr string) ([]models.RightsizingClusterUtilization, error) {
+// collectionID scopes the migration_excluded vinfo subquery to avoid cross-collection pollution.
+func (s *RightSizingStore) clusterUtilizationRows(ctx context.Context, reportID, filterExpr string, collectionID int64) ([]models.RightsizingClusterUtilization, error) {
 	builder := sq.Select(
 		"cluster_id",
 		"cluster_name",
@@ -271,7 +271,7 @@ func (s *RightSizingStore) clusterUtilizationRows(ctx context.Context, reportID,
 		Where(sq.Eq{"report_id": reportID}).
 		Where(sq.NotEq{"cluster_name": nil}).
 		Where(sq.NotEq{"cluster_id": nil}).
-		Where("moid NOT IN (SELECT \"VM ID\" FROM vinfo WHERE \"migration_excluded\" = TRUE)").
+		Where("moid NOT IN (SELECT vmmoid FROM vinfo WHERE \"migration_excluded\" = TRUE AND \"collection_id\" = ?)", collectionID).
 		GroupBy("cluster_id", "cluster_name").
 		OrderBy("cluster_name")
 
@@ -292,7 +292,7 @@ func (s *RightSizingStore) clusterUtilizationRows(ctx context.Context, reportID,
 	if err != nil {
 		return nil, fmt.Errorf("executing cluster utilization query: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close() //nolint:errcheck
 
 	var result []models.RightsizingClusterUtilization
 	for rows.Next() {
@@ -326,14 +326,16 @@ func (s *RightSizingStore) clusterUtilizationRows(ctx context.Context, reportID,
 
 // ListClusterUtilization returns weighted cluster utilization aggregates for a specific report.
 // filterExpr is an optional filter DSL expression (e.g. "cluster_id = 'domain-c123'"); empty means no filter.
-func (s *RightSizingStore) ListClusterUtilization(ctx context.Context, reportID, filterExpr string) ([]models.RightsizingClusterUtilization, error) {
-	return s.clusterUtilizationRows(ctx, reportID, filterExpr)
+// collectionID scopes the migration_excluded subquery to the active inventory collection.
+func (s *RightSizingStore) ListClusterUtilization(ctx context.Context, reportID, filterExpr string, collectionID int64) ([]models.RightsizingClusterUtilization, error) {
+	return s.clusterUtilizationRows(ctx, reportID, filterExpr, collectionID)
 }
 
 // ListLatestClusterUtilization returns weighted cluster utilization for the latest completed
 // report, along with that report's ID so callers can include it in responses.
 // filterExpr is an optional filter DSL expression (e.g. "cluster_id = 'domain-c123'"); empty means no filter.
-func (s *RightSizingStore) ListLatestClusterUtilization(ctx context.Context, filterExpr string) (string, []models.RightsizingClusterUtilization, error) {
+// collectionID scopes the migration_excluded subquery to the active inventory collection.
+func (s *RightSizingStore) ListLatestClusterUtilization(ctx context.Context, filterExpr string, collectionID int64) (string, []models.RightsizingClusterUtilization, error) {
 	latestReportSQL, latestReportArgs, err := sq.Select(rsReportsColID).
 		From(rsReportsTable).
 		Where(sq.Gt{rsReportsColWrittenBatchCount: 0}).
@@ -351,7 +353,7 @@ func (s *RightSizingStore) ListLatestClusterUtilization(ctx context.Context, fil
 		}
 		return "", nil, fmt.Errorf("finding latest report: %w", err)
 	}
-	clusters, err := s.clusterUtilizationRows(ctx, reportID, filterExpr)
+	clusters, err := s.clusterUtilizationRows(ctx, reportID, filterExpr, collectionID)
 	return reportID, clusters, err
 }
 
@@ -420,14 +422,16 @@ func (s *RightSizingStore) GetVMUtilization(ctx context.Context, moid string) (*
 	return &d, nil
 }
 
-// ListInventoryVMs reads VM IDs and names from the local inventory (vinfo table).
-// "VM ID" is the MoRef value; "VM" is the display name.
-// Returns all entries ordered by name.
-func (s *RightSizingStore) ListInventoryVMs(ctx context.Context) ([]models.InventoryVM, error) {
+// ListInventoryVMs reads vmmoid and names from the local inventory (vinfo table)
+// scoped to the given collection. collectionID = 0 is the safe fallback when no
+// active collection exists; it produces an empty result without error.
+// Returns entries ordered by name.
+func (s *RightSizingStore) ListInventoryVMs(ctx context.Context, collectionID int64) ([]models.InventoryVM, error) {
 	builder := sq.Select(
-		fmt.Sprintf(`"%s"`, vinfoColVMID),
+		"vmmoid",
 		fmt.Sprintf(`"%s"`, vinfoColName),
 	).From(vinfoTable).
+		Where(sq.Eq{`"collection_id"`: collectionID}).
 		OrderBy(fmt.Sprintf(`"%s"`, vinfoColName))
 
 	query, args, err := builder.ToSql()
@@ -439,7 +443,7 @@ func (s *RightSizingStore) ListInventoryVMs(ctx context.Context) ([]models.Inven
 	if err != nil {
 		return nil, fmt.Errorf("executing list inventory VMs query: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close() //nolint:errcheck
 
 	var result []models.InventoryVM
 	for rows.Next() {
@@ -470,7 +474,7 @@ func (s *RightSizingStore) ListReports(ctx context.Context) ([]models.Rightsizin
 	if err != nil {
 		return nil, fmt.Errorf("executing list reports query: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close() //nolint:errcheck
 
 	reports := []models.RightsizingReportSummary{}
 	for rows.Next() {
@@ -542,7 +546,7 @@ func (s *RightSizingStore) appendMetrics(ctx context.Context, r *models.Rightsiz
 	if err != nil {
 		return fmt.Errorf("executing metrics query: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close() //nolint:errcheck
 
 	// vmIdx[moid] = index in r.VMs
 	vmIdx := make(map[string]int)
@@ -574,6 +578,57 @@ func (s *RightSizingStore) appendMetrics(ctx context.Context, r *models.Rightsiz
 	return rows.Err()
 }
 
+// DeleteByCollectionID removes all rightsizing data (reports, metrics, utilization,
+// and warnings) for every report associated with the given collection.
+// Child rows are deleted before the parent report row to satisfy FK constraints.
+func (s *RightSizingStore) DeleteByCollectionID(ctx context.Context, collectionID int64) error {
+	// Find all report IDs for this collection.
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM rightsizing_reports WHERE collection_id = ?`, collectionID)
+	if err != nil {
+		return fmt.Errorf("finding rightsizing reports for collection %d: %w", collectionID, err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	// rightsizing_reports.id is VARCHAR (UUID), not an integer.
+	var reportIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		reportIDs = append(reportIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	childTables := []string{
+		"rightsizing_metrics",
+		"rightsizing_vm_warnings",
+		"rightsizing_vm_utilization",
+	}
+
+	for _, reportID := range reportIDs {
+		for _, tbl := range childTables {
+			if _, err := s.db.ExecContext(ctx,
+				fmt.Sprintf(`DELETE FROM %s WHERE report_id = ?`, tbl),
+				reportID,
+			); err != nil {
+				return fmt.Errorf("deleting from %s for report %s: %w", tbl, reportID, err)
+			}
+		}
+	}
+
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM rightsizing_reports WHERE collection_id = ?`, collectionID,
+	); err != nil {
+		return fmt.Errorf("deleting rightsizing_reports for collection %d: %w", collectionID, err)
+	}
+
+	return nil
+}
+
 // appendVMWarnings reads warning-only VMs and merges them into r.VMs.
 func (s *RightSizingStore) appendVMWarnings(ctx context.Context, r *models.RightsizingReport) error {
 	query, args, err := sq.Select(
@@ -589,7 +644,7 @@ func (s *RightSizingStore) appendVMWarnings(ctx context.Context, r *models.Right
 	if err != nil {
 		return fmt.Errorf("executing VM warnings query: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close() //nolint:errcheck
 
 	for rows.Next() {
 		var reportID, moid, vmName, warning string

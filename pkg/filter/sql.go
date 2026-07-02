@@ -18,6 +18,8 @@ var defaultMapFn MapFunc = func(name string) (string, FieldType, error) {
 	// vinfo (v) — string fields
 	case "id":
 		return `v."VM ID"`, StringField, nil
+	case "vmmoid":
+		return `v."vmmoid"`, StringField, nil
 	case "name":
 		return `v."VM"`, StringField, nil
 	case "folder_id":

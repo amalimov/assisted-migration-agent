@@ -89,8 +89,8 @@ func (m *ServiceManager) Initialize() error {
 		m.credentials.WithKeyManager(m.keyMgr)
 	}
 
-	factory := newCollectorWorkFactory(m.store, m.event, m.cfg.Agent.DataFolder, m.cfg.Agent.OpaPoliciesFolder)
-	m.collector = NewCollectorService(m.inventory, factory.Build, m.credentials)
+	factory := newCollectorWorkFactory(m.store, m.cfg.Agent, m.event, m.cfg.Agent.DataFolder, m.cfg.Agent.OpaPoliciesFolder)
+	m.collector = NewCollectorService(m.store, factory.Build, m.credentials)
 
 	var err error
 	m.inspector, err = NewInspectorService(m.store, maxVMsPerCycle, m.cfg.Agent.DataFolder, m.credentials)

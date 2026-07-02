@@ -82,7 +82,19 @@ func (s *GroupService) List(ctx context.Context, params GroupListParams) ([]mode
 }
 
 func (s *GroupService) Get(ctx context.Context, id uuid.UUID) (*models.Group, error) {
-	return s.store.Group().Get(ctx, id)
+	g, err := s.store.Group().Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	// Load inventory from the active collection's group_inventory.
+	cols, _ := s.store.Collection().List(ctx, sq.Eq{"vcenter_id": defaultVCenterID, "active": true})
+	if len(cols) > 0 {
+		data, _ := s.store.Group().GetGroupInventory(ctx, g.ID, cols[0].ID)
+		if data != nil {
+			_ = json.Unmarshal(data, &g.Inventory)
+		}
+	}
+	return g, nil
 }
 
 func (s *GroupService) ListVirtualMachines(ctx context.Context, id uuid.UUID, params GroupGetParams) ([]models.VirtualMachineSummary, int, error) {
@@ -135,8 +147,14 @@ func (s *GroupService) Create(ctx context.Context, group models.Group) (*models.
 			return err
 		}
 
-		if err := s.store.Group().RefreshMatches(txCtx, created.ID); err != nil {
-			return err
+		colID, err := activeCollectionIDFromStore(txCtx, s.store)
+		if err != nil {
+			return fmt.Errorf("finding active collection for group matches: %w", err)
+		}
+		if colID != 0 {
+			if err := s.store.Group().RefreshMatches(txCtx, colID, created.ID); err != nil {
+				return fmt.Errorf("refreshing matches for group %s: %w", created.ID, err)
+			}
 		}
 
 		vmIDs, err := s.store.Group().GetMatchedIDs(txCtx, created.ID)
@@ -149,8 +167,16 @@ func (s *GroupService) Create(ctx context.Context, group models.Group) (*models.
 			return fmt.Errorf("building group inventory: %w", err)
 		}
 
-		if err := s.store.Group().UpdateInventory(txCtx, created.ID, inv); err != nil {
-			return fmt.Errorf("updating group inventory: %w", err)
+		// Save inventory to group_inventory scoped to the active collection.
+		cols, _ := s.store.Collection().List(txCtx, sq.Eq{"vcenter_id": defaultVCenterID, "active": true})
+		if len(cols) > 0 && inv != nil {
+			data, err := json.Marshal(inv)
+			if err != nil {
+				return fmt.Errorf("marshaling group inventory: %w", err)
+			}
+			if err := s.store.Group().SaveGroupInventory(txCtx, created.ID, cols[0].ID, data); err != nil {
+				return fmt.Errorf("saving group inventory: %w", err)
+			}
 		}
 
 		created.Inventory = inv
@@ -179,8 +205,14 @@ func (s *GroupService) Update(ctx context.Context, id uuid.UUID, group models.Gr
 			return err
 		}
 
-		if err := s.store.Group().RefreshMatches(txCtx, id); err != nil {
-			return err
+		colID, err := activeCollectionIDFromStore(txCtx, s.store)
+		if err != nil {
+			return fmt.Errorf("finding active collection for group matches: %w", err)
+		}
+		if colID != 0 {
+			if err := s.store.Group().RefreshMatches(txCtx, colID, updated.ID); err != nil {
+				return fmt.Errorf("refreshing matches for group %s: %w", updated.ID, err)
+			}
 		}
 
 		vmIDs, err := s.store.Group().GetMatchedIDs(txCtx, id)
@@ -193,8 +225,16 @@ func (s *GroupService) Update(ctx context.Context, id uuid.UUID, group models.Gr
 			return fmt.Errorf("building group inventory: %w", err)
 		}
 
-		if err := s.store.Group().UpdateInventory(txCtx, id, inv); err != nil {
-			return fmt.Errorf("updating group inventory: %w", err)
+		// Save inventory to group_inventory scoped to the active collection.
+		cols, _ := s.store.Collection().List(txCtx, sq.Eq{"vcenter_id": defaultVCenterID, "active": true})
+		if len(cols) > 0 && inv != nil {
+			data, err := json.Marshal(inv)
+			if err != nil {
+				return fmt.Errorf("marshaling group inventory: %w", err)
+			}
+			if err := s.store.Group().SaveGroupInventory(txCtx, updated.ID, cols[0].ID, data); err != nil {
+				return fmt.Errorf("saving group inventory: %w", err)
+			}
 		}
 
 		updated.Inventory = inv

@@ -23,6 +23,7 @@ type VirtualMachineSummary struct {
 	UtilizationConfidence  *float64 // Data confidence (%); nil when no utilization data
 	MigrationExcluded      bool
 	Labels                 []string
+	VmMoid                 string // original vSphere MOID (from vmmoid column)
 }
 
 type VM struct {

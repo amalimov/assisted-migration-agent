@@ -62,8 +62,21 @@ type CollectorStatus struct {
 	Error error
 }
 
+// PersistentVMData holds VM fields that survive across collection runs.
+// Keyed by vmmoid in CollectorResult.VMPersistentData so the copy-forward
+// pipeline unit can match new vinfo rows without knowing their hashed VM IDs.
+type PersistentVMData struct {
+	MigrationExcluded bool
+	Labels            []string
+}
+
 // CollectorResult is the shared result struct threaded through collector work units.
 type CollectorResult struct {
-	SQLitePath string
-	Inventory  []byte
+	SQLitePath       string
+	Inventory        []byte
+	CollectionID     int64 // ID of the collection row created for this run; set by setupCollection
+	PrevCollectionID int64 // ID of the previously active collection; set by setupCollection (0 if none)
+	// VMPersistentData carries per-VM fields from the previous collection so the
+	// copy-forward pipeline unit can restore them after reIDVMs hashes the VM IDs.
+	VMPersistentData map[string]PersistentVMData // key: vmmoid
 }

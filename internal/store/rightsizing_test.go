@@ -285,7 +285,54 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("ListInventoryVMs", func() {
 		It("should return empty when vinfo has no rows", func() {
-			vms, err := s.RightSizing().ListInventoryVMs(ctx)
+			vms, err := s.RightSizing().ListInventoryVMs(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vms).To(BeEmpty())
+		})
+
+		It("should return only VMs for the given collection_id", func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", vmmoid, collection_id)
+				VALUES ('hash-col1-vm1', 'Alpha VM', 'vm-moid-1', 1),
+				       ('hash-col1-vm2', 'Beta VM',  'vm-moid-2', 1),
+				       ('hash-col2-vm1', 'Gamma VM', 'vm-moid-3', 2)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			vms, err := s.RightSizing().ListInventoryVMs(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vms).To(HaveLen(2))
+			// Results are ordered by name; IDs should be the vmmoid values.
+			Expect(vms[0].ID).To(Equal("vm-moid-1"))
+			Expect(vms[0].Name).To(Equal("Alpha VM"))
+			Expect(vms[1].ID).To(Equal("vm-moid-2"))
+			Expect(vms[1].Name).To(Equal("Beta VM"))
+		})
+
+		It("should return VMs for a different collection_id when requested", func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", vmmoid, collection_id)
+				VALUES ('hash-col1-vm1', 'Alpha VM', 'vm-moid-1', 1),
+				       ('hash-col2-vm1', 'Gamma VM', 'vm-moid-3', 2)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			vms, err := s.RightSizing().ListInventoryVMs(ctx, 2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vms).To(HaveLen(1))
+			Expect(vms[0].ID).To(Equal("vm-moid-3"))
+			Expect(vms[0].Name).To(Equal("Gamma VM"))
+		})
+
+		It("should return empty when collectionID = 0 and no rows match", func() {
+			// collectionID=0 is the safe fallback; no vinfo rows have collection_id=0 by default.
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", vmmoid, collection_id)
+				VALUES ('hash-col1-vm1', 'Alpha VM', 'vm-moid-1', 1)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			vms, err := s.RightSizing().ListInventoryVMs(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vms).To(BeEmpty())
 		})
@@ -399,7 +446,7 @@ var _ = Describe("RightSizingStore", func() {
 			id, _, _ := s.RightSizing().CreateReport(ctx, testReport(), 0, 1)
 			_ = s.RightSizing().IncrementWrittenBatchCount(ctx, id)
 
-			clusters, err := s.RightSizing().ListClusterUtilization(ctx, id, "")
+			clusters, err := s.RightSizing().ListClusterUtilization(ctx, id, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clusters).To(BeEmpty())
 		})
@@ -422,7 +469,7 @@ var _ = Describe("RightSizingStore", func() {
                 WHERE report_id = ?`, id)
 			Expect(err).NotTo(HaveOccurred())
 
-			clusters, err := s.RightSizing().ListClusterUtilization(ctx, id, "")
+			clusters, err := s.RightSizing().ListClusterUtilization(ctx, id, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clusters).To(HaveLen(1))
 			Expect(clusters[0].ClusterID).To(Equal("domain-c1"))
@@ -460,19 +507,19 @@ var _ = Describe("RightSizingStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// No filter — both clusters returned.
-			all, err := s.RightSizing().ListClusterUtilization(ctx, id, "")
+			all, err := s.RightSizing().ListClusterUtilization(ctx, id, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(all).To(HaveLen(2))
 
 			// Filter to cluster-A only.
-			filtered, err := s.RightSizing().ListClusterUtilization(ctx, id, "cluster_id = 'domain-c1'")
+			filtered, err := s.RightSizing().ListClusterUtilization(ctx, id, "cluster_id = 'domain-c1'", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(filtered).To(HaveLen(1))
 			Expect(filtered[0].ClusterID).To(Equal("domain-c1"))
 			Expect(filtered[0].ClusterName).To(Equal("cluster-A"))
 
 			// Filter to a non-existent cluster — empty result, no error.
-			none, err := s.RightSizing().ListClusterUtilization(ctx, id, "cluster_id = 'domain-c999'")
+			none, err := s.RightSizing().ListClusterUtilization(ctx, id, "cluster_id = 'domain-c999'", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(none).To(BeEmpty())
 		})
@@ -480,7 +527,7 @@ var _ = Describe("RightSizingStore", func() {
 
 	Describe("ListLatestClusterUtilization", func() {
 		It("should return empty when no completed report exists", func() {
-			reportID, clusters, err := s.RightSizing().ListLatestClusterUtilization(ctx, "")
+			reportID, clusters, err := s.RightSizing().ListLatestClusterUtilization(ctx, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reportID).To(BeEmpty())
 			Expect(clusters).To(BeEmpty())

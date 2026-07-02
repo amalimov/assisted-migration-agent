@@ -5,9 +5,12 @@ import (
 	"errors"
 	"sync"
 
+	sq "github.com/Masterminds/squirrel"
+
 	"github.com/kubev2v/assisted-migration-agent/pkg/vmware"
 
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 	"github.com/kubev2v/assisted-migration-agent/pkg/work"
 )
@@ -19,27 +22,35 @@ type (
 )
 
 type CollectorService struct {
-	mu           sync.Mutex
-	workSrv      *work.Service[models.CollectorStatus, models.CollectorResult]
-	inventorySrv *InventoryService
-	buildFn      collectorWorkBuilderFunc
-	credsSvc     *CredentialsService
+	mu       sync.Mutex
+	workSrv  *work.Service[models.CollectorStatus, models.CollectorResult]
+	store    *store.Store
+	buildFn  collectorWorkBuilderFunc
+	credsSvc *CredentialsService
 }
 
-func NewCollectorService(inventorySrv *InventoryService, buildFn collectorWorkBuilderFunc, credsSvc *CredentialsService) *CollectorService {
+func NewCollectorService(st *store.Store, buildFn collectorWorkBuilderFunc, credsSvc *CredentialsService) *CollectorService {
 	return &CollectorService{
-		inventorySrv: inventorySrv,
-		buildFn:      buildFn,
-		credsSvc:     credsSvc,
+		store:    st,
+		buildFn:  buildFn,
+		credsSvc: credsSvc,
 	}
 }
 
 func (c *CollectorService) GetStatus() models.CollectorStatus {
-	inv, err := c.inventorySrv.GetInventory(context.Background())
-	if err == nil && inv != nil {
+	ctx := context.Background()
+
+	// Check if any done+active collection exists — the authoritative source of truth.
+	// Checked first so a successfully published collection is always reported as
+	// CollectorStateCollected, even while the in-memory pipeline state is stale.
+	done, err := c.store.Collection().List(ctx,
+		sq.Eq{"vcenter_id": defaultVCenterID, "active": true})
+	if err == nil && len(done) > 0 {
 		return models.CollectorStatus{State: models.CollectorStateCollected}
 	}
 
+	// Fall back to in-memory work service state for transient states
+	// (connecting, collecting, parsing, error) that the DB doesn't capture yet.
 	c.mu.Lock()
 	srv := c.workSrv
 	c.mu.Unlock()
@@ -54,6 +65,14 @@ func (c *CollectorService) GetStatus() models.CollectorStatus {
 		}
 	}
 
+	// Check if a collection run is in progress in the DB (e.g. after a process restart
+	// where workSrv is nil but a running collection row exists).
+	running, dbErr := c.store.Collection().List(ctx,
+		sq.Eq{"vcenter_id": defaultVCenterID, "state": string(models.CollectionStateRunning)})
+	if dbErr == nil && len(running) > 0 {
+		return models.CollectorStatus{State: models.CollectorStateConnecting}
+	}
+
 	return models.CollectorStatus{State: models.CollectorStateReady}
 }
 
@@ -65,9 +84,14 @@ func (c *CollectorService) Start(ctx context.Context) error {
 		return srvErrors.NewCollectionInProgressError()
 	}
 
-	inv, err := c.inventorySrv.GetInventory(ctx)
-	if err == nil && inv != nil {
-		return nil
+	// Guard against a DB-running collection (e.g. from a previous process restart).
+	running, err := c.store.Collection().List(ctx,
+		sq.Eq{"vcenter_id": defaultVCenterID, "state": string(models.CollectionStateRunning)})
+	if err != nil {
+		return err
+	}
+	if len(running) > 0 {
+		return srvErrors.NewCollectionInProgressError()
 	}
 
 	creds, err := c.credsSvc.Resolve(ctx)

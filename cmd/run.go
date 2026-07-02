@@ -292,6 +292,7 @@ func registerAgentFlags(flagSet *pflag.FlagSet, config *config.Configuration) {
 	flagSet.StringVar(&config.Agent.Version, "version", config.Agent.Version, "Agent version to report to console")
 	flagSet.StringVar(&config.Agent.DataFolder, "data-folder", config.Agent.DataFolder, "Path to the persistent data folder")
 	flagSet.BoolVar(&config.Agent.LegacyStatusEnabled, "legacy-status-enabled", config.Agent.LegacyStatusEnabled, "Use agent's legacy status like waiting-for-credentials")
+	flagSet.IntVar(&config.Agent.RetainCollections, "retain-collections", config.Agent.RetainCollections, "Number of completed (inactive) collections to keep in addition to the active one")
 }
 
 func registerConsoleFlags(flagSet *pflag.FlagSet, config *config.Configuration) {

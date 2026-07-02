@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 	"github.com/kubev2v/migration-planner/pkg/inventory/converters"
@@ -55,16 +56,26 @@ func (s *VMService) Get(ctx context.Context, id string) (*models.VM, error) {
 }
 
 func (s *VMService) List(ctx context.Context, params VMListParams) ([]models.VirtualMachineSummary, int, error) {
-	filter := store.ByFilter(params.Expression)
+	// Find the active collection.
+	cols, err := s.store.Collection().List(ctx, sq.Eq{"vcenter_id": defaultVCenterID, "active": true})
+	if err != nil {
+		return nil, 0, fmt.Errorf("finding active collection: %w", err)
+	}
+	if len(cols) == 0 {
+		// No collection published yet — return empty list, not an error.
+		return nil, 0, nil
+	}
 
 	opts := params.listOptions()
+	opts = append(opts, store.WithCollectionID(cols[0].ID))
 
+	filter := store.ByFilter(params.Expression)
 	vms, err := s.store.VM().List(ctx, filter, opts...)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	total, err := s.store.VM().Count(ctx, filter)
+	total, err := s.store.VM().Count(ctx, filter, store.WithCollectionID(cols[0].ID))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -95,8 +106,29 @@ func (p VMListParams) listOptions() []store.ListOption {
 	return opts
 }
 
+// activeCollectionID returns the ID of the currently active collection for the
+// default vCenter, or 0 if none is active yet. A zero return means "no data
+// available" and callers should treat it as an empty result without error.
+func (s *VMService) activeCollectionID(ctx context.Context) (int64, error) {
+	cols, err := s.store.Collection().List(ctx, sq.Eq{"vcenter_id": defaultVCenterID, "active": true})
+	if err != nil {
+		return 0, err
+	}
+	if len(cols) == 0 {
+		return 0, nil // no active collection yet
+	}
+	return cols[0].ID, nil
+}
+
 func (s *VMService) GetFilterOptions(ctx context.Context) (models.VMFilterOptions, error) {
-	return s.store.VM().GetFilterOptions(ctx)
+	collectionID, err := s.activeCollectionID(ctx)
+	if err != nil {
+		return models.VMFilterOptions{}, fmt.Errorf("finding active collection: %w", err)
+	}
+	if collectionID == 0 {
+		return models.VMFilterOptions{}, nil
+	}
+	return s.store.VM().GetFilterOptions(ctx, collectionID)
 }
 
 // UpdateMigrationExcluded updates the migration exclusion status for a VM.
@@ -205,11 +237,17 @@ func (s *VMService) UpdateMigrationExcluded(ctx context.Context, id string, excl
 		})
 	}
 
+	// Resolve the active collection ID before the transaction so we can pass it
+	// to both Inventory().Save and SaveGroupInventory without an inner lookup.
+	activeColID, err := s.activeCollectionID(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving active collection for inventory save: %w", err)
+	}
+
 	// Transaction 2: Update main inventory and all affected group inventories + add outbox events
 	// If this fails, the deferred rollback will restore the original VM state
 	err = s.store.WithTx(ctx, func(txCtx context.Context) error {
-		// Update main inventory
-		if err := s.store.Inventory().Save(txCtx, mainInventoryData); err != nil {
+		if err := s.store.Inventory().Save(txCtx, activeColID, mainInventoryData); err != nil {
 			return fmt.Errorf("updating main inventory: %w", err)
 		}
 
@@ -224,8 +262,24 @@ func (s *VMService) UpdateMigrationExcluded(ctx context.Context, id string, excl
 
 		// Update group inventories and add outbox events
 		for _, gi := range newInventories {
-			if err := s.store.Group().UpdateInventory(txCtx, gi.groupID, gi.inventory); err != nil {
-				return fmt.Errorf("updating inventory for group %s: %w", gi.groupID, err)
+			// Save group inventory to group_inventory table scoped to the active collection,
+			// and bump groups.updated_at so that callers can detect the change.
+			if activeColID != 0 {
+				var invData []byte
+				if gi.inventory != nil {
+					invData, err = json.Marshal(gi.inventory)
+					if err != nil {
+						return fmt.Errorf("marshaling inventory for group %s: %w", gi.groupID, err)
+					}
+				}
+				if invData != nil {
+					if err := s.store.Group().SaveGroupInventory(txCtx, gi.groupID, activeColID, invData); err != nil {
+						return fmt.Errorf("saving group inventory for group %s: %w", gi.groupID, err)
+					}
+				}
+				if err := s.store.Group().TouchUpdatedAt(txCtx, gi.groupID); err != nil {
+					return fmt.Errorf("touching updated_at for group %s: %w", gi.groupID, err)
+				}
 			}
 
 			// Add outbox event for group inventory update
@@ -289,12 +343,26 @@ func (s *VMService) UpdateLabels(ctx context.Context, id string, labels []string
 // GetAllLabels returns all distinct labels in use across VMs along with their counts.
 // The labels and counts are returned in the same order (sorted alphabetically by label).
 func (s *VMService) GetAllLabels(ctx context.Context) ([]string, []int, error) {
-	return s.store.VM().GetAllLabels(ctx)
+	collectionID, err := s.activeCollectionID(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("finding active collection: %w", err)
+	}
+	if collectionID == 0 {
+		return nil, nil, nil
+	}
+	return s.store.VM().GetAllLabels(ctx, collectionID)
 }
 
-// RemoveLabelFromAllVMs removes a label from all VMs in the system.
+// RemoveLabelFromAllVMs removes a label from all VMs in the active collection.
 func (s *VMService) RemoveLabelFromAllVMs(ctx context.Context, label string) (int, error) {
-	return s.store.VM().RemoveLabelGlobally(ctx, label)
+	collectionID, err := s.activeCollectionID(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("finding active collection: %w", err)
+	}
+	if collectionID == 0 {
+		return 0, nil
+	}
+	return s.store.VM().RemoveLabelGlobally(ctx, label, collectionID)
 }
 
 // UpdateLabelVMs adds and/or removes a label from multiple VMs atomically.

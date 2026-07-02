@@ -45,6 +45,9 @@ type InspectionResult struct {
 	Completed  bool
 	SnapshotID string
 	Concerns   []VmInspectionConcern
+	// VmMoid is the vSphere MOID resolved from the hash VM ID in the first work unit.
+	// It is used by subsequent work units that need to call vCenter APIs.
+	VmMoid string
 }
 
 // VmInspectionResult is one persisted inspection run for a VM (ordered by inspection_id; CreatedAt is unset).

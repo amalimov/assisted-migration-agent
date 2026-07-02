@@ -16,10 +16,11 @@ import (
 
 var _ = Describe("InventoryService", func() {
 	var (
-		ctx context.Context
-		db  *sql.DB
-		st  *store.Store
-		srv *services.InventoryService
+		ctx          context.Context
+		db           *sql.DB
+		st           *store.Store
+		srv          *services.InventoryService
+		collectionID int64
 	)
 
 	BeforeEach(func() {
@@ -31,6 +32,9 @@ var _ = Describe("InventoryService", func() {
 
 		st = store.NewStore(db, test.NewMockValidator())
 		Expect(st.Migrate(ctx)).To(Succeed())
+
+		// Create an active collection (vcenter_id="default") so GetInventory can find it.
+		collectionID = createActiveCollection(ctx, st)
 
 		srv = services.NewInventoryService(st)
 	})
@@ -55,14 +59,15 @@ var _ = Describe("InventoryService", func() {
 			Expect(inv).To(BeNil())
 		})
 
-		// Given inventory data has been inserted via raw SQL
+		// Given inventory data was saved through the store for the active collection
 		// When we request the inventory through the service
 		// Then it should return the stored inventory data
 		It("should return inventory after raw SQL insert", func() {
-			// Arrange
+			// Arrange: insert directly into inventory table with the active collection's ID.
 			inventoryJSON := `{"vcenter_id":"vc-123","clusters":{},"vcenter":{}}`
 			_, err := db.ExecContext(ctx,
-				`INSERT INTO inventory (id, data) VALUES (1, ?)`, []byte(inventoryJSON))
+				`INSERT INTO inventory (collection_id, data) VALUES (?, ?)`,
+				collectionID, []byte(inventoryJSON))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
@@ -80,9 +85,9 @@ var _ = Describe("InventoryService", func() {
 		// When we request the inventory through the service
 		// Then it should return the same data
 		It("should return inventory saved through store", func() {
-			// Arrange
+			// Arrange: save using the active collection ID so GetActive can find it.
 			data := []byte(`{"vcenter_id":"vc-456"}`)
-			Expect(st.Inventory().Save(ctx, data)).To(Succeed())
+			Expect(st.Inventory().Save(ctx, collectionID, data)).To(Succeed())
 
 			// Act
 			inv, err := srv.GetInventory(ctx)

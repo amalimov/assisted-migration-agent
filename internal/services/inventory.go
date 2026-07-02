@@ -19,7 +19,7 @@ func NewInventoryService(st *store.Store) *InventoryService {
 	return srv
 }
 
-// GetInventory retrieves the stored inventory.
+// GetInventory retrieves the stored inventory for the active collection.
 func (c *InventoryService) GetInventory(ctx context.Context) (*models.Inventory, error) {
-	return c.store.Inventory().Get(ctx)
+	return c.store.Inventory().GetActive(ctx, c.store.Collection())
 }

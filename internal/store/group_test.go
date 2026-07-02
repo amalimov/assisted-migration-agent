@@ -10,8 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kubev2v/migration-planner/pkg/inventory"
-
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
@@ -46,11 +44,11 @@ var _ = Describe("GroupStore", func() {
 		}
 	})
 
-	// Helper to insert VM into vinfo table
+	// Helper to insert VM into vinfo table (collection_id=0 matches the stub collectionID used in legacy tests).
 	insertVM := func(id, name, folder string) {
 		_, err := db.ExecContext(ctx, `
-			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template", "Folder")
-			VALUES (?, ?, 'poweredOn', 'cluster-a', 4096, false, ?)
+			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template", "Folder", collection_id)
+			VALUES (?, ?, 'poweredOn', 'cluster-a', 4096, false, ?, 0)
 		`, id, name, folder)
 		Expect(err).NotTo(HaveOccurred())
 	}
@@ -396,7 +394,7 @@ var _ = Describe("GroupStore", func() {
 		})
 
 		It("should do nothing when no groups exist", func() {
-			err := s.Group().RefreshMatches(ctx)
+			err := s.Group().RefreshMatches(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -407,7 +405,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			ids := getMatchedVMIDs(g.ID)
@@ -427,7 +425,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx)
+			err = s.Group().RefreshMatches(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			ids1 := getMatchedVMIDs(g1.ID)
@@ -451,14 +449,14 @@ var _ = Describe("GroupStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Refresh all first
-			err = s.Group().RefreshMatches(ctx)
+			err = s.Group().RefreshMatches(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(getMatchedVMIDs(g1.ID)).To(ConsistOf("vm-1", "vm-2"))
 			Expect(getMatchedVMIDs(g2.ID)).To(ConsistOf("vm-3"))
 
 			// Refresh only g1 — g2 should remain unchanged
-			err = s.Group().RefreshMatches(ctx, g1.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g1.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(getMatchedVMIDs(g1.ID)).To(ConsistOf("vm-1", "vm-2"))
@@ -472,7 +470,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getMatchedVMIDs(g.ID)).To(ConsistOf("vm-1", "vm-2"))
 
@@ -480,7 +478,7 @@ var _ = Describe("GroupStore", func() {
 			_, err = s.Group().Update(ctx, g.ID, *g)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getMatchedVMIDs(g.ID)).To(ConsistOf("vm-3"))
 		})
@@ -492,7 +490,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getMatchedVMIDs(g.ID)).To(ConsistOf("vm-1", "vm-2"))
 
@@ -521,7 +519,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			groupIDs, err := s.Group().GetGroupsContainingVM(ctx, "vm-3")
@@ -536,7 +534,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			groupIDs, err := s.Group().GetGroupsContainingVM(ctx, "vm-1")
@@ -558,7 +556,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx)
+			err = s.Group().RefreshMatches(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 
 			// vm-1 is in production folder AND has 'server' in name
@@ -587,7 +585,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			groupIDs, err := s.Group().GetGroupsContainingVM(ctx, "non-existent-vm")
@@ -602,7 +600,7 @@ var _ = Describe("GroupStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			// VM should not be found in the empty group
@@ -612,202 +610,134 @@ var _ = Describe("GroupStore", func() {
 		})
 	})
 
-	Context("Inventory Data", func() {
-		It("should create group with inventory data", func() {
-			// Arrange
-			inv := &inventory.Inventory{
-				VCenterID:      "vcenter-1",
-				VCenterVersion: "7.0.3",
-			}
-			g := models.Group{
-				Name:      "test-group",
-				Filter:    "memory >= 8GB",
-				Inventory: inv,
-			}
+	Context("RefreshMatches with collection_id", func() {
+		var group *models.Group
+		const col1 int64 = 1
+		const col2 int64 = 2
 
-			// Act
-			created, err := s.Group().Create(ctx, g)
-
-			// Assert
+		BeforeEach(func() {
+			var err error
+			group, err = s.Group().Create(ctx, models.Group{Name: "test-group", Filter: "name = 'match-vm'"})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(created.Inventory).NotTo(BeNil())
-			Expect(created.Inventory.VCenterID).To(Equal("vcenter-1"))
-			Expect(created.Inventory.VCenterVersion).To(Equal("7.0.3"))
+
+			// Insert a vinfo row for collection 1 that matches the group filter.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", collection_id, vmmoid)
+				VALUES ('hash-col1', 'match-vm', ?, 'vm-1')
+			`, col1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Insert a vinfo row for collection 2 that also matches.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", collection_id, vmmoid)
+				VALUES ('hash-col2', 'match-vm', ?, 'vm-1')
+			`, col2)
+			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should create group without inventory data", func() {
-			// Arrange
-			g := models.Group{Name: "test-group", Filter: "memory >= 8GB"}
+		It("generates matches only for the given collection", func() {
+			Expect(s.Group().RefreshMatches(ctx, col1)).To(Succeed())
 
-			// Act
-			created, err := s.Group().Create(ctx, g)
-
-			// Assert
+			var vmIDs store.StringArray
+			err := db.QueryRowContext(ctx,
+				`SELECT vm_ids FROM group_matches WHERE group_id = ? AND collection_id = ?`,
+				group.ID, col1).Scan(&vmIDs)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(created.Inventory).To(BeNil())
+			Expect([]string(vmIDs)).To(ConsistOf("hash-col1"))
+
+			// Collection 2 must have no matches yet.
+			var count int
+			Expect(db.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM group_matches WHERE group_id = ? AND collection_id = ?`,
+				group.ID, col2).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
 		})
 
-		It("should retrieve group with inventory data", func() {
-			// Arrange
-			inv := &inventory.Inventory{
-				VCenterID:      "vcenter-2",
-				VCenterVersion: "8.0.1",
-			}
-			g := models.Group{
-				Name:      "test-group",
-				Filter:    "cluster = 'prod'",
-				Inventory: inv,
-			}
-			created, err := s.Group().Create(ctx, g)
+		It("does not delete matches from other collections when refreshing one", func() {
+			Expect(s.Group().RefreshMatches(ctx, col1)).To(Succeed())
+			Expect(s.Group().RefreshMatches(ctx, col2)).To(Succeed())
+
+			// col1 matches still present.
+			var count int
+			Expect(db.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM group_matches WHERE collection_id = ?`, col1).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+		})
+	})
+
+	Context("DeleteMatchesForCollection", func() {
+		It("removes all group_matches rows for a collection", func() {
+			group, err := s.Group().Create(ctx, models.Group{Name: "del-test", Filter: "name = 'x'"})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Act
-			retrieved, err := s.Group().Get(ctx, created.ID)
-
-			// Assert
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO group_matches (group_id, collection_id, vm_ids)
+				VALUES (?, 10, ['vm-x']), (?, 20, ['vm-y'])
+			`, group.ID, group.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Inventory).NotTo(BeNil())
-			Expect(retrieved.Inventory.VCenterID).To(Equal("vcenter-2"))
-			Expect(retrieved.Inventory.VCenterVersion).To(Equal("8.0.1"))
+
+			Expect(s.Group().DeleteMatchesForCollection(ctx, 10)).To(Succeed())
+
+			var count int
+			Expect(db.QueryRowContext(ctx, `SELECT COUNT(*) FROM group_matches WHERE collection_id = 10`).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
+
+			// Collection 20 is untouched.
+			Expect(db.QueryRowContext(ctx, `SELECT COUNT(*) FROM group_matches WHERE collection_id = 20`).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+		})
+	})
+
+	Context("Group Inventory", func() {
+		var created *models.Group
+
+		BeforeEach(func() {
+			var err error
+			created, err = s.Group().Create(ctx, models.Group{Name: "inv-group", Filter: "memory >= 1"})
+			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should list groups with inventory data", func() {
-			// Arrange
-			inv1 := &inventory.Inventory{VCenterID: "vc1", VCenterVersion: "7.0"}
-			inv2 := &inventory.Inventory{VCenterID: "vc2", VCenterVersion: "8.0"}
-			g1 := models.Group{Name: "group1", Filter: "filter1", Inventory: inv1}
-			g2 := models.Group{Name: "group2", Filter: "filter2", Inventory: inv2}
-			_, err := s.Group().Create(ctx, g1)
-			Expect(err).NotTo(HaveOccurred())
-			_, err = s.Group().Create(ctx, g2)
-			Expect(err).NotTo(HaveOccurred())
+		It("saves and retrieves a blob", func() {
+			data := []byte(`{"vms":[{"id":"vm-1"}]}`)
+			Expect(s.Group().SaveGroupInventory(ctx, created.ID, 1, data)).To(Succeed())
 
-			// Act
-			groups, err := s.Group().List(ctx, nil, 0, 0)
-
-			// Assert
+			got, err := s.Group().GetGroupInventory(ctx, created.ID, 1)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(groups).To(HaveLen(2))
-			Expect(groups[0].Inventory).NotTo(BeNil())
-			Expect(groups[1].Inventory).NotTo(BeNil())
-			vcenterIDs := []string{groups[0].Inventory.VCenterID, groups[1].Inventory.VCenterID}
-			Expect(vcenterIDs).To(ConsistOf("vc1", "vc2"))
+			Expect(got).To(Equal(data))
 		})
 
-		It("should update inventory data using UpdateInventory", func() {
-			// Arrange
-			g := models.Group{Name: "test-group", Filter: "filter"}
-			created, err := s.Group().Create(ctx, g)
+		It("returns nil (not an error) for a missing collection", func() {
+			got, err := s.Group().GetGroupInventory(ctx, created.ID, 9999)
 			Expect(err).NotTo(HaveOccurred())
-
-			newInventory := &inventory.Inventory{
-				VCenterID:      "updated-vcenter",
-				VCenterVersion: "9.0.0",
-			}
-
-			// Act
-			err = s.Group().UpdateInventory(ctx, created.ID, newInventory)
-
-			// Assert
-			Expect(err).NotTo(HaveOccurred())
-
-			retrieved, err := s.Group().Get(ctx, created.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Inventory).NotTo(BeNil())
-			Expect(retrieved.Inventory.VCenterID).To(Equal("updated-vcenter"))
-			Expect(retrieved.Inventory.VCenterVersion).To(Equal("9.0.0"))
+			Expect(got).To(BeNil())
 		})
 
-		It("should update inventory data to nil", func() {
-			// Arrange
-			initialInventory := &inventory.Inventory{
-				VCenterID:      "initial-vcenter",
-				VCenterVersion: "7.0",
-			}
-			g := models.Group{
-				Name:      "test-group",
-				Filter:    "filter",
-				Inventory: initialInventory,
-			}
-			created, err := s.Group().Create(ctx, g)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(created.Inventory).NotTo(BeNil())
+		It("upserts on second save", func() {
+			Expect(s.Group().SaveGroupInventory(ctx, created.ID, 1, []byte(`{"v":1}`))).To(Succeed())
+			Expect(s.Group().SaveGroupInventory(ctx, created.ID, 1, []byte(`{"v":2}`))).To(Succeed())
 
-			// Act
-			err = s.Group().UpdateInventory(ctx, created.ID, nil)
-
-			// Assert
+			got, err := s.Group().GetGroupInventory(ctx, created.ID, 1)
 			Expect(err).NotTo(HaveOccurred())
-
-			retrieved, err := s.Group().Get(ctx, created.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Inventory).To(BeNil())
+			Expect(got).To(MatchJSON(`{"v":2}`))
 		})
 
-		It("should return error when updating inventory for non-existent group", func() {
-			// Arrange
-			nonExistentID := uuid.New()
-			inventoryData := &inventory.Inventory{VCenterID: "test"}
-
-			// Act
-			err := s.Group().UpdateInventory(ctx, nonExistentID, inventoryData)
-
-			// Assert
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not found"))
-		})
-
-		It("should handle large inventory data", func() {
-			// Arrange
-			clusters := make(map[string]inventory.InventoryData)
-			for i := 0; i < 100; i++ {
-				clusters[fmt.Sprintf("cluster-%d", i)] = inventory.InventoryData{}
-			}
-			largeInventory := &inventory.Inventory{
-				VCenterID:      "large-vcenter",
-				VCenterVersion: "8.0",
-				Clusters:       clusters,
-			}
-			g := models.Group{
-				Name:      "large-group",
-				Filter:    "memory > 0",
-				Inventory: largeInventory,
-			}
-
-			// Act
-			created, err := s.Group().Create(ctx, g)
-
-			// Assert
-			Expect(err).NotTo(HaveOccurred())
-			Expect(created.Inventory).NotTo(BeNil())
-			Expect(created.Inventory.VCenterID).To(Equal("large-vcenter"))
-			Expect(len(created.Inventory.Clusters)).To(Equal(100))
-
-			retrieved, err := s.Group().Get(ctx, created.ID)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Inventory).NotTo(BeNil())
-			Expect(retrieved.Inventory.VCenterID).To(Equal("large-vcenter"))
-			Expect(len(retrieved.Inventory.Clusters)).To(Equal(100))
-		})
-
-		It("should handle corrupted inventory JSON in database", func() {
-			// Arrange - Create a group first
-			g := models.Group{
-				Name:      "test-group",
-				Filter:    "memory >= 8GB",
-				Inventory: &inventory.Inventory{VCenterID: "test"},
-			}
-			created, err := s.Group().Create(ctx, g)
+		It("deletes all rows for a collection without affecting other collections", func() {
+			created2, err := s.Group().Create(ctx, models.Group{Name: "g2", Filter: "memory >= 2"})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Act - Corrupt the inventory data in the database
-			_, err = db.ExecContext(ctx, "UPDATE groups SET inventory_data = ? WHERE id = ?", []byte(`{invalid json}`), created.ID)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(s.Group().SaveGroupInventory(ctx, created.ID, 10, []byte(`{}`))).To(Succeed())
+			Expect(s.Group().SaveGroupInventory(ctx, created2.ID, 10, []byte(`{}`))).To(Succeed())
+			Expect(s.Group().SaveGroupInventory(ctx, created.ID, 11, []byte(`{}`))).To(Succeed())
 
-			// Assert - Get should fail with unmarshal error
-			_, err = s.Group().Get(ctx, created.ID)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("unmarshal"))
+			Expect(s.Group().DeleteGroupInventoryForCollection(ctx, 10)).To(Succeed())
+
+			r1, err := s.Group().GetGroupInventory(ctx, created.ID, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(r1).To(BeNil())
+
+			rKeep, err := s.Group().GetGroupInventory(ctx, created.ID, 11)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rKeep).NotTo(BeNil())
 		})
 	})
 })

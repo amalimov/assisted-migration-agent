@@ -3,10 +3,12 @@ package store_test
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
@@ -22,104 +24,80 @@ var _ = Describe("InventoryStore", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-
 		var err error
 		db, err = store.NewDB(nil, ":memory:")
 		Expect(err).NotTo(HaveOccurred())
-
-		err = migrations.Run(ctx, db)
-		Expect(err).NotTo(HaveOccurred())
-
+		Expect(migrations.Run(ctx, db)).To(Succeed())
 		s = store.NewStore(db, test.NewMockValidator())
 	})
 
-	AfterEach(func() {
-		if db != nil {
-			_ = db.Close()
-		}
-	})
+	AfterEach(func() { _ = db.Close() })
 
-	Describe("Save", func() {
-		// Given valid inventory data
-		// When we save the inventory
-		// Then it should save successfully without error
-		It("should save inventory successfully", func() {
-			// Arrange
-			data := []byte(`{"vms": [{"name": "vm1"}]}`)
+	// helper: create a done+active collection and return its ID
+	createActiveCollection := func() int64 {
+		now := time.Now()
+		col, err := s.Collection().Create(ctx, models.Collection{
+			VCenterID: "default",
+			State:     models.CollectionStateRunning,
+			StartedAt: &now,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(s.Collection().MarkDone(ctx, col.ID)).To(Succeed())
+		return col.ID
+	}
 
-			// Act
-			err := s.Inventory().Save(ctx, data)
+	Describe("Save and GetByCollectionID", func() {
+		It("stores and retrieves a blob", func() {
+			colID := createActiveCollection()
+			data := []byte(`{"vms":[]}`)
+			Expect(s.Inventory().Save(ctx, colID, data)).To(Succeed())
 
-			// Assert
+			got, err := s.Inventory().GetByCollectionID(ctx, colID)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Data).To(Equal(data))
 		})
 
-		// Given existing inventory in the store
-		// When we save new inventory data
-		// Then it should update the existing record (upsert)
-		It("should update inventory on second save (upsert)", func() {
-			// Arrange
-			data1 := []byte(`{"vms": [{"name": "vm1"}]}`)
-			err := s.Inventory().Save(ctx, data1)
-			Expect(err).NotTo(HaveOccurred())
+		It("upserts on second save", func() {
+			colID := createActiveCollection()
+			Expect(s.Inventory().Save(ctx, colID, []byte(`{"v":1}`))).To(Succeed())
+			Expect(s.Inventory().Save(ctx, colID, []byte(`{"v":2}`))).To(Succeed())
 
-			// Act
-			data2 := []byte(`{"vms": [{"name": "vm1"}, {"name": "vm2"}]}`)
-			err = s.Inventory().Save(ctx, data2)
+			got, err := s.Inventory().GetByCollectionID(ctx, colID)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Data).To(MatchJSON(`{"v":2}`))
+		})
 
-			// Assert
-			retrieved, err := s.Inventory().Get(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Data).To(Equal(data2))
+		It("returns ResourceNotFoundError for unknown collection", func() {
+			_, err := s.Inventory().GetByCollectionID(ctx, 9999)
+			Expect(srvErrors.IsResourceNotFoundError(err)).To(BeTrue())
 		})
 	})
 
-	Describe("Get", func() {
-		// Given an empty inventory store
-		// When we try to get the inventory
-		// Then it should return ResourceNotFoundError
-		It("should return ResourceNotFoundError when no inventory exists", func() {
-			// Act
-			_, err := s.Inventory().Get(ctx)
-
-			// Assert
+	Describe("GetActive", func() {
+		It("returns ResourceNotFoundError when no active collection has inventory", func() {
+			_, err := s.Inventory().GetActive(ctx, s.Collection())
 			Expect(srvErrors.IsResourceNotFoundError(err)).To(BeTrue())
 		})
 
-		// Given saved inventory in the store
-		// When we retrieve the inventory
-		// Then it should return the saved data
-		It("should retrieve saved inventory", func() {
-			// Arrange
-			data := []byte(`{"vms": [{"name": "vm1"}]}`)
-			err := s.Inventory().Save(ctx, data)
-			Expect(err).NotTo(HaveOccurred())
+		It("returns the blob for the active collection", func() {
+			colID := createActiveCollection()
+			data := []byte(`{"active":true}`)
+			Expect(s.Inventory().Save(ctx, colID, data)).To(Succeed())
 
-			// Act
-			retrieved, err := s.Inventory().Get(ctx)
-
-			// Assert
+			got, err := s.Inventory().GetActive(ctx, s.Collection())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.Data).To(Equal(data))
+			Expect(got.Data).To(Equal(data))
 		})
+	})
 
-		// Given saved inventory in the store
-		// When we retrieve the inventory
-		// Then it should have timestamps set by the database
-		It("should have timestamps set by database", func() {
-			// Arrange
-			data := []byte(`{"vms": []}`)
-			err := s.Inventory().Save(ctx, data)
-			Expect(err).NotTo(HaveOccurred())
+	Describe("DeleteByCollectionID", func() {
+		It("removes the blob", func() {
+			colID := createActiveCollection()
+			Expect(s.Inventory().Save(ctx, colID, []byte(`{}`))).To(Succeed())
+			Expect(s.Inventory().DeleteByCollectionID(ctx, colID)).To(Succeed())
 
-			// Act
-			retrieved, err := s.Inventory().Get(ctx)
-
-			// Assert
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.CreatedAt).NotTo(BeZero())
-			Expect(retrieved.UpdatedAt).NotTo(BeZero())
+			_, err := s.Inventory().GetByCollectionID(ctx, colID)
+			Expect(srvErrors.IsResourceNotFoundError(err)).To(BeTrue())
 		})
 	})
 })

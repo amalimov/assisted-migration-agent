@@ -818,6 +818,9 @@ type VirtualMachine struct {
 
 	// VCenterState vCenter state (e.g., poweredOn, poweredOff, suspended)
 	VCenterState string `json:"vCenterState"`
+
+	// VmMoid The original vSphere MOID for this VM. Stable across collections — use this to correlate the same physical VM between different collection snapshots.
+	VmMoid *string `json:"vmMoid,omitempty"`
 }
 
 // VirtualMachineDetail defines model for VirtualMachineDetail.
@@ -1101,7 +1104,7 @@ type GetVMsParams struct {
 	// ByExpression Filter by expression (matches VMs with the provided expression)
 	ByExpression *string `form:"byExpression,omitempty" json:"byExpression,omitempty"`
 
-	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+	// Sort Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg, vmMoid.
 	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
 
 	// Page Page number for pagination

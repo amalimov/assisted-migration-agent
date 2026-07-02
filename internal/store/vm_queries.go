@@ -1,6 +1,10 @@
 package store
 
-import sq "github.com/Masterminds/squirrel"
+import (
+	"fmt"
+
+	sq "github.com/Masterminds/squirrel"
+)
 
 // vmGetQuery fetches a single VM by ID with full details (disks, NICs, concerns)
 // plus utilization data from the latest rightsizing report.
@@ -62,11 +66,12 @@ concerns_agg AS (
 groups_agg AS (
     SELECT
         u.vm_id,
+        gm.collection_id AS gm_collection_id,
         ARRAY_AGG(DISTINCT grp.name) AS groups
     FROM group_matches gm
     JOIN groups grp ON gm.group_id = grp.id
     , UNNEST(gm.vm_ids) AS u(vm_id)
-    GROUP BY u.vm_id
+    GROUP BY u.vm_id, gm.collection_id
 )
 SELECT
     COALESCE(i."VM ID", '') AS "ID",
@@ -133,39 +138,49 @@ LEFT JOIN vmemory m ON i."VM ID" = m."VM ID"
 LEFT JOIN disks d ON i."VM ID" = d."VM ID"
 LEFT JOIN nics n ON i."VM ID" = n."VM ID"
 LEFT JOIN concerns_agg con ON i."VM ID" = con."VM_ID"
-LEFT JOIN groups_agg g ON i."VM ID" = g.vm_id
+LEFT JOIN groups_agg g ON i."VM ID" = g.vm_id AND g.gm_collection_id = i."collection_id"
 LEFT JOIN rightsizing_vm_utilization u
-    ON u.moid = i."VM ID"
+    ON u.moid = i."vmmoid"
     AND u.report_id = (
         SELECT id FROM rightsizing_reports
-        WHERE written_batch_count > 0
-        ORDER BY created_at DESC LIMIT 1
+        WHERE collection_id = i."collection_id"
+        ORDER BY id DESC LIMIT 1
     )
 WHERE i."VM ID" = ?;
 `
 
-// vmFilterOptionsQuery returns distinct clusters, datacenters, concern labels,
-// and concern categories in a single row.
-const vmFilterOptionsQuery = `
+// buildVMFilterOptionsQuery returns the query and args to fetch distinct filter option
+// values (clusters, datacenters, concern labels/categories, applications).
+// When collectionID is 0 the subqueries are unscoped (return data across all collections).
+func buildVMFilterOptionsQuery(collectionID int64) (string, []interface{}) {
+	collectionFilter := ""
+	var args []interface{}
+	if collectionID != 0 {
+		collectionFilter = ` AND "collection_id" = ?`
+		args = []interface{}{collectionID, collectionID}
+	}
+	query := fmt.Sprintf(`
 SELECT
     (SELECT COALESCE(list(DISTINCT "Cluster" ORDER BY "Cluster"), [])
-     FROM vinfo WHERE "Cluster" IS NOT NULL AND "Cluster" != '') AS clusters,
+     FROM vinfo WHERE "Cluster" IS NOT NULL AND "Cluster" != ''%s) AS clusters,
     (SELECT COALESCE(list(DISTINCT "Datacenter" ORDER BY "Datacenter"), [])
-     FROM vinfo WHERE "Datacenter" IS NOT NULL AND "Datacenter" != '') AS datacenters,
+     FROM vinfo WHERE "Datacenter" IS NOT NULL AND "Datacenter" != ''%s) AS datacenters,
     (SELECT COALESCE(list(DISTINCT "Label" ORDER BY "Label"), [])
      FROM concerns WHERE "Label" IS NOT NULL AND "Label" != '') AS concern_labels,
     (SELECT COALESCE(list(DISTINCT "Category" ORDER BY "Category"), [])
      FROM concerns WHERE "Category" IS NOT NULL AND "Category" != '') AS concern_categories,
     (SELECT COALESCE(list(DISTINCT app_name ORDER BY app_name), [])
      FROM vm_applications) AS applications
-`
+`, collectionFilter, collectionFilter)
+	return query, args
+}
 
 // vmOutputQuery is the base aggregated output query that produces one row per VM.
 // Filters should be applied via Where clauses on the VM ID.
 var vmOutputQuery = sq.Select(
 	`v."VM ID" AS id`,
 	`v."VM" AS name`,
-	`v."Powerstate" AS power_state`,
+	`COALESCE(v."Powerstate", '') AS power_state`,
 	`COALESCE(v."Cluster", '') AS cluster`,
 	`COALESCE(v."Datacenter", '') AS datacenter`,
 	`v."Memory" AS memory`,
@@ -180,18 +195,19 @@ var vmOutputQuery = sq.Select(
 	`COALESCE(g.groups, [])::VARCHAR[] AS groups`,
 	`v."migration_excluded" AS migration_excluded`,
 	`COALESCE(CAST(v."labels" AS VARCHAR[]), [])::VARCHAR[] AS labels`,
+	`COALESCE(v."vmmoid", '') AS vmmoid`,
 ).From("vinfo v").
 	LeftJoin(`(SELECT "VM_ID", COUNT(*) AS issues_count FROM concerns GROUP BY "VM_ID") c ON v."VM ID" = c."VM_ID"`).
 	LeftJoin(`(SELECT "VM_ID", COUNT(*) AS critical_count FROM concerns WHERE "Category" = 'Critical' GROUP BY "VM_ID") crit ON v."VM ID" = crit."VM_ID"`).
 	LeftJoin(`(SELECT "VM ID", SUM("Capacity MiB") AS total_disk FROM vdisk GROUP BY "VM ID") d ON v."VM ID" = d."VM ID"`).
 	LeftJoin(`vm_inspection_status i ON v."VM ID" = i."VM ID"`).
 	LeftJoin(`(
-		SELECT u.vm_id, ARRAY_AGG(DISTINCT grp.name) AS groups
+		SELECT u.vm_id, gm.collection_id AS gm_collection_id, ARRAY_AGG(DISTINCT grp.name) AS groups
 		FROM group_matches gm
 		JOIN groups grp ON gm.group_id = grp.id
 		, UNNEST(gm.vm_ids) AS u(vm_id)
-		GROUP BY u.vm_id
-	) g ON v."VM ID" = g.vm_id`)
+		GROUP BY u.vm_id, gm.collection_id
+	) g ON v."VM ID" = g.vm_id AND g.gm_collection_id = v."collection_id"`)
 
 // vmFilterSubquery is the base flat JOIN query for filtering.
 // It joins all tables so WHERE clauses can reference any raw column.
@@ -209,23 +225,14 @@ var vmFilterSubquery = sq.Select(`DISTINCT v."VM ID"`).
 	LeftJoin(`(SELECT "VM ID", SUM("Capacity MiB") AS total_disk FROM vdisk GROUP BY "VM ID") d ON v."VM ID" = d."VM ID"`).
 	LeftJoin(`vdatastore ds ON ds."Name" = regexp_extract(COALESCE(dk."Path", dk."Disk Path"), '\[([^\]]+)\]', 1)`).
 	LeftJoin(`vm_inspection_concerns ic ON v."VM ID" = ic."VM ID" AND ic.inspection_id = (SELECT MAX(inspection_id) FROM vm_inspection_concerns imx WHERE imx."VM ID" = v."VM ID")`).
-	LeftJoin(`(
-SELECT moid, vm_name,
-       provisioned_cpus, provisioned_memory_mb, provisioned_disk_kb,
-       cpu_avg_pct, cpu_p95_pct, cpu_max_pct, cpu_latest_pct,
-       mem_avg_pct, mem_p95_pct, mem_max_pct, mem_latest_pct,
-       disk_pct, confidence_pct
-FROM rightsizing_vm_utilization
-WHERE report_id = (
-      SELECT id FROM rightsizing_reports
-      WHERE written_batch_count > 0
-      ORDER BY created_at DESC LIMIT 1
-  )) as utilization ON v."VM ID" = utilization.moid`).
+	LeftJoin(`rightsizing_vm_utilization AS utilization ON utilization.moid = v."vmmoid" AND utilization.report_id = (` +
+		`SELECT id FROM rightsizing_reports WHERE collection_id = v."collection_id" ORDER BY id DESC LIMIT 1` +
+		`)`).
 	LeftJoin(`vm_applications va ON v."VM ID" = va.vm_id`).
 	LeftJoin(`(
-		SELECT u.vm_id, ARRAY_AGG(DISTINCT grp.name) AS groups
+		SELECT u.vm_id, gm.collection_id AS gm_collection_id, ARRAY_AGG(DISTINCT grp.name) AS groups
 		FROM group_matches gm
 		JOIN groups grp ON gm.group_id = grp.id
 		, UNNEST(gm.vm_ids) AS u(vm_id)
-		GROUP BY u.vm_id
-	) g ON v."VM ID" = g.vm_id`)
+		GROUP BY u.vm_id, gm.collection_id
+	) g ON v."VM ID" = g.vm_id AND g.gm_collection_id = v."collection_id"`)

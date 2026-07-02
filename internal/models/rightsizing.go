@@ -8,6 +8,7 @@ import "time"
 
 // RightSizingReport is the input type for RightSizingStore.CreateReport.
 type RightSizingReport struct {
+	CollectionID        int64
 	VCenter             string
 	ClusterID           string
 	IntervalID          int
@@ -70,12 +71,13 @@ type RightsizingCollectionResult struct {
 // RightsizingParams holds request parameters for the TriggerCollection service call.
 type RightsizingParams struct {
 	Credentials
-	NameFilter  string
-	ClusterID   string
-	LookbackH   int // hours; e.g. 720 = 30 days
-	IntervalID  int // vSphere interval in seconds (300=day, 1800=week, 7200=month)
-	BatchSize   int
-	DiscoverVMs bool // true = query vSphere live; false (default) = use local inventory
+	NameFilter   string
+	ClusterID    string
+	LookbackH    int // hours; e.g. 720 = 30 days
+	IntervalID   int // vSphere interval in seconds (300=day, 1800=week, 7200=month)
+	BatchSize    int
+	DiscoverVMs  bool  // true = query vSphere live; false (default) = use local inventory
+	CollectionID int64 // when > 0, stamps the report with this collection ID instead of the active one
 }
 
 // RightsizingMetricStats holds per-metric aggregated statistics for the API read model.

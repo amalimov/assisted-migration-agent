@@ -3,23 +3,43 @@ package services_test
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 
+	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/services"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/test"
 )
 
+// createActiveCollection creates a running collection, marks it done (active=true),
+// and returns the collection ID. Uses vcenter_id="default" as required by VMService.List.
+func createActiveCollection(ctx context.Context, st *store.Store) int64 {
+	now := time.Now()
+	col := models.Collection{
+		VCenterID: "default",
+		VCenter:   "vc-01.example.com",
+		State:     models.CollectionStateRunning,
+		Active:    false,
+		StartedAt: &now,
+	}
+	created, err := st.Collection().Create(ctx, col)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	ExpectWithOffset(1, st.Collection().MarkDone(ctx, created.ID)).To(Succeed())
+	return created.ID
+}
+
 var _ = Describe("VMService", func() {
 	var (
-		ctx context.Context
-		db  *sql.DB
-		st  *store.Store
-		srv *services.VMService
+		ctx          context.Context
+		db           *sql.DB
+		st           *store.Store
+		srv          *services.VMService
+		collectionID int64
 	)
 
 	BeforeEach(func() {
@@ -31,7 +51,13 @@ var _ = Describe("VMService", func() {
 
 		st = store.NewStore(db, test.NewMockValidator())
 		Expect(st.Migrate(ctx)).To(Succeed())
-		Expect(test.InsertVMs(ctx, db)).To(Succeed())
+
+		// Create an active collection first so that InsertVMsForCollection
+		// can stamp the rows with the correct collection_id at INSERT time.
+		// (DuckDB FK constraints prevent updating collection_id after child
+		// rows referencing vinfo."VM ID" exist.)
+		collectionID = createActiveCollection(ctx, st)
+		Expect(test.InsertVMsForCollection(ctx, db, collectionID)).To(Succeed())
 
 		srv = services.NewVMService(st)
 	})
@@ -75,7 +101,7 @@ var _ = Describe("VMService", func() {
 	})
 
 	Context("List", func() {
-		// Given 10 VMs exist in the database
+		// Given 10 VMs exist in the database belonging to the active collection
 		// When we list without any filters
 		// Then it should return all VMs with the correct total count
 		It("should return all VMs with total count", func() {
@@ -178,6 +204,51 @@ var _ = Describe("VMService", func() {
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(total).To(Equal(10))
+			Expect(vms).To(BeEmpty())
+		})
+
+		// Given no active collection exists
+		// When we list VMs
+		// Then it should return an empty list with count 0 (not an error)
+		It("should return empty list when no active collection exists", func() {
+			// Arrange: deactivate the collection so none is active
+			Expect(st.Collection().Deactivate(ctx, collectionID)).To(Succeed())
+
+			// Act
+			vms, total, err := srv.List(ctx, services.VMListParams{})
+
+			// Assert
+			Expect(err).NotTo(HaveOccurred())
+			Expect(total).To(Equal(0))
+			Expect(vms).To(BeNil())
+		})
+
+		// Given VMs belonging to a previous (inactive) collection
+		// When we list VMs with a new active collection that has no VMs assigned
+		// Then it should return only the VMs from the active collection (none)
+		It("should only return VMs from the active collection", func() {
+			// Arrange: create a second collection with no VMs assigned, make it active.
+			now := time.Now()
+			newCol := models.Collection{
+				VCenterID: "default",
+				VCenter:   "vc-01.example.com",
+				State:     models.CollectionStateRunning,
+				Active:    false,
+				StartedAt: &now,
+			}
+			newCreated, err := st.Collection().Create(ctx, newCol)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Deactivate first collection, activate new one (no VMs assigned to it).
+			Expect(st.Collection().Deactivate(ctx, collectionID)).To(Succeed())
+			Expect(st.Collection().MarkDone(ctx, newCreated.ID)).To(Succeed())
+
+			// Act
+			vms, total, err := srv.List(ctx, services.VMListParams{})
+
+			// Assert: new collection has no vinfo rows assigned to it.
+			Expect(err).NotTo(HaveOccurred())
+			Expect(total).To(Equal(0))
 			Expect(vms).To(BeEmpty())
 		})
 	})

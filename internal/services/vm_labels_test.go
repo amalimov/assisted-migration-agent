@@ -16,10 +16,11 @@ import (
 
 var _ = Describe("VMService Labels", func() {
 	var (
-		ctx context.Context
-		svc *services.VMService
-		st  *store.Store
-		db  *sql.DB
+		ctx          context.Context
+		svc          *services.VMService
+		st           *store.Store
+		db           *sql.DB
+		collectionID int64
 	)
 
 	BeforeEach(func() {
@@ -33,6 +34,10 @@ var _ = Describe("VMService Labels", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		st = store.NewStore(db, test.NewMockValidator())
+
+		// Create an active collection so that VMService.List returns VMs.
+		collectionID = createActiveCollection(ctx, st)
+
 		svc = services.NewVMService(st)
 	})
 
@@ -42,12 +47,12 @@ var _ = Describe("VMService Labels", func() {
 		}
 	})
 
-	// Helper to insert VM into vinfo table
+	// Helper to insert VM into vinfo table, stamped with the active collectionID.
 	insertVM := func(id, name, cluster string) {
 		_, err := db.ExecContext(ctx, `
-			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template")
-			VALUES (?, ?, 'poweredOn', ?, 4096, false)
-		`, id, name, cluster)
+			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template", "collection_id")
+			VALUES (?, ?, 'poweredOn', ?, 4096, false, ?)
+		`, id, name, cluster, collectionID)
 		Expect(err).NotTo(HaveOccurred())
 	}
 

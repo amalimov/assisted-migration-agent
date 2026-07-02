@@ -298,3 +298,5 @@ require (
 )
 
 replace github.com/go-ini/ini => gopkg.in/ini.v1 v1.67.1
+
+replace github.com/kubev2v/migration-planner => /home/amalimov/projects/migration-planner

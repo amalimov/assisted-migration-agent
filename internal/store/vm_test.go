@@ -39,21 +39,24 @@ var _ = Describe("VMStore", func() {
 		}
 	})
 
-	// Helper to insert test data into vinfo table
+	// Helper to insert test data into vinfo table.
+	// Sets vmmoid = id and collection_id = 0 so that the rightsizing utilization join
+	// (on vmmoid + collection_id) works in tests that use the VM ID as the utilization moid.
 	insertVM := func(id, name, powerState, cluster string, memory int32) {
 		_, err := db.ExecContext(ctx, `
-			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template")
-			VALUES (?, ?, ?, ?, ?, false)
-		`, id, name, powerState, cluster, memory)
+			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template", vmmoid, collection_id)
+			VALUES (?, ?, ?, ?, ?, false, ?, 0)
+		`, id, name, powerState, cluster, memory, id)
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	// Helper to insert VM with template flag
+	// Helper to insert VM with template flag.
+	// Sets vmmoid = id and collection_id = 0 for the same reason as insertVM.
 	insertVMWithTemplate := func(id, name, powerState, cluster string, memory int32, isTemplate bool) {
 		_, err := db.ExecContext(ctx, `
-			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template")
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, id, name, powerState, cluster, memory, isTemplate)
+			INSERT INTO vinfo ("VM ID", "VM", "Powerstate", "Cluster", "Memory", "Template", vmmoid, collection_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+		`, id, name, powerState, cluster, memory, isTemplate, id)
 		Expect(err).NotTo(HaveOccurred())
 	}
 
@@ -947,7 +950,7 @@ var _ = Describe("VMStore", func() {
 
 	Context("GetFolders", func() {
 		// Given VMs with different folders
-		// When we call GetFolders
+		// When we call GetFolders with collectionID=0 (unscoped)
 		// Then it should return distinct folders ordered by name
 		It("should return distinct folders ordered by name", func() {
 			// Arrange
@@ -957,7 +960,7 @@ var _ = Describe("VMStore", func() {
 			insertVMWithFolder("vm-4", "vm4", "folder-3", "Testing")
 
 			// Act
-			folders, err := s.VM().GetFolders(ctx)
+			folders, err := s.VM().GetFolders(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -975,7 +978,7 @@ var _ = Describe("VMStore", func() {
 		// Then it should return an empty list
 		It("should return empty list when no VMs exist", func() {
 			// Act
-			folders, err := s.VM().GetFolders(ctx)
+			folders, err := s.VM().GetFolders(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -991,7 +994,7 @@ var _ = Describe("VMStore", func() {
 			insertVMWithFolder("vm-2", "vm2", "", "") // empty folder
 
 			// Act
-			folders, err := s.VM().GetFolders(ctx)
+			folders, err := s.VM().GetFolders(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -1007,13 +1010,30 @@ var _ = Describe("VMStore", func() {
 			insertVMWithFolder("vm-1", "vm1", "folder-123", "")
 
 			// Act
-			folders, err := s.VM().GetFolders(ctx)
+			folders, err := s.VM().GetFolders(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(folders).To(HaveLen(1))
 			Expect(folders[0].ID).To(Equal("folder-123"))
 			Expect(folders[0].Name).To(Equal(""))
+		})
+
+		// Given VMs with folders in two different collections
+		// When we call GetFolders scoped to one collection
+		// Then it should return only that collection's folders
+		It("GetFolders returns folders only for the given collection", func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", "Folder ID", "Folder", collection_id)
+				VALUES ('hash-f1', 'VM-F1', 'fid-1', 'FolderA', 1),
+				       ('hash-f2', 'VM-F2', 'fid-2', 'FolderB', 2)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			folders, err := s.VM().GetFolders(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(folders).To(HaveLen(1))
+			Expect(folders[0].Name).To(Equal("FolderA"))
 		})
 	})
 
@@ -1041,7 +1061,7 @@ var _ = Describe("VMStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			vms, err := s.VM().List(ctx, nil)
@@ -1071,7 +1091,7 @@ var _ = Describe("VMStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g1.ID, g2.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g1.ID, g2.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			vms, err := s.VM().List(ctx, nil)
@@ -1094,7 +1114,7 @@ var _ = Describe("VMStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = s.Group().RefreshMatches(ctx, g.ID)
+			err = s.Group().RefreshMatches(ctx, 0, g.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			vms, err := s.VM().List(ctx, store.ByFilter("cluster = 'cluster-a'"))
@@ -1164,6 +1184,82 @@ var _ = Describe("VMStore", func() {
 		})
 	})
 
+	Describe("GetVmMoid", func() {
+		It("returns the vmmoid for a known VM ID hash", func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", vmmoid, collection_id)
+				VALUES ('hash-abc', 'Test VM', 'vm-moid-123', 1)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			moid, err := s.VM().GetVmMoid(ctx, "hash-abc")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(moid).To(Equal("vm-moid-123"))
+		})
+
+		It("returns ResourceNotFoundError for an unknown VM ID", func() {
+			_, err := s.VM().GetVmMoid(ctx, "does-not-exist")
+			Expect(srvErrors.IsResourceNotFoundError(err)).To(BeTrue())
+		})
+	})
+
+	Context("WithCollectionID", func() {
+		It("should return only VMs for the given collection", func() {
+			// Insert two vinfo rows with different collection_ids.
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", vmmoid, collection_id)
+				VALUES ('hash-col1-vm1', 'VM in col 1', 'vm-1', 1),
+				       ('hash-col2-vm1', 'VM in col 2', 'vm-1', 2)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			results, err := s.VM().List(ctx, nil, store.WithCollectionID(1))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].VmMoid).To(Equal("vm-1"))
+		})
+
+		It("group filter returns only VMs from the correct collection", func() {
+			// Create two groups: one that should match "grouped-vm" in each collection separately.
+			// "col1-group" is recorded in group_matches for collection 1 only.
+			// "col2-group" is recorded in group_matches for collection 2 only.
+			col1Group, err := s.Group().Create(ctx, models.Group{Name: "col1-group", Filter: "name = 'grouped-vm'"})
+			Expect(err).NotTo(HaveOccurred())
+			col2Group, err := s.Group().Create(ctx, models.Group{Name: "col2-group", Filter: "name = 'grouped-vm'"})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Insert vinfo rows for two collections, same VM name but different "VM ID" hashes.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", collection_id, vmmoid)
+				VALUES ('hash-col1', 'grouped-vm', 1, 'vm-1'),
+				       ('hash-col2', 'grouped-vm', 2, 'vm-2')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Insert group_matches: col1-group matches hash-col1 (collection 1),
+			// col2-group matches hash-col2 (collection 2).
+			// Without collection-scoping in the join, hash-col1 could appear in col2-group's matches
+			// if the unnested vm_ids from collection 2 happen to contain it (or vice versa).
+			// We simulate this by inserting a "stale" group_match where col2-group lists hash-col1.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO group_matches (group_id, collection_id, vm_ids)
+				VALUES (?, 1, ['hash-col1']),
+				       (?, 2, ['hash-col2', 'hash-col1'])
+			`, col1Group.ID, col2Group.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Query collection 1 — must see only hash-col1.
+			// The VM should belong to col1-group only, NOT col2-group.
+			vms, err := s.VM().List(ctx, nil, store.WithCollectionID(1))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vms).To(HaveLen(1))
+			// hash-col1 should be in col1-group (its own collection's match).
+			Expect(vms[0].Groups).To(ContainElement("col1-group"))
+			// hash-col1 must NOT appear in col2-group just because col2's group_matches row lists it.
+			Expect(vms[0].Groups).NotTo(ContainElement("col2-group"))
+		})
+	})
+
 	Context("NIC IP addresses", func() {
 		BeforeEach(func() {
 			_, err := db.ExecContext(ctx, `
@@ -1202,6 +1298,76 @@ var _ = Describe("VMStore", func() {
 			noIpNic := vm.NICs[1]
 			Expect(noIpNic.IPv4Address).To(Equal(""))
 			Expect(noIpNic.IPv6Address).To(Equal(""))
+		})
+	})
+
+	Context("rightsizing utilization via vmmoid", func() {
+		It("GET /vms shows rightsizing utilization for the correct collection", func() {
+			// vinfo row: "VM ID" is a hash, vmmoid is the MOID.
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", collection_id, vmmoid)
+				VALUES ('hash-col1-vm1', 'My VM', 1, 'vm-moid-1')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Rightsizing report for collection 1.
+			var reportID string
+			err = db.QueryRowContext(ctx, `
+				INSERT INTO rightsizing_reports (id, vcenter, cluster_id, interval_id, window_start, window_end,
+					expected_sample_count, expected_batch_count, written_batch_count, collection_id)
+				VALUES ('r-col1', 'vc', '', 1, '2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00',
+					288, 1, 1, 1)
+				RETURNING id
+			`).Scan(&reportID)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Utilization row keyed by vmmoid (MOID), linked to the report.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO rightsizing_vm_utilization (report_id, moid, vm_name, cpu_p95_pct, mem_p95_pct)
+				VALUES ('r-col1', 'vm-moid-1', 'My VM', 42.5, 67.3)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			vms, err := s.VM().List(ctx, nil, store.WithCollectionID(1))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vms).To(HaveLen(1))
+			Expect(vms[0].UtilizationCpuP95).NotTo(BeNil())
+			Expect(*vms[0].UtilizationCpuP95).To(BeNumerically("~", 42.5, 0.1))
+		})
+
+		It("GET /vms returns exactly one VM row when two rightsizing reports exist for the same VM", func() {
+			// Two collections, same physical VM (same vmmoid).
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", collection_id, vmmoid)
+				VALUES ('hash-col1-vm1', 'My VM', 1, 'vm-moid-1'),
+				       ('hash-col2-vm1', 'My VM', 2, 'vm-moid-1')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Two rightsizing reports, one per collection.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO rightsizing_reports (id, vcenter, cluster_id, interval_id, window_start, window_end,
+					expected_sample_count, expected_batch_count, written_batch_count, collection_id)
+				VALUES ('r-c1', 'vc', '', 1, '2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00', 288, 1, 1, 1),
+				       ('r-c2', 'vc', '', 1, '2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00', 288, 1, 1, 2)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Use cpu_p95_pct (exposed by List) to verify the correct report is used.
+			_, err = db.ExecContext(ctx, `
+				INSERT INTO rightsizing_vm_utilization (report_id, moid, vm_name, cpu_p95_pct)
+				VALUES ('r-c1', 'vm-moid-1', 'My VM', 30.0),
+				       ('r-c2', 'vm-moid-1', 'My VM', 50.0)
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Querying collection 2 must return exactly one VM — not two due to duplicate join matches.
+			vms, err := s.VM().List(ctx, nil, store.WithCollectionID(2))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vms).To(HaveLen(1))
+			// And it should use the report for collection 2, not collection 1.
+			Expect(vms[0].UtilizationCpuP95).NotTo(BeNil(), "utilization should be populated from collection 2 report")
+			Expect(*vms[0].UtilizationCpuP95).To(BeNumerically("~", 50.0, 0.1), "should use collection 2's report (50%%) not collection 1's (30%%)")
 		})
 	})
 })

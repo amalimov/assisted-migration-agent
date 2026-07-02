@@ -132,7 +132,7 @@ paths:
           example: "exp1"
         - name: sort
           in: query
-          description: Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+          description: Sort fields with direction (e.g., "name:asc" or "cluster:desc,name:asc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg, vmMoid.
           schema:
             type: array
             items:
@@ -1465,6 +1465,11 @@ components:
           type: number
           format: double
           description: Data confidence — sample_count / expected_sample_count × 100
+        vmMoid:
+          type: string
+          description: >-
+            The original vSphere MOID for this VM. Stable across collections —
+            use this to correlate the same physical VM between different collection snapshots.
 
     VirtualMachineDetail:
       type: object

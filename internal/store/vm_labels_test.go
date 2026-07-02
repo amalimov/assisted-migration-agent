@@ -258,7 +258,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -282,7 +282,7 @@ var _ = Describe("VMStore Labels", func() {
 			insertVM("vm-2", "Test VM 2", "cluster-a")
 
 			// Act
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -307,7 +307,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -331,7 +331,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -363,7 +363,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -388,7 +388,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -414,7 +414,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify initial count
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(labels).To(Equal([]string{"production"}))
 			Expect(counts).To(Equal([]int{3}))
@@ -424,7 +424,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			labels, counts, err = s.VM().GetAllLabels(ctx)
+			labels, counts, err = s.VM().GetAllLabels(ctx, 0)
 
 			// Assert - count should now be 2
 			Expect(err).NotTo(HaveOccurred())
@@ -445,12 +445,30 @@ var _ = Describe("VMStore Labels", func() {
 			}
 
 			// Act
-			labels, counts, err := s.VM().GetAllLabels(ctx)
+			labels, counts, err := s.VM().GetAllLabels(ctx, 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(labels).To(Equal([]string{"shared-label"}))
 			Expect(counts).To(Equal([]int{10}))
+		})
+
+		// Given VMs in two different collections each with distinct labels
+		// When GetAllLabels is called scoped to one collection
+		// Then it should return only labels from that collection
+		It("GetAllLabels returns labels only for the given collection", func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", collection_id, labels)
+				VALUES ('hash-1', 'VM-A', 1, '["prod"]'),
+				       ('hash-2', 'VM-B', 2, '["staging"]')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			labels, counts, err := s.VM().GetAllLabels(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(labels).To(ConsistOf("prod"))
+			Expect(counts).To(ConsistOf(1))
+			Expect(labels).NotTo(ContainElement("staging"))
 		})
 	})
 
@@ -663,7 +681,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			affected, err := s.VM().RemoveLabelGlobally(ctx, "production")
+			affected, err := s.VM().RemoveLabelGlobally(ctx, "production", 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -696,7 +714,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			affected, err := s.VM().RemoveLabelGlobally(ctx, "non-existent-label")
+			affected, err := s.VM().RemoveLabelGlobally(ctx, "non-existent-label", 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -718,7 +736,7 @@ var _ = Describe("VMStore Labels", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Act
-			affected, err := s.VM().RemoveLabelGlobally(ctx, "deprecated")
+			affected, err := s.VM().RemoveLabelGlobally(ctx, "deprecated", 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
@@ -742,11 +760,37 @@ var _ = Describe("VMStore Labels", func() {
 			}
 
 			// Act
-			affected, err := s.VM().RemoveLabelGlobally(ctx, "batch-label")
+			affected, err := s.VM().RemoveLabelGlobally(ctx, "batch-label", 0)
 
 			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(affected).To(Equal(5))
+		})
+
+		// Given VMs in two different collections both with the same label
+		// When RemoveLabelGlobally is called scoped to one collection
+		// Then it should only remove the label from VMs in that collection
+		It("RemoveLabelGlobally only affects VMs in the given collection", func() {
+			_, err := db.ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", collection_id, labels)
+				VALUES ('hash-a', 'VM-A', 1, '["prod"]'),
+				       ('hash-b', 'VM-B', 2, '["prod"]')
+			`)
+			Expect(err).NotTo(HaveOccurred())
+
+			affected, err := s.VM().RemoveLabelGlobally(ctx, "prod", 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(affected).To(Equal(1))
+
+			// VM-A (collection 1) should have label removed
+			var labelsA string
+			Expect(db.QueryRowContext(ctx, `SELECT labels FROM vinfo WHERE "VM ID" = 'hash-a'`).Scan(&labelsA)).To(Succeed())
+			Expect(labelsA).To(Equal("[]"))
+
+			// VM-B (collection 2) should still have the label
+			var labelsB string
+			Expect(db.QueryRowContext(ctx, `SELECT labels FROM vinfo WHERE "VM ID" = 'hash-b'`).Scan(&labelsB)).To(Succeed())
+			Expect(labelsB).To(ContainSubstring("prod"))
 		})
 	})
 })

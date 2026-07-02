@@ -150,19 +150,26 @@ var Utilizations = []Utilization{
 	{"vm-005", 45.0, 50.0, 40.0},
 }
 
-// InsertVMs inserts all test VM data into the database.
+// InsertVMs inserts all test VM data into the database with collection_id = 0.
 func InsertVMs(ctx context.Context, db *sql.DB) error {
+	return InsertVMsForCollection(ctx, db, 0)
+}
+
+// InsertVMsForCollection inserts all test VM data into the database with the given collectionID.
+// Use this when tests require collection-scoped queries via WithCollectionID.
+func InsertVMsForCollection(ctx context.Context, db *sql.DB, collectionID int64) error {
 	for _, vm := range VMs {
 		_, err := db.ExecContext(ctx, `
 			INSERT INTO vinfo (
 				"VM ID", "VM", "Powerstate", "Connection state", "Cluster", "Datacenter",
 				"Host", "Folder ID", "Firmware", "SMBIOS UUID", "Memory", "CPUs",
 				"OS according to the configuration file", "DNS Name", "Primary IP Address",
-				"In Use MiB", "Template", "FT State"
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				"In Use MiB", "Template", "FT State", "collection_id"
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, vm.ID, vm.Name, vm.PowerState, vm.ConnectionState, vm.Cluster, vm.Datacenter,
 			vm.Host, vm.Folder, vm.Firmware, vm.UUID, vm.Memory, vm.CPUs,
-			vm.GuestName, vm.DNSName, vm.IPAddress, vm.StorageUsed, vm.IsTemplate, vm.FTEnabled)
+			vm.GuestName, vm.DNSName, vm.IPAddress, vm.StorageUsed, vm.IsTemplate, vm.FTEnabled,
+			collectionID)
 		if err != nil {
 			return err
 		}

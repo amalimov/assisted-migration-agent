@@ -6,6 +6,7 @@ import (
 
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 
+	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/pkg/work"
 )
@@ -24,12 +25,13 @@ func drainBuilder(b work.WorkBuilder[models.CollectorStatus, models.CollectorRes
 }
 
 func TestCollectorWorkFactory_NoPostCollectionBuilder(t *testing.T) {
-	f := newCollectorWorkFactory(nil, nil, "", "")
+	f := newCollectorWorkFactory(nil, config.Agent{}, nil, "", "")
 	units := drainBuilder(f.Build(models.Credentials{}))
 
-	// Base pipeline: connect, collect, parse, save-inventory, collected-event.
-	if len(units) != 5 {
-		t.Fatalf("expected 5 units without postCollectionBuilder, got %d", len(units))
+	// Base pipeline: setup, connect, collect, parse, copyForward,
+	// refreshGroupMatches, buildInventory, publishCollection, collected-event.
+	if len(units) != 9 {
+		t.Fatalf("expected 9 units without postCollectionBuilder, got %d", len(units))
 	}
 
 	// Verify final unit reports CollectorStateCollected.
@@ -49,20 +51,22 @@ func TestCollectorWorkFactory_WithPostCollectionBuilder(t *testing.T) {
 		},
 	}
 
-	f := newCollectorWorkFactory(nil, nil, "", "")
+	f := newCollectorWorkFactory(nil, config.Agent{}, nil, "", "")
 	f.WithPostCollectionBuilder(func(_ models.Credentials) []collectorWorkUnit {
 		return []collectorWorkUnit{extraUnit}
 	})
 
 	units := drainBuilder(f.Build(models.Credentials{}))
 
-	// Base 4 + 1 extra + 1 final event = 6 total.
-	if len(units) != 6 {
-		t.Fatalf("expected 6 units with postCollectionBuilder, got %d", len(units))
+	// Base 8 + 1 extra + 1 final event = 10 total.
+	// Pipeline: setup, connect, collect, parse, copyForward, refreshGroupMatches, [extra],
+	//           buildInventory, publishCollection, collected-event.
+	if len(units) != 10 {
+		t.Fatalf("expected 10 units with postCollectionBuilder, got %d", len(units))
 	}
 
-	// The injected unit comes before save-inventory and the event unit.
-	injected := units[len(units)-3]
+	// The injected unit comes before buildInventory, publishCollection, and the event unit.
+	injected := units[len(units)-4]
 	if s := injected.Status(); s.State != models.CollectorStateRightsizingConnecting {
 		t.Errorf("expected injected unit status RightsizingConnecting, got %q", s.State)
 	}
@@ -92,7 +96,7 @@ func TestCollectorWorkFactory_WithMultiplePostCollectionBuilders(t *testing.T) {
 		},
 	}
 
-	f := newCollectorWorkFactory(nil, nil, "", "")
+	f := newCollectorWorkFactory(nil, config.Agent{}, nil, "", "")
 	f.WithPostCollectionBuilder(func(_ models.Credentials) []collectorWorkUnit {
 		return []collectorWorkUnit{unit1}
 	})
@@ -102,9 +106,11 @@ func TestCollectorWorkFactory_WithMultiplePostCollectionBuilders(t *testing.T) {
 
 	units := drainBuilder(f.Build(models.Credentials{}))
 
-	// Base 3 + 2 extra + 2 final (save-inventory + collected-event) = 7 total.
-	if len(units) != 7 {
-		t.Fatalf("expected 7 units with two builders, got %d", len(units))
+	// Base 9 + 2 extra = 11 total.
+	// Pipeline: setup, connect, collect, parse, copyForward, refreshGroupMatches, [unit1, unit2],
+	//           buildInventory, publishCollection, collected-event.
+	if len(units) != 11 {
+		t.Fatalf("expected 11 units with two builders, got %d", len(units))
 	}
 
 	// The final unit must still be CollectorStateCollected.
