@@ -1033,18 +1033,6 @@ type VmUtilizationDetails struct {
 	VmName              string `json:"vm_name"`
 }
 
-// GetLatestRightsizingClustersParams defines parameters for GetLatestRightsizingClusters.
-type GetLatestRightsizingClustersParams struct {
-	// ByExpression Filter DSL expression (e.g. "cluster_id = 'domain-c123'"). Omit to return all clusters.
-	ByExpression *string `form:"byExpression,omitempty" json:"byExpression,omitempty"`
-}
-
-// GetRightsizingReportClustersParams defines parameters for GetRightsizingReportClusters.
-type GetRightsizingReportClustersParams struct {
-	// ByExpression Filter DSL expression (e.g. "cluster_id = 'domain-c123'"). Omit to return all clusters.
-	ByExpression *string `form:"byExpression,omitempty" json:"byExpression,omitempty"`
-}
-
 // ExportInventoryParams defines parameters for ExportInventory.
 type ExportInventoryParams struct {
 	// Scope Comma-separated list of scopes to export (default: overview). Available scopes: overview, hosts, clusters, datastores, vms, network, utilization, storage-forecast, applications, groups, inspection

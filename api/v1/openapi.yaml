@@ -819,62 +819,6 @@ paths:
         '500':
           description: Internal server error
 
-  /cluster_rightsizing:
-    get:
-      deprecated: true
-      summary: Get cluster-level utilization aggregates for the latest completed report
-      operationId: getLatestRightsizingClusters
-      parameters:
-        - name: byExpression
-          in: query
-          required: false
-          description: Filter DSL expression (e.g. "cluster_id = 'domain-c123'"). Omit to return all clusters.
-          schema:
-            type: string
-            maxLength: 10240
-      responses:
-        '200':
-          description: Cluster utilization aggregates
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RightsizingClusterListResponse'
-        '404':
-          description: No completed rightsizing report found
-        '500':
-          description: Internal server error
-
-  /cluster_rightsizing/{report_id}:
-    get:
-      deprecated: true
-      summary: Get cluster-level utilization aggregates for a specific report
-      operationId: getRightsizingReportClusters
-      parameters:
-        - name: report_id
-          in: path
-          required: true
-          description: Rightsizing report UUID
-          schema:
-            type: string
-        - name: byExpression
-          in: query
-          required: false
-          description: Filter DSL expression (e.g. "cluster_id = 'domain-c123'"). Omit to return all clusters.
-          schema:
-            type: string
-            maxLength: 10240
-      responses:
-        '200':
-          description: Cluster utilization aggregates
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RightsizingClusterListResponse'
-        '404':
-          description: Report not found
-        '500':
-          description: Internal server error
-
   /rightsizing/{report_id}:
     get:
       summary: Get a specific rightsizing report with full VM metrics
