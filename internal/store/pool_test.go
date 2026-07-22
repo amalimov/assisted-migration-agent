@@ -228,6 +228,42 @@ var _ = Describe("Pool", func() {
 		})
 	})
 
+	Context("LatestCollection", func() {
+		It("returns false when pool is empty", func() {
+			db, ok := pool.LatestCollection()
+			Expect(ok).To(BeFalse())
+			Expect(db).To(BeNil())
+		})
+
+		It("returns false when pool has only the main database", func() {
+			mainDB, err := pool.NewDatabase(store.MainDatabaseID, filepath.Join(tmpDir, "main.duckdb"), time.Now(), store.EagerConnectionInitilization, 0, store.ReadWriteDatabase)
+			Expect(err).NotTo(HaveOccurred())
+			pool.Add(mainDB)
+
+			db, ok := pool.LatestCollection()
+			Expect(ok).To(BeFalse())
+			Expect(db).To(BeNil())
+		})
+
+		It("returns the newest collection database, skipping main", func() {
+			mainDB, err := pool.NewDatabase(store.MainDatabaseID, filepath.Join(tmpDir, "main.duckdb"), time.Now(), store.EagerConnectionInitilization, 0, store.ReadWriteDatabase)
+			Expect(err).NotTo(HaveOccurred())
+			pool.Add(mainDB)
+
+			older, err := pool.NewDatabase("col-old", filepath.Join(tmpDir, "col-old.duckdb"), time.Now().Add(-1*time.Hour), store.EagerConnectionInitilization, 0, store.ReadWriteDatabase)
+			Expect(err).NotTo(HaveOccurred())
+			pool.Add(older)
+
+			newer, err := pool.NewDatabase("col-new", filepath.Join(tmpDir, "col-new.duckdb"), time.Now(), store.EagerConnectionInitilization, 0, store.ReadWriteDatabase)
+			Expect(err).NotTo(HaveOccurred())
+			pool.Add(newer)
+
+			db, ok := pool.LatestCollection()
+			Expect(ok).To(BeTrue())
+			Expect(db.ID).To(Equal("col-new"))
+		})
+	})
+
 	Context("Close", func() {
 		It("should close all connections without removing entries", func() {
 			dbPath := filepath.Join(tmpDir, "close.duckdb")

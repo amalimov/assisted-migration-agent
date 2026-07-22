@@ -249,6 +249,17 @@ func (p *Pool) All() iter.Seq[*Database] {
 	}
 }
 
+// LatestCollection returns the most recently created collection database in the pool,
+// excluding the main database. Returns (nil, false) if no collection databases exist.
+func (p *Pool) LatestCollection() (*Database, bool) {
+	for db := range p.All() {
+		if db.ID != MainDatabaseID {
+			return db, true
+		}
+	}
+	return nil, false
+}
+
 func (p *Pool) Close() {
 	p.cleanupTimer.Stop()
 

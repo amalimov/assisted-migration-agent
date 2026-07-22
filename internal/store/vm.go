@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	sq "github.com/Masterminds/squirrel"
@@ -688,6 +689,31 @@ func (s *VMStore) UpdateLabels(ctx context.Context, vmID string, labels []string
 	return nil
 }
 
+// ListLabels returns a map from VM ID to its labels, for all VMs with at least one label.
+func (s *VMStore) ListLabels(ctx context.Context) (map[string][]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT "VM ID", CAST("labels" AS VARCHAR[]) FROM vinfo WHERE "labels" != '[]'`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var vmID string
+		var labels StringArray
+		if err := rows.Scan(&vmID, &labels); err != nil {
+			return nil, err
+		}
+		if len(labels) > 0 {
+			result[vmID] = labels
+		}
+	}
+
+	return result, rows.Err()
+}
+
 // GetAllLabels returns all distinct labels in use across VMs along with their counts.
 // The labels and counts are returned in the same order (sorted alphabetically by label).
 func (s *VMStore) GetAllLabels(ctx context.Context) ([]string, []int, error) {
@@ -728,6 +754,86 @@ func (s *VMStore) GetAllLabels(ctx context.Context) ([]string, []int, error) {
 	}
 
 	return labels, counts, rows.Err()
+}
+
+// sourceCatalog returns the DuckDB catalog name of the current (source) database.
+// When a second database is ATTACHed, DuckDB requires fully-qualified references
+// (catalog.schema.table) to resolve ambiguity between tables that share the same name
+// in both databases. The catalog name matches the database filename without extension
+// and is authoritative via current_catalog().
+func (s *VMStore) sourceCatalog(ctx context.Context) (string, error) {
+	var catalog string
+	if err := s.db.QueryRowContext(ctx, "SELECT current_catalog()").Scan(&catalog); err != nil {
+		return "", fmt.Errorf("querying current catalog: %w", err)
+	}
+	return catalog, nil
+}
+
+// CopyLabelsToAttached copies user-assigned labels from this store's vinfo into the attached
+// database's vinfo, for VMs present in both. Labels whose keys appear in excludeLabels are
+// omitted. VMs absent from the attached database are silently skipped.
+func (s *VMStore) CopyLabelsToAttached(ctx context.Context, attachAlias string, excludeLabels map[string]bool) error {
+	cat, err := s.sourceCatalog(ctx)
+	if err != nil {
+		return err
+	}
+	srcVinfo := cat + ".main.vinfo"
+	exclusionArr := buildExclusionArray(excludeLabels)
+	filterExpr := fmt.Sprintf(
+		`list_filter(CAST(%s."labels" AS VARCHAR[]), x -> NOT list_contains(CAST(%s AS VARCHAR[]), x))`,
+		srcVinfo, exclusionArr,
+	)
+	query, args, err := sq.Update(attachAlias+".vinfo").
+		Set(`"labels"`, sq.Expr(filterExpr)).
+		From(srcVinfo).
+		Where(sq.Expr(srcVinfo + `."VM ID" = ` + attachAlias + `.vinfo."VM ID"`)).
+		Where(sq.Expr(srcVinfo + `."labels" != '[]'`)).
+		ToSql()
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+// CopyMigrationExclusionToAttached sets migration_excluded=true in the attached schema's vinfo
+// for every VM that is excluded in this store. VMs absent from the attached schema are silently skipped.
+func (s *VMStore) CopyMigrationExclusionToAttached(ctx context.Context, attachAlias string) error {
+	cat, err := s.sourceCatalog(ctx)
+	if err != nil {
+		return err
+	}
+	srcVinfo := cat + ".main.vinfo"
+	query, args, err := sq.Update(attachAlias+".vinfo").
+		Set(`"migration_excluded"`, true).
+		From(srcVinfo).
+		Where(sq.Expr(srcVinfo + `."VM ID" = ` + attachAlias + `.vinfo."VM ID"`)).
+		Where(sq.Eq{srcVinfo + `."migration_excluded"`: true}).
+		ToSql()
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+// LabelNewVMsInAttached adds label to every VM in the attached schema whose VM ID does not
+// appear in this store's vinfo. These are VMs that are new to the current collection run.
+func (s *VMStore) LabelNewVMsInAttached(ctx context.Context, attachAlias string, label string) error {
+	cat, err := s.sourceCatalog(ctx)
+	if err != nil {
+		return err
+	}
+	srcVinfo := cat + ".main.vinfo"
+	query, args, err := sq.Update(attachAlias+".vinfo").
+		Set(`"labels"`, sq.Expr(`list_distinct(list_append(CAST("labels" AS VARCHAR[]), ?))`, label)).
+		Where(sq.Expr(`"VM ID" NOT IN (SELECT "VM ID" FROM ` + srcVinfo + `)`)).
+		ToSql()
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
 }
 
 // AddLabel adds a label to a VM's labels array (idempotent - no duplicates).
@@ -931,6 +1037,21 @@ func (s *VMStore) RemoveLabelBatch(ctx context.Context, vmIDs []string, label st
 	}
 
 	return nil
+}
+
+// buildExclusionArray builds a DuckDB array literal from the keys of a string set.
+// Used in list_filter lambda expressions to exclude system-managed labels.
+// Values are single-quote-escaped for safe embedding in SQL.
+func buildExclusionArray(labels map[string]bool) string {
+	if len(labels) == 0 {
+		return "[]"
+	}
+	parts := make([]string, 0, len(labels))
+	for l := range labels {
+		parts = append(parts, "'"+strings.ReplaceAll(l, "'", "''")+"'")
+	}
+	sort.Strings(parts) // deterministic order
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 // deduplicateVMIDs removes duplicate VM IDs from a slice while preserving order.

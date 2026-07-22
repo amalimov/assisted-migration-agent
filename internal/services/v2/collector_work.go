@@ -339,37 +339,76 @@ func (f *collectorWorkFactory) Build(creds models.Credentials) work.WorkBuilder2
 				return r, nil
 			},
 		},
-		// 8. Sync data between the previous database and the current one.
-		// - Copy groups and recompute the inventory for each group.
-		// - Copy labels and exclude_migrations from the previous database to the new one.
-		// - Add "first seen/new" label for virtual machines found on current database but not found on the previous one.
-		// If previous is not found than is no-op.
+		// 8. Sync user data from the previous collection into the new one.
+		// Attach the (closed) new collection DB to the previous collection's connection,
+		// run cross-DB SQL to copy groups, labels, and migration exclusion flags, then
+		// detach and reopen the new DB to refresh group inventories.
+		// If no previous collection exists, this stage is a no-op.
+		// Any failure here fails the collection — a collection without user data (groups,
+		// labels, exclusion flags) is considered invalid and should not be published.
 		{
 			Status: func() models.CollectorStatus {
 				return models.CollectorStatus{State: models.CollectorStateCollecting}
 			},
 			Work: func(ctx context.Context, result models.CollectorResult) (models.CollectorResult, error) {
-				var previousDatabase *store.Database
-				for db := range f.pool.All() {
-					previousDatabase = db
-					break
-				}
-
-				if previousDatabase == nil {
+				prevDB, ok := f.pool.LatestCollection()
+				if !ok {
+					log.Info("no previous collection found, skipping sync")
 					return result, nil
 				}
 
-				zap.S().Infow("found previous database", "database", previousDatabase.Path, "id", previousDatabase.ID)
+				log.Infow("syncing user data from previous collection", "previous_id", prevDB.ID)
+				now := time.Now()
 
-				// close the current one, otherwise attaching this db to the previousDatabase will fail.
-				// The connection will be reopen at next call of Store().
-				if err := collectionDb.Close(); err != nil {
-					result.Err = err
-					return result, err
+				prevSt, err := prevDB.Store()
+				if err != nil {
+					result.Err = fmt.Errorf("sync: failed to open previous collection store: %w", err)
+					return result, result.Err
 				}
 
-				// TODO: Close the current one, attaching to the previous and copy data from previous to current.
-				// Question: Should we have a dedicated method in the store for that?
+				const attachedSchema = "new_col"
+
+				// DuckDB requires the file to be closed before it can be attached to another connection.
+				// collectionDb.Store() in subsequent steps transparently reopens it.
+				if err := collectionDb.Close(); err != nil {
+					result.Err = fmt.Errorf("sync: failed to close collection database before attach: %w", err)
+					return result, result.Err
+				}
+
+				if err := prevSt.AttachDatabase(ctx, collectionDb, attachedSchema, store.ReadWriteDatabase); err != nil {
+					result.Err = fmt.Errorf("sync: failed to attach collection database: %w", err)
+					return result, result.Err
+				}
+
+				syncErr := SyncAttached(ctx, prevSt, attachedSchema, now)
+
+				if detachErr := prevSt.DetachDatabase(ctx, attachedSchema); detachErr != nil {
+					log.Errorw("failed to detach collection database", "error", detachErr)
+					if syncErr == nil {
+						syncErr = fmt.Errorf("sync: failed to detach collection database: %w", detachErr)
+					}
+				}
+
+				if syncErr != nil {
+					result.Err = syncErr
+					return result, result.Err
+				}
+
+				// Reopen the collection DB (transparently reconnects after the Close() above)
+				// and refresh group inventories against the new VM set.
+				newSt, err := collectionDb.Store()
+				if err != nil {
+					result.Err = fmt.Errorf("sync: failed to reopen collection database for group refresh: %w", err)
+					return result, result.Err
+				}
+
+				groupSvc := NewGroupService(newSt, parser)
+				if err := RefreshGroupInventories(ctx, newSt, groupSvc); err != nil {
+					result.Err = fmt.Errorf("sync: failed to refresh group inventories: %w", err)
+					return result, result.Err
+				}
+
+				log.Info("collection sync completed")
 				return result, nil
 			},
 		},

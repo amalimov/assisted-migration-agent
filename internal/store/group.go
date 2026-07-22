@@ -193,6 +193,26 @@ func (s *GroupStore) Create(ctx context.Context, group models.Group) (*models.Gr
 	return &g, nil
 }
 
+// CopyToAttached copies all group definitions from this store into the attached schema.
+// The group ID and created_at are preserved; updated_at is set to now.
+// inventory_data and group_matches are not copied — call RefreshMatches and UpdateInventory
+// afterward to rebuild them against the new VM set.
+func (s *GroupStore) CopyToAttached(ctx context.Context, attachAlias string, now time.Time) error {
+	selectQuery := sq.Select(
+		groupColID, groupColName, groupColDescription, groupColFilter, groupColCreatedAt,
+	).Column(sq.Expr("?", now)).From(groupTable)
+
+	query, args, err := sq.Insert(attachAlias+"."+groupTable).
+		Columns(groupColID, groupColName, groupColDescription, groupColFilter, groupColCreatedAt, groupColUpdatedAt).
+		Select(selectQuery).
+		ToSql()
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 // Update updates an existing group by ID.
 func (s *GroupStore) Update(ctx context.Context, id uuid.UUID, group models.Group) (*models.Group, error) {
 	query, args, err := sq.Update(groupTable).
