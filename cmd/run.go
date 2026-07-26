@@ -35,6 +35,7 @@ import (
 	v1 "github.com/kubev2v/assisted-migration-agent/api/v1"
 	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
 	v1Handlers "github.com/kubev2v/assisted-migration-agent/internal/handlers/v1"
 	v2Handlers "github.com/kubev2v/assisted-migration-agent/internal/handlers/v2"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
@@ -226,6 +227,10 @@ func initV2(cfg *config.Configuration) (*server.Server, func(), error) {
 	)
 	if err := v2SvcMgr.Initialize(); err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize v2 services: %w", err)
+	}
+
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		handlers.RegisterValidators(v)
 	}
 
 	v2H := v2Handlers.NewHandler(*cfg, v2SvcMgr)

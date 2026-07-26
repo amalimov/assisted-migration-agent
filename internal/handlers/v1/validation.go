@@ -3,16 +3,13 @@ package v1
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
 
 	v1 "github.com/kubev2v/assisted-migration-agent/api/v1"
+	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
 )
-
-// tagFormatRegex validates that tags contain only alphanumeric characters, underscores, and dots.
-var tagFormatRegex = regexp.MustCompile(`^[a-zA-Z0-9_.]+$`)
 
 // validationErrorMessage translates validator.ValidationErrors into a
 // human-readable message. Falls back to "invalid request body" for
@@ -53,24 +50,11 @@ func formatFieldError(fe validator.FieldError) string {
 	}
 }
 
-// RegisterValidators registers all custom struct-level validators with
-// the given validator instance. Called once during application startup.
+// RegisterValidators registers common field-level validators plus V1-specific
+// struct-level validators. Called once during application startup.
 func RegisterValidators(v *validator.Validate) {
-	_ = v.RegisterValidation("tag_format", validateTagFormat)
-	_ = v.RegisterValidation("notblank", validateNotBlank)
+	handlers.RegisterValidators(v)
 	v.RegisterStructValidation(validateUpdateGroupAtLeastOneField, v1.UpdateGroupRequest{})
-}
-
-// validateTagFormat checks that a tag contains only alphanumeric characters, underscores, and dots.
-func validateTagFormat(fl validator.FieldLevel) bool {
-	tag := fl.Field().String()
-	return tagFormatRegex.MatchString(tag)
-}
-
-// validateNotBlank checks that a string is not empty or whitespace-only.
-func validateNotBlank(fl validator.FieldLevel) bool {
-	value := fl.Field().String()
-	return strings.TrimSpace(value) != ""
 }
 
 func validateUpdateGroupAtLeastOneField(sl validator.StructLevel) {
