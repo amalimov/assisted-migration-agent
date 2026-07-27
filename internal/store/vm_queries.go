@@ -4,9 +4,13 @@ import sq "github.com/Masterminds/squirrel"
 
 // vmGetQuery fetches a single VM by ID with full details (disks, NICs, concerns)
 // plus utilization data from the latest rightsizing report.
-// Mirrors the vendored duckdb_parser vm_query template but adds the utilization JOIN.
+// filtered_vm is resolved first to scope all subsequent CTEs to one VM,
+// preventing full-table aggregations.
 const vmGetQuery = `
-WITH disks AS (
+WITH filtered_vm AS (
+    SELECT * FROM vinfo WHERE "VM ID" = ?
+),
+disks AS (
     SELECT
         dk."VM ID",
         LIST({
@@ -26,12 +30,13 @@ WITH disks AS (
             'Datastore': COALESCE(ds."Object ID", '')
         }) AS disks
     FROM vdisk dk
+    JOIN filtered_vm fv ON dk."VM ID" = fv."VM ID"
     LEFT JOIN vdatastore ds ON ds."Name" = regexp_extract(COALESCE(dk."Path", dk."Disk Path"), '\[([^\]]+)\]', 1)
     GROUP BY dk."VM ID"
 ),
 nics AS (
     SELECT
-        "VM ID",
+        vnetwork."VM ID",
         LIST({
             'Network': "Network",
             'MAC': "Mac Address",
@@ -43,9 +48,10 @@ nics AS (
             'Type': "Type",
             'IPv4Address': CASE WHEN "IPv4 Address" = 'VM' OR "IPv4 Address" IS NULL THEN '' ELSE "IPv4 Address" END,
             'IPv6Address': CASE WHEN "IPv6 Address" = 'VM' OR "IPv6 Address" IS NULL THEN '' ELSE "IPv6 Address" END
-        }) AS nics
+        } ORDER BY "Mac Address" ASC) AS nics
     FROM vnetwork
-    GROUP BY "VM ID"
+    JOIN filtered_vm fv ON vnetwork."VM ID" = fv."VM ID"
+    GROUP BY vnetwork."VM ID"
 ),
 concerns_agg AS (
     SELECT
@@ -57,6 +63,7 @@ concerns_agg AS (
             'Assessment': "Assessment"
         }) AS concerns
     FROM concerns
+    JOIN filtered_vm fv ON concerns."VM_ID" = fv."VM ID"
     GROUP BY "VM_ID"
 ),
 groups_agg AS (
@@ -66,6 +73,7 @@ groups_agg AS (
     FROM group_matches gm
     JOIN groups grp ON gm.group_id = grp.id
     , UNNEST(gm.vm_ids) AS u(vm_id)
+    JOIN filtered_vm fv ON u.vm_id = fv."VM ID"
     GROUP BY u.vm_id
 )
 SELECT
@@ -131,7 +139,7 @@ SELECT
     COALESCE(ins.status, 'not_started') AS "InspectionState",
     COALESCE(ins.details, '') AS "InspectionDetails",
     COALESCE(ins.error, '') AS "InspectionError"
-FROM vinfo i
+FROM filtered_vm i
 LEFT JOIN vcpu c ON i."VM ID" = c."VM ID"
 LEFT JOIN vmemory m ON i."VM ID" = m."VM ID"
 LEFT JOIN disks d ON i."VM ID" = d."VM ID"
@@ -146,7 +154,7 @@ LEFT JOIN rightsizing_vm_utilization u
         ORDER BY created_at DESC LIMIT 1
     )
 LEFT JOIN vm_inspection_status ins ON i."VM ID" = ins."VM ID"
-WHERE i."VM ID" = ?;
+
 `
 
 // vmFilterOptionsQuery returns distinct clusters, datacenters, concern labels,

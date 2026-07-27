@@ -977,6 +977,36 @@ var _ = Describe("VMStore", func() {
 			Expect(vm.InspectionStatus.Details).To(BeEmpty())
 			Expect(vm.InspectionStatus.Error).To(BeNil())
 		})
+
+		// Given a VM that belongs to a group
+		// When we get it by ID
+		// Then it should return the correct groups
+		It("should return groups for a VM that belongs to groups", func() {
+			// Arrange — insert two VMs; only vm-grp-1 is in cluster-x
+			insertVM("vm-grp-1", "grouped-vm", "poweredOn", "cluster-x", 4096)
+			insertVM("vm-grp-2", "other-vm", "poweredOn", "cluster-y", 2048)
+
+			g, err := s.Group().Create(ctx, models.Group{
+				Name:   "cluster-x-group",
+				Filter: "cluster = 'cluster-x'",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = s.Group().RefreshMatches(ctx, g.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Act
+			vm, err := s.VM().Get(ctx, "vm-grp-1")
+
+			// Assert
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vm.Groups).To(ConsistOf("cluster-x-group"), "vm-grp-1 should appear in cluster-x-group")
+
+			// vm-grp-2 is in a different cluster and must not appear in the group
+			vm2, err := s.VM().Get(ctx, "vm-grp-2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vm2.Groups).To(BeEmpty(), "vm-grp-2 should not belong to any group")
+		})
 	})
 
 	Context("GetFolders", func() {
