@@ -1761,6 +1761,8 @@ components:
       properties:
         group:
           $ref: '#/components/schemas/Group'
+        inventory:
+          $ref: 'https://raw.githubusercontent.com/kubev2v/migration-planner/main/api/v1alpha1/openapi.yaml#/components/schemas/Inventory'
         vms:
           type: array
           items:

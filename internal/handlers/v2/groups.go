@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/kubev2v/migration-planner/pkg/inventory/converters"
 
 	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
@@ -282,13 +283,17 @@ func (h *Handler) getGroup(c *gin.Context, groupSvc *services.GroupService, grou
 		apiVMs = append(apiVMs, v2.NewVirtualMachineFromSummary(vm))
 	}
 
-	c.JSON(http.StatusOK, v2.GroupResponse{
+	resp := v2.GroupResponse{
 		Group:     v2.NewGroupFromModel(*group),
 		Page:      pg,
 		PageCount: pageCount,
 		Total:     total,
 		Vms:       apiVMs,
-	})
+	}
+	if group.Inventory != nil {
+		resp.Inventory = converters.ToAPI(group.Inventory)
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) updateGroup(c *gin.Context, groupSvc *services.GroupService, groupId string) {

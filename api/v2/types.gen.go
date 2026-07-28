@@ -220,11 +220,12 @@ type GroupListResponse struct {
 
 // GroupResponse defines model for GroupResponse.
 type GroupResponse struct {
-	Group     Group            `json:"group"`
-	Page      int              `json:"page"`
-	PageCount int              `json:"pageCount"`
-	Total     int              `json:"total"`
-	Vms       []VirtualMachine `json:"vms"`
+	Group     Group                   `json:"group"`
+	Inventory *externalRef0.Inventory `json:"inventory,omitempty"`
+	Page      int                     `json:"page"`
+	PageCount int                     `json:"pageCount"`
+	Total     int                     `json:"total"`
+	Vms       []VirtualMachine        `json:"vms"`
 }
 
 // GuestNetwork defines model for GuestNetwork.
