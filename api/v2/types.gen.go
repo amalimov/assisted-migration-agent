@@ -28,6 +28,13 @@ const (
 	AgentStatusModeDisconnected AgentStatusMode = "disconnected"
 )
 
+// Defines values for CollectionComparisonDiffDimension.
+const (
+	CollectionComparisonDiffDimensionMigratable    CollectionComparisonDiffDimension = "migratable"
+	CollectionComparisonDiffDimensionNonMigratable CollectionComparisonDiffDimension = "non-migratable"
+	CollectionComparisonDiffDimensionTotal         CollectionComparisonDiffDimension = "total"
+)
+
 // Defines values for CollectorStatusStatus.
 const (
 	CollectorStatusMetricsCollecting CollectorStatusStatus = "collecting metrics"
@@ -62,6 +69,13 @@ const (
 	VirtualMachineIssueCategoryInformation VirtualMachineIssueCategory = "Information"
 	VirtualMachineIssueCategoryOther       VirtualMachineIssueCategory = "Other"
 	VirtualMachineIssueCategoryWarning     VirtualMachineIssueCategory = "Warning"
+)
+
+// Defines values for CompareCollectionsDiffParamsDimension.
+const (
+	CompareCollectionsDiffParamsDimensionMigratable    CompareCollectionsDiffParamsDimension = "migratable"
+	CompareCollectionsDiffParamsDimensionNonMigratable CompareCollectionsDiffParamsDimension = "non-migratable"
+	CompareCollectionsDiffParamsDimensionTotal         CompareCollectionsDiffParamsDimension = "total"
 )
 
 // AgentModeRequest defines model for AgentModeRequest.
@@ -149,6 +163,52 @@ type Collection struct {
 	Name string `json:"name"`
 }
 
+// CollectionAggregate defines model for CollectionAggregate.
+type CollectionAggregate struct {
+	// Clusters Number of distinct clusters
+	Clusters int `json:"clusters"`
+
+	// CreatedAt When the collection was created
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Id Collection identifier
+	Id string `json:"id"`
+
+	// Migratable Number of migratable VMs (no Critical concerns)
+	Migratable int `json:"migratable"`
+
+	// NonMigratable Number of non-migratable VMs (at least one Critical concern)
+	NonMigratable int `json:"nonMigratable"`
+
+	// TotalVMs Total number of VMs in the collection
+	TotalVMs int `json:"totalVMs"`
+}
+
+// CollectionComparisonDiff defines model for CollectionComparisonDiff.
+type CollectionComparisonDiff struct {
+	// Dimension The dimension being compared
+	Dimension CollectionComparisonDiffDimension `json:"dimension"`
+	OnlyInA   ComparisonDiffPage                `json:"onlyInA"`
+	OnlyInB   ComparisonDiffPage                `json:"onlyInB"`
+}
+
+// CollectionComparisonDiffDimension The dimension being compared
+type CollectionComparisonDiffDimension string
+
+// CollectionComparisonSummary defines model for CollectionComparisonSummary.
+type CollectionComparisonSummary struct {
+	// Collections Aggregates for both collections. Index 0 is A (baseline), index 1 is B.
+	Collections []CollectionAggregate `json:"collections"`
+
+	// Diff Numeric differences (B minus A) with symmetric set-diff counts per dimension. clusters has no onlyInA/onlyInB.
+	Diff struct {
+		Clusters      ComparisonDiffEntry `json:"clusters"`
+		Migratable    ComparisonDiffEntry `json:"migratable"`
+		NonMigratable ComparisonDiffEntry `json:"nonMigratable"`
+		TotalVMs      ComparisonDiffEntry `json:"totalVMs"`
+	} `json:"diff"`
+}
+
 // CollectionListResponse defines model for CollectionListResponse.
 type CollectionListResponse struct {
 	Collections []Collection `json:"collections"`
@@ -163,6 +223,33 @@ type CollectorStatus struct {
 
 // CollectorStatusStatus defines model for CollectorStatus.Status.
 type CollectorStatusStatus string
+
+// ComparisonDiffEntry defines model for ComparisonDiffEntry.
+type ComparisonDiffEntry struct {
+	// Delta Difference (B minus A). Positive means B has more.
+	Delta int `json:"delta"`
+
+	// OnlyInA Count of VMs satisfying this dimension in A but not in B
+	OnlyInA *int `json:"onlyInA,omitempty"`
+
+	// OnlyInB Count of VMs satisfying this dimension in B but not in A
+	OnlyInB *int `json:"onlyInB,omitempty"`
+}
+
+// ComparisonDiffPage defines model for ComparisonDiffPage.
+type ComparisonDiffPage struct {
+	// Page Current page number
+	Page int `json:"page"`
+
+	// PageCount Total number of pages
+	PageCount int `json:"pageCount"`
+
+	// Total Total number of VM IDs in this list
+	Total int `json:"total"`
+
+	// VmIds VM IDs on this page. Empty array when page exceeds pageCount.
+	VmIds []string `json:"vmIds"`
+}
 
 // CreateGroupRequest defines model for CreateGroupRequest.
 type CreateGroupRequest struct {
@@ -677,6 +764,18 @@ type VmUtilizationDetails struct {
 	ProvisionedMemoryMb int     `json:"provisioned_memory_mb"`
 	VmName              string  `json:"vm_name"`
 }
+
+// CompareCollectionsDiffParams defines parameters for CompareCollectionsDiff.
+type CompareCollectionsDiffParams struct {
+	// Page Page number (1-based). Applied independently to onlyInA and onlyInB.
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// PageSize Number of VM IDs per page per side
+	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
+// CompareCollectionsDiffParamsDimension defines parameters for CompareCollectionsDiff.
+type CompareCollectionsDiffParamsDimension string
 
 // ExportCollectionParams defines parameters for ExportCollection.
 type ExportCollectionParams struct {
