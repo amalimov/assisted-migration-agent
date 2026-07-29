@@ -398,3 +398,64 @@ func NewGroupFromModel(g models.Group) Group {
 	}
 	return group
 }
+
+func comparisonDiffEntry(e models.ComparisonDiffEntry) ComparisonDiffEntry {
+	onlyInA := e.OnlyInA
+	onlyInB := e.OnlyInB
+	return ComparisonDiffEntry{Delta: e.Delta, OnlyInA: &onlyInA, OnlyInB: &onlyInB}
+}
+
+func comparisonDiffEntryDeltaOnly(e models.ComparisonDiffEntry) ComparisonDiffEntry {
+	// Clusters has no per-VM identity; OnlyInA/OnlyInB do not apply.
+	return ComparisonDiffEntry{Delta: e.Delta}
+}
+
+func collectionAggregateFromModel(a models.CollectionAggregate) CollectionAggregate {
+	return CollectionAggregate{
+		Id:            a.ID,
+		CreatedAt:     a.CreatedAt,
+		TotalVMs:      a.TotalVMs,
+		Migratable:    a.Migratable,
+		NonMigratable: a.NonMigratable,
+		Clusters:      a.Clusters,
+	}
+}
+
+// NewCollectionComparisonSummaryFromModel converts a models.ComparisonSummary to the V2 API type.
+func NewCollectionComparisonSummaryFromModel(s models.ComparisonSummary) CollectionComparisonSummary {
+	return CollectionComparisonSummary{
+		Collections: []CollectionAggregate{collectionAggregateFromModel(s.A), collectionAggregateFromModel(s.B)},
+		Diff: struct {
+			Clusters      ComparisonDiffEntry `json:"clusters"`
+			Migratable    ComparisonDiffEntry `json:"migratable"`
+			NonMigratable ComparisonDiffEntry `json:"nonMigratable"`
+			TotalVMs      ComparisonDiffEntry `json:"totalVMs"`
+		}{
+			TotalVMs:      comparisonDiffEntry(s.TotalVMs),
+			Migratable:    comparisonDiffEntry(s.Migratable),
+			NonMigratable: comparisonDiffEntry(s.NonMigratable),
+			Clusters:      comparisonDiffEntryDeltaOnly(s.Clusters),
+		},
+	}
+}
+
+// NewCollectionComparisonDiffFromModel converts a models.ComparisonDiff to the V2 API type.
+func NewCollectionComparisonDiffFromModel(d models.ComparisonDiff) CollectionComparisonDiff {
+	toPage := func(p models.ComparisonDiffPage) ComparisonDiffPage {
+		vmIds := p.VMIDs
+		if vmIds == nil {
+			vmIds = []string{}
+		}
+		return ComparisonDiffPage{
+			Total:     p.Total,
+			Page:      p.Page,
+			PageCount: p.PageCount,
+			VmIds:     vmIds,
+		}
+	}
+	return CollectionComparisonDiff{
+		Dimension: CollectionComparisonDiffDimension(d.Dimension),
+		OnlyInA:   toPage(d.OnlyInA),
+		OnlyInB:   toPage(d.OnlyInB),
+	}
+}

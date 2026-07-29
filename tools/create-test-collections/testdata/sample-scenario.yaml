@@ -1,0 +1,55 @@
+# Comparison test scenario
+#
+# Two collections designed to exercise every counter in the comparison API:
+#   - vm-001: unchanged (migratable in both)         → appears in neither diff list
+#   - vm-002: status flip (mig in A, non-mig in B)   → migratable.onlyInA + nonMigratable.onlyInB
+#   - vm-003: unchanged (non-migratable in both)     → appears in neither diff list
+#   - vm-004: only in A (migratable)                 → total.onlyInA + migratable.onlyInA
+#   - vm-005: only in B (migratable)                 → total.onlyInB + migratable.onlyInB
+#
+# Expected summary (A→B):
+#   totalVMs:      delta=0,  onlyInA=1 (vm-004),       onlyInB=1 (vm-005)
+#   migratable:    delta=-1, onlyInA=2 (vm-002,vm-004), onlyInB=1 (vm-005)
+#   nonMigratable: delta=+1, onlyInA=0,                onlyInB=1 (vm-002)
+#   clusters:      delta=-1  (A has prod+staging, B has only prod)
+
+collections:
+  - label: collection-a
+    timestamp: 1700000000   # 2023-11-14T22:13:20Z
+
+    vms:
+      - id: vm-001
+        cluster: cluster-prod
+        # migratable defaults to true
+
+      - id: vm-002
+        cluster: cluster-prod
+        migratable: true
+
+      - id: vm-003
+        cluster: cluster-prod
+        migratable: false
+
+      - id: vm-004
+        cluster: cluster-staging
+        labels: [web, production]
+
+  - label: collection-b
+    timestamp: 1700100000   # 2023-11-15T03:40:00Z
+
+    vms:
+      - id: vm-001
+        cluster: cluster-prod
+
+      - id: vm-002
+        cluster: cluster-prod
+        migratable: false       # ← flipped from A
+
+      - id: vm-003
+        cluster: cluster-prod
+        migratable: false
+
+      - id: vm-005
+        cluster: cluster-prod
+        excluded: true          # new VM, but excluded from migration
+        labels: [db]

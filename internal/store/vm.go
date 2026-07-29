@@ -1075,3 +1075,52 @@ func deduplicateVMIDs(input []string) []string {
 
 	return result
 }
+
+const listForComparisonQuery = `
+SELECT v."VM ID", COALESCE(crit.critical_count, 0) = 0 AS migratable
+FROM vinfo v
+LEFT JOIN (
+    SELECT "VM_ID", COUNT(*) AS critical_count
+    FROM concerns
+    WHERE "Category" = 'Critical'
+    GROUP BY "VM_ID"
+) crit ON v."VM ID" = crit."VM_ID"
+WHERE v."migration_excluded" IS NOT TRUE
+ORDER BY v."VM ID"
+`
+
+const countDistinctClustersQuery = `
+SELECT COUNT(DISTINCT "Cluster")
+FROM vinfo
+WHERE "Cluster" IS NOT NULL AND "Cluster" != ''
+`
+
+// ListForComparison returns all VM IDs with their migratable status.
+// Used by ComparisonService to compute cross-collection set differences.
+// A VM is migratable when it has zero Critical concerns.
+func (s *VMStore) ListForComparison(ctx context.Context) ([]models.VMComparisonRow, error) {
+	rows, err := s.db.QueryContext(ctx, listForComparisonQuery)
+	if err != nil {
+		return nil, fmt.Errorf("listing VMs for comparison: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var result []models.VMComparisonRow
+	for rows.Next() {
+		var row models.VMComparisonRow
+		if err := rows.Scan(&row.VMID, &row.Migratable); err != nil {
+			return nil, fmt.Errorf("scanning VM comparison row: %w", err)
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+// CountDistinctClusters returns the number of distinct non-empty cluster names in the collection.
+func (s *VMStore) CountDistinctClusters(ctx context.Context) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, countDistinctClustersQuery).Scan(&count); err != nil {
+		return 0, fmt.Errorf("counting distinct clusters: %w", err)
+	}
+	return count, nil
+}

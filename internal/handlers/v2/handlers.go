@@ -13,6 +13,7 @@ type ServiceProvider interface {
 	CredentialsService() *svc.CredentialsService
 
 	ApplicationService(collectionID string) (*svc.ApplicationService, error)
+	ComparisonService(aId, bId string) (*svc.ComparisonService, error)
 	ExportService(collectionID string) (*svc.ExportService, error)
 	VirtualMachineService(collectionID string) (*svc.VMService, error)
 	GroupService(collectionID string) (*svc.GroupService, error)

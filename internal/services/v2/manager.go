@@ -9,6 +9,7 @@ import (
 	"github.com/kubev2v/migration-planner/pkg/opa"
 
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/pkg/console"
 	"github.com/kubev2v/assisted-migration-agent/pkg/crypto"
@@ -354,4 +355,27 @@ func (m *ServiceManager) exportService(db *store.Database) (*ExportService, erro
 		return nil, err
 	}
 	return NewExportService(st), nil
+}
+
+func (m *ServiceManager) ComparisonService(aId, bId string) (*ComparisonService, error) {
+	dbA, err := m.pool.Get(aId)
+	if err != nil {
+		return nil, err
+	}
+	dbB, err := m.pool.Get(bId)
+	if err != nil {
+		return nil, err
+	}
+	stA, err := dbA.Store()
+	if err != nil {
+		return nil, err
+	}
+	stB, err := dbB.Store()
+	if err != nil {
+		return nil, err
+	}
+	return NewComparisonService(stA, stB,
+		models.CollectionMeta{ID: dbA.ID, CreatedAt: dbA.CreatedAt},
+		models.CollectionMeta{ID: dbB.ID, CreatedAt: dbB.CreatedAt},
+	), nil
 }

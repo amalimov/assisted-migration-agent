@@ -1268,4 +1268,82 @@ var _ = Describe("VMStore", func() {
 			Expect(noIpNic.IPv6Address).To(Equal(""))
 		})
 	})
+
+	Context("ListForComparison", func() {
+		BeforeEach(func() {
+			err := test.InsertVMs(ctx, db)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		// Given VMs in the database
+		// When we call ListForComparison
+		// Then it should return all VMs with non-empty IDs
+		It("should return all VMs with non-empty VM IDs", func() {
+			rows, err := s.VM().ListForComparison(ctx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rows).ToNot(BeEmpty())
+			for _, r := range rows {
+				Expect(r.VMID).ToNot(BeEmpty())
+			}
+		})
+
+		// Given vm-007 has a Critical concern ("RDM disk detected") in the fixture
+		// When we call ListForComparison
+		// Then vm-007 should have Migratable=false and vm-001 (no concerns) should have Migratable=true
+		It("should mark vm-007 (Critical concern) as non-migratable and vm-001 (no concerns) as migratable", func() {
+			rows, err := s.VM().ListForComparison(ctx)
+			Expect(err).ToNot(HaveOccurred())
+
+			vmMap := make(map[string]bool)
+			for _, r := range rows {
+				vmMap[r.VMID] = r.Migratable
+			}
+
+			Expect(vmMap).To(HaveKey("vm-007"), "vm-007 should be present in the result")
+			Expect(vmMap["vm-007"]).To(BeFalse(), "vm-007 should not be migratable (has Critical concern)")
+
+			Expect(vmMap).To(HaveKey("vm-001"), "vm-001 should be present in the result")
+			Expect(vmMap["vm-001"]).To(BeTrue(), "vm-001 should be migratable (no concerns)")
+		})
+
+		// Given vm-001 is marked as migration_excluded
+		// When we call ListForComparison
+		// Then vm-001 must not appear in the result
+		It("should exclude VMs whose migration_excluded flag is true", func() {
+			Expect(s.VM().UpdateMigrationExcluded(ctx, "vm-001", true)).To(Succeed())
+
+			rows, err := s.VM().ListForComparison(ctx)
+			Expect(err).ToNot(HaveOccurred())
+
+			ids := make([]string, 0, len(rows))
+			for _, r := range rows {
+				ids = append(ids, r.VMID)
+			}
+			Expect(ids).NotTo(ContainElement("vm-001"))
+		})
+	})
+
+	Context("CountDistinctClusters", func() {
+		// Given no VMs in the database
+		// When we call CountDistinctClusters
+		// Then it should return zero
+		It("should return zero when the database is empty", func() {
+			count, err := s.VM().CountDistinctClusters(ctx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(count).To(Equal(0))
+		})
+
+		// Given VMs across production, staging, and development clusters
+		// When we call CountDistinctClusters
+		// Then it should return 3
+		It("should return 3 for the standard fixture (production, staging, development)", func() {
+			err := test.InsertVMs(ctx, db)
+			Expect(err).NotTo(HaveOccurred())
+
+			count, err := s.VM().CountDistinctClusters(ctx)
+			Expect(err).ToNot(HaveOccurred())
+			// Fixture VMs span: production (vm-001..004), staging (vm-005..007), development (vm-008..010)
+			Expect(count).To(Equal(3))
+		})
+	})
 })

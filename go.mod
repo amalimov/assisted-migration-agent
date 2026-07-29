@@ -35,6 +35,7 @@ require (
 	go.podman.io/podman/v6 v6.0.2
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.54.0
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.2
 	k8s.io/apimachinery v0.36.2
 )
@@ -277,7 +278,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/gorm v1.25.11 // indirect
 	k8s.io/apiextensions-apiserver v0.36.2 // indirect
 	k8s.io/client-go v0.36.2 // indirect

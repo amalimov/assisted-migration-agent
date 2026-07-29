@@ -41,6 +41,9 @@ func (s *stubServiceProvider) CredentialsService() *svc.CredentialsService      
 func (s *stubServiceProvider) ApplicationService(_ string) (*svc.ApplicationService, error) {
 	return nil, nil
 }
+func (s *stubServiceProvider) ComparisonService(aId, bId string) (*svc.ComparisonService, error) {
+	return nil, nil
+}
 func (s *stubServiceProvider) ExportService(_ string) (*svc.ExportService, error) { return nil, nil }
 func (s *stubServiceProvider) VirtualMachineService(_ string) (*svc.VMService, error) {
 	return nil, nil
