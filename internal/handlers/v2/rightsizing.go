@@ -15,7 +15,7 @@ import (
 
 var (
 	clusterIDPattern = regexp.MustCompile(`^(domain-c\d+|cluster-[0-9a-f]{16})$`)
-	vmIDPattern      = regexp.MustCompile(`^(vm-[0-9a-f]{16})$`)
+	vmIDPattern      = regexp.MustCompile(`^(vm-[0-9]+)$`)
 )
 
 // GetClusterUtilization returns utilization for a specific cluster from the latest completed report.
