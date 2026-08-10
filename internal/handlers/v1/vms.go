@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 
 	"github.com/gin-gonic/gin"
 
@@ -54,7 +54,7 @@ func (h *Handler) GetVMs(c *gin.Context, params v1.GetVMsParams) {
 	}
 
 	if params.ByExpression != nil {
-		if _, err := filter.ParseWithDefaultMap([]byte(*params.ByExpression)); err != nil {
+		if _, err := vmfilter.ParseWithDefaultMap([]byte(*params.ByExpression)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("expression filter is invalid: %v", err)})
 			return
 		}

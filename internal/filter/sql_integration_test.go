@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	pkgfilter "github.com/kubev2v/assisted-migration-agent/pkg/filter"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/duckdb/duckdb-go/v2"
 	. "github.com/onsi/ginkgo/v2"
@@ -14,8 +16,8 @@ var _ = Describe("Filter Integration with DuckDB", func() {
 	var db *sql.DB
 
 	// testMapper maps filter variable names to SQL column references.
-	var testMapper MapFunc = func(name string) (string, FieldType, error) {
-		return fmt.Sprintf(`"%s"`, name), AnyField, nil
+	var testMapper pkgfilter.MapFunc = func(name string) (string, pkgfilter.FieldType, error) {
+		return fmt.Sprintf(`"%s"`, name), pkgfilter.AnyField, nil
 	}
 
 	BeforeEach(func() {
@@ -61,12 +63,7 @@ var _ = Describe("Filter Integration with DuckDB", func() {
 	})
 
 	queryVMs := func(filterExpr string) ([]string, error) {
-		expr, err := parse([]byte(filterExpr))
-		if err != nil {
-			return nil, err
-		}
-
-		sqlizer, err := toSql(expr, testMapper)
+		sqlizer, err := pkgfilter.Parse([]byte(filterExpr), testMapper)
 		if err != nil {
 			return nil, err
 		}

@@ -3,21 +3,18 @@ package filter
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	pkgfilter "github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 var _ = Describe("Migration Excluded Filter", func() {
 	Context("migration_excluded field mapping", func() {
-		// Given the defaultMapFn
-		// When migration_excluded is queried
-		// Then it should map to the correct SQL expression with BooleanField type
-		It("should map migration_excluded to COALESCE expression", func() {
-			// Act
-			column, fieldType, err := defaultMapFn("migration_excluded")
+		It("should map migration_excluded to correct column with BooleanField type", func() {
+			column, fieldType, err := DefaultMapper("migration_excluded")
 
-			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(column).To(Equal(`v."migration_excluded"`))
-			Expect(fieldType).To(Equal(BooleanField))
+			Expect(fieldType).To(Equal(pkgfilter.BooleanField))
 		})
 	})
 
@@ -69,13 +66,10 @@ var _ = Describe("Migration Excluded Filter", func() {
 		for _, test := range tests {
 			test := test
 			It("should generate correct SQL for: "+test.description, func() {
-				// Act
-				expr, err := parse([]byte(test.input))
+				sqlizer, err := ParseWithDefaultMap([]byte(test.input))
 				Expect(err).NotTo(HaveOccurred())
 
-				sql, err := toSqlString(expr, defaultMapFn)
-
-				// Assert
+				sql, err := sqlToString(sqlizer)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(sql).To(Equal(test.expectedSQL))
 			})
@@ -83,14 +77,9 @@ var _ = Describe("Migration Excluded Filter", func() {
 	})
 
 	Context("ParseWithDefaultMap integration", func() {
-		// Given a migration_excluded filter expression
-		// When ParseWithDefaultMap is called
-		// Then it should return a valid Sqlizer
 		It("should parse migration_excluded = true", func() {
-			// Act
 			sqlizer, err := ParseWithDefaultMap([]byte("migration_excluded = true"))
 
-			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sqlizer).NotTo(BeNil())
 
@@ -101,14 +90,9 @@ var _ = Describe("Migration Excluded Filter", func() {
 			Expect(args).To(HaveLen(0)) // Boolean values are embedded directly, not placeholders
 		})
 
-		// Given a migration_excluded filter expression
-		// When ParseWithDefaultMap is called
-		// Then it should return a valid Sqlizer
 		It("should parse migration_excluded = false", func() {
-			// Act
 			sqlizer, err := ParseWithDefaultMap([]byte("migration_excluded = false"))
 
-			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sqlizer).NotTo(BeNil())
 
@@ -119,15 +103,10 @@ var _ = Describe("Migration Excluded Filter", func() {
 			Expect(args).To(HaveLen(0)) // Boolean values are embedded directly, not placeholders
 		})
 
-		// Given a complex filter with migration_excluded
-		// When ParseWithDefaultMap is called
-		// Then it should parse successfully
 		It("should parse complex expression with migration_excluded", func() {
-			// Act
 			expression := `migration_excluded = false and cluster = "production" and memory >= 8192`
 			sqlizer, err := ParseWithDefaultMap([]byte(expression))
 
-			// Assert
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sqlizer).NotTo(BeNil())
 
@@ -140,14 +119,9 @@ var _ = Describe("Migration Excluded Filter", func() {
 	})
 
 	Context("Error handling", func() {
-		// Given an invalid boolean value
-		// When parsing the expression
-		// Then it should return an error
 		It("should reject non-boolean values for boolean fields", func() {
-			// Act
 			sqlizer, err := ParseWithDefaultMap([]byte("migration_excluded = 'invalid'"))
 
-			// Assert - should fail because migration_excluded is a boolean field
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("boolean"))
 			Expect(sqlizer).To(BeNil())

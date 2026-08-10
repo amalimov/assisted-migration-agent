@@ -12,10 +12,10 @@ import (
 
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 	"github.com/kubev2v/assisted-migration-agent/test"
 )
 
@@ -91,7 +91,7 @@ var _ = Describe("GroupStore", func() {
 			_, err = s.Group().Create(ctx, models.Group{Name: "staging-cluster", Filter: "cluster = 'staging'"})
 			Expect(err).NotTo(HaveOccurred())
 
-			f, err := filter.ParseWithGroupMap([]byte("name = 'prod-cluster'"))
+			f, err := vmfilter.ParseWithGroupMap([]byte("name = 'prod-cluster'"))
 			Expect(err).NotTo(HaveOccurred())
 
 			groups, err := s.Group().List(ctx, []sq.Sqlizer{f}, 0, 0)
@@ -147,7 +147,7 @@ var _ = Describe("GroupStore", func() {
 			_, err = s.Group().Create(ctx, models.Group{Name: "staging-vms", Filter: "memory > 0"})
 			Expect(err).NotTo(HaveOccurred())
 
-			f, err := filter.ParseWithGroupMap([]byte("name = 'prod-vms'"))
+			f, err := vmfilter.ParseWithGroupMap([]byte("name = 'prod-vms'"))
 			Expect(err).NotTo(HaveOccurred())
 
 			count, err := s.Group().Count(ctx, f)

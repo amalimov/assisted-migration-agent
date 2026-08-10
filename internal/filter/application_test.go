@@ -3,29 +3,31 @@ package filter
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	pkgfilter "github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 var _ = Describe("Application Filter", func() {
 	Context("application field mapping", func() {
 		It("should map 'application' to va.app_name as StringField", func() {
-			column, fieldType, err := defaultMapFn("application")
+			column, fieldType, err := DefaultMapper("application")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(column).To(Equal(`va.app_name`))
-			Expect(fieldType).To(Equal(StringField))
+			Expect(fieldType).To(Equal(pkgfilter.StringField))
 		})
 
 		It("should map 'application.name' to va.app_name as StringField", func() {
-			column, fieldType, err := defaultMapFn("application.name")
+			column, fieldType, err := DefaultMapper("application.name")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(column).To(Equal(`va.app_name`))
-			Expect(fieldType).To(Equal(StringField))
+			Expect(fieldType).To(Equal(pkgfilter.StringField))
 		})
 
 		It("should map 'application.description' to va.app_desc as StringField", func() {
-			column, fieldType, err := defaultMapFn("application.description")
+			column, fieldType, err := DefaultMapper("application.description")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(column).To(Equal(`va.app_desc`))
-			Expect(fieldType).To(Equal(StringField))
+			Expect(fieldType).To(Equal(pkgfilter.StringField))
 		})
 	})
 
@@ -67,11 +69,10 @@ var _ = Describe("Application Filter", func() {
 		for _, test := range tests {
 			test := test
 			It("should generate correct SQL for: "+test.description, func() {
-				expr, err := parse([]byte(test.input))
+				sqlizer, err := ParseWithDefaultMap([]byte(test.input))
 				Expect(err).NotTo(HaveOccurred())
 
-				sql, err := toSqlString(expr, defaultMapFn)
-
+				sql, err := sqlToString(sqlizer)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(sql).To(Equal(test.expectedSQL))
 			})

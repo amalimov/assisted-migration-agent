@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	pkgfilter "github.com/kubev2v/assisted-migration-agent/pkg/filter"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/duckdb/duckdb-go/v2"
 	. "github.com/onsi/ginkgo/v2"
@@ -14,14 +16,14 @@ var _ = Describe("Labels Filter Integration with DuckDB", func() {
 	var db *sql.DB
 
 	// labelsMapper maps filter variable names to SQL column references.
-	var labelsMapper MapFunc = func(name string) (string, FieldType, error) {
+	var labelsMapper pkgfilter.MapFunc = func(name string) (string, pkgfilter.FieldType, error) {
 		switch name {
 		case "name":
-			return `"name"`, StringField, nil
+			return `"name"`, pkgfilter.StringField, nil
 		case "cluster":
-			return `"cluster"`, StringField, nil
+			return `"cluster"`, pkgfilter.StringField, nil
 		case "labels":
-			return `"labels"`, ArrayField, nil
+			return `"labels"`, pkgfilter.ArrayField, nil
 		default:
 			return "", 0, fmt.Errorf("unknown field: %s", name)
 		}
@@ -66,12 +68,7 @@ var _ = Describe("Labels Filter Integration with DuckDB", func() {
 	})
 
 	queryVMs := func(filterExpr string) ([]string, error) {
-		expr, err := parse([]byte(filterExpr))
-		if err != nil {
-			return nil, err
-		}
-
-		sqlizer, err := toSql(expr, labelsMapper)
+		sqlizer, err := pkgfilter.Parse([]byte(filterExpr), labelsMapper)
 		if err != nil {
 			return nil, err
 		}

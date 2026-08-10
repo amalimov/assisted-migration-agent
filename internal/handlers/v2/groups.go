@@ -10,10 +10,10 @@ import (
 	"github.com/kubev2v/migration-planner/pkg/inventory/converters"
 
 	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	services "github.com/kubev2v/assisted-migration-agent/internal/services/v2"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 // ListGroups returns groups with optional name filtering and pagination.
@@ -189,7 +189,7 @@ func (h *Handler) createGroup(c *gin.Context, groupSvc *services.GroupService) {
 		return
 	}
 
-	if _, err := filter.ParseWithDefaultMap([]byte(req.Filter)); err != nil {
+	if _, err := vmfilter.ParseWithDefaultMap([]byte(req.Filter)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("filter is invalid: %v", err)})
 		return
 	}
@@ -319,7 +319,7 @@ func (h *Handler) updateGroup(c *gin.Context, groupSvc *services.GroupService, g
 	}
 
 	if req.Filter != nil {
-		if _, err := filter.ParseWithDefaultMap([]byte(*req.Filter)); err != nil {
+		if _, err := vmfilter.ParseWithDefaultMap([]byte(*req.Filter)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("filter is invalid: %v", err)})
 			return
 		}

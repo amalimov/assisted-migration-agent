@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
@@ -107,7 +108,7 @@ func FuzzParseSecurityProperties(f *testing.F) {
 	f.Add([]byte("name = '[]'"))
 
 	f.Fuzz(func(t *testing.T, input []byte) {
-		result, err := filter.ParseWithDefaultMap(input)
+		result, err := vmfilter.ParseWithDefaultMap(input)
 		if err != nil {
 			return // Parse error is acceptable for fuzzed input
 		}
@@ -155,7 +156,7 @@ func FuzzIdentifierWhitelist(f *testing.F) {
 	f.Add([]byte("WHERE = 'x'"))
 
 	f.Fuzz(func(t *testing.T, input []byte) {
-		result, err := filter.ParseWithDefaultMap(input)
+		result, err := vmfilter.ParseWithDefaultMap(input)
 		if err != nil {
 			// Parse/mapping error is expected for invalid identifiers
 			return

@@ -13,9 +13,9 @@ import (
 	duckdb_models "github.com/kubev2v/migration-planner/pkg/duckdb_parser/models"
 	"go.uber.org/zap"
 
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 type VMStore struct {
@@ -416,7 +416,7 @@ func ByFilter(expr string) sq.Sqlizer {
 	if expr == "" {
 		return nil
 	}
-	sqlizer, err := filter.ParseWithDefaultMap([]byte(expr))
+	sqlizer, err := vmfilter.ParseWithDefaultMap([]byte(expr))
 	if err != nil {
 		zap.S().Named("vm_store").Warnw("failed to parse filter expression", "expression", expr, "error", err)
 	}

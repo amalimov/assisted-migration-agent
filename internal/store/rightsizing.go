@@ -11,8 +11,8 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 )
@@ -276,7 +276,7 @@ func (s *RightSizingStore) clusterUtilizationRows(ctx context.Context, reportID,
 		OrderBy("cluster_name")
 
 	if filterExpr != "" {
-		sqlizer, err := filter.ParseWithClusterMap([]byte(filterExpr))
+		sqlizer, err := vmfilter.ParseWithClusterMap([]byte(filterExpr))
 		if err != nil {
 			return nil, fmt.Errorf("invalid cluster filter expression: %w", err)
 		}

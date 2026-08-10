@@ -11,9 +11,9 @@ import (
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 	"github.com/kubev2v/migration-planner/pkg/inventory/converters"
 
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 const (
@@ -61,7 +61,7 @@ func (s *GroupService) List(ctx context.Context, params GroupListParams) ([]mode
 	var filters []sq.Sqlizer
 	if params.ByName != "" {
 		expr := fmt.Sprintf(filterByNameExpression, params.ByName)
-		f, err := filter.ParseWithGroupMap([]byte(expr))
+		f, err := vmfilter.ParseWithGroupMap([]byte(expr))
 		if err != nil {
 			return nil, 0, fmt.Errorf("invalid name filter: %w", err)
 		}

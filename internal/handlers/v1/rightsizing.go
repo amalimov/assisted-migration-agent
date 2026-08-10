@@ -9,9 +9,9 @@ import (
 	"go.uber.org/zap"
 
 	v1 "github.com/kubev2v/assisted-migration-agent/api/v1"
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 var clusterIDPattern = regexp.MustCompile(`^(domain-c\d+|cluster-[0-9a-f]{16})$`)
@@ -137,7 +137,7 @@ func (h *Handler) ListRightsizingReportClusters(c *gin.Context, reportId string,
 
 	filterExpr := ""
 	if params.ByExpression != nil {
-		if _, err := filter.ParseWithClusterMap([]byte(*params.ByExpression)); err != nil {
+		if _, err := vmfilter.ParseWithClusterMap([]byte(*params.ByExpression)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("expression filter is invalid: %v", err)})
 			return
 		}

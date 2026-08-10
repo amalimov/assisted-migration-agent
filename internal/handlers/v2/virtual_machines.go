@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
+	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
 	services "github.com/kubev2v/assisted-migration-agent/internal/services/v2"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
-	"github.com/kubev2v/assisted-migration-agent/pkg/filter"
 )
 
 var validSortFields = map[string]bool{
@@ -242,7 +242,7 @@ func (h *Handler) listVirtualMachines(c *gin.Context, vmSvc *services.VMService,
 	}
 
 	if byExpression != nil {
-		if _, err := filter.ParseWithDefaultMap([]byte(*byExpression)); err != nil {
+		if _, err := vmfilter.ParseWithDefaultMap([]byte(*byExpression)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("expression filter is invalid: %v", err)})
 			return
 		}
