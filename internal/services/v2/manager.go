@@ -417,7 +417,19 @@ func (m *ServiceManager) exportService(db *store.Database) (*ExportService, erro
 	if err != nil {
 		return nil, err
 	}
-	return NewExportService(st), nil
+
+	// Get main database for storage-forecast data
+	mainDB, err := m.pool.Get(store.MainDatabaseID)
+	if err != nil {
+		// If main DB not available, create service without it (will write empty forecast CSV)
+		return NewExportService(st), nil
+	}
+	mainStore, err := mainDB.Store()
+	if err != nil {
+		return NewExportService(st), nil
+	}
+
+	return NewExportServiceWithMain(st, mainStore), nil
 }
 
 func (m *ServiceManager) ComparisonService(aId, bId string) (*ComparisonService, error) {

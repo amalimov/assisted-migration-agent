@@ -18,11 +18,16 @@ import (
 )
 
 type ExportService struct {
-	store *store.Store2
+	store     *store.Store2
+	mainStore *store.Store2
 }
 
 func NewExportService(st *store.Store2) *ExportService {
 	return &ExportService{store: st}
+}
+
+func NewExportServiceWithMain(st, mainSt *store.Store2) *ExportService {
+	return &ExportService{store: st, mainStore: mainSt}
 }
 
 func (s *ExportService) SupportedScopes() []string {
@@ -41,11 +46,16 @@ func (s *ExportService) WriteZip(ctx context.Context, scopes []string, w io.Writ
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	exportStore := s.store.Export()
+	var mainExportStore *store.ExportStore
+	if s.mainStore != nil {
+		mainExportStore = s.mainStore.Export()
+	}
+
 	for _, scope := range scopes {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := exportScope(ctx, exportStore, scope, tmpDir); err != nil {
+		if err := exportScope(ctx, exportStore, mainExportStore, scope, tmpDir); err != nil {
 			return fmt.Errorf("%s export failed: %w", scope, err)
 		}
 	}
@@ -66,11 +76,16 @@ func (s *ExportService) WriteExcel(ctx context.Context, scopes []string, w io.Wr
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	exportStore := s.store.Export()
+	var mainExportStore *store.ExportStore
+	if s.mainStore != nil {
+		mainExportStore = s.mainStore.Export()
+	}
+
 	for _, scope := range scopes {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := exportScope(ctx, exportStore, scope, tmpDir); err != nil {
+		if err := exportScope(ctx, exportStore, mainExportStore, scope, tmpDir); err != nil {
 			return fmt.Errorf("%s export failed: %w", scope, err)
 		}
 	}
@@ -178,7 +193,20 @@ func addCSVAsSheet(f *excelize.File, sheet, csvPath string) error {
 	return nil
 }
 
-func exportScope(ctx context.Context, exportStore *store.ExportStore, scope, tmpDir string) error {
+func exportScope(ctx context.Context, exportStore, mainExportStore *store.ExportStore, scope, tmpDir string) error {
+	// storage-forecast data lives in the main agent database
+	if scope == "storage-forecast" {
+		if mainExportStore == nil {
+			// No main store available - write empty CSV
+			return writeEmptyStorageForecastCSV(filepath.Join(tmpDir, "storage-forecast.csv"))
+		}
+		filename, ok := mainExportStore.ScopeFilename(scope)
+		if !ok {
+			return fmt.Errorf("unknown export scope: %s", scope)
+		}
+		return mainExportStore.CopyScope(ctx, scope, filepath.Join(tmpDir, filename))
+	}
+
 	if scope == "utilization" {
 		return exportStore.ExportUtilization(ctx, tmpDir)
 	}
@@ -187,6 +215,17 @@ func exportScope(ctx context.Context, exportStore *store.ExportStore, scope, tmp
 		return fmt.Errorf("unknown export scope: %s", scope)
 	}
 	return exportStore.CopyScope(ctx, scope, filepath.Join(tmpDir, filename))
+}
+
+func writeEmptyStorageForecastCSV(path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	// Write just the header - no forecast data available
+	_, err = f.WriteString("id,session_id,pair_name,source_datastore,target_datastore,iteration,disk_size_gb,duration_sec,throughput_mbps,prep_duration_sec,method,error,created_at\n")
+	return err
 }
 
 func writeZIP(ctx context.Context, tmpDir string, w io.Writer) error {
