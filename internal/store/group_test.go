@@ -16,12 +16,12 @@ import (
 	"github.com/kubev2v/migration-planner/pkg/duckdb_parser"
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 
-	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
-	"github.com/kubev2v/assisted-migration-agent/test"
+	vmfilter "github.com/kubev2v/rvtools-analyser/internal/filter"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store/migrations"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
+	"github.com/kubev2v/rvtools-analyser/test"
 )
 
 var _ = Describe("GroupStore", func() {

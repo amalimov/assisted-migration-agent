@@ -2,7 +2,7 @@ package errors_test
 
 import (
 	"fmt"
-	errors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	errors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 	"testing"
 )
 

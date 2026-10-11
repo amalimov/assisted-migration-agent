@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	services "github.com/kubev2v/assisted-migration-agent/internal/services"
 	"github.com/kubev2v/assisted-migration-agent/pkg/work"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	services "github.com/kubev2v/rvtools-analyser/internal/services"
 )
 
 type completedWorkFactory struct{}

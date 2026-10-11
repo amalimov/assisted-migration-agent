@@ -2,9 +2,9 @@ package v2
 
 import (
 	"context"
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	svc "github.com/kubev2v/assisted-migration-agent/internal/services"
+	"github.com/kubev2v/rvtools-analyser/internal/config"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	svc "github.com/kubev2v/rvtools-analyser/internal/services"
 )
 
 type ServiceProvider interface {

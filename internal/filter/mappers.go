@@ -1,7 +1,7 @@
 // Package filter maps RVTools workbook fields to the generic filter DSL.
 //
 // This package contains MapFunc implementations that map VM-related filter field names
-// to their corresponding SQL column references in the assisted-migration-agent database schema.
+// to their corresponding SQL column references in the local RVTools database schema.
 package filter
 
 import (

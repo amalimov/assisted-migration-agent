@@ -2,7 +2,7 @@ package v2
 
 import (
 	"github.com/gin-gonic/gin"
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
+	v2 "github.com/kubev2v/rvtools-analyser/api/v2"
 	"net/http"
 )
 

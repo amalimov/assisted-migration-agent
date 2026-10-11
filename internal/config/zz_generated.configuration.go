@@ -116,6 +116,7 @@ func NewServerWithOptionsAndDefaults(opts ...ServerOption) *Server {
 func (s *Server) ToOption() ServerOption {
 	return func(to *Server) {
 		to.ServerMode = s.ServerMode
+		to.ListenAddress = s.ListenAddress
 		to.HTTPPort = s.HTTPPort
 		to.StaticsFolder = s.StaticsFolder
 	}
@@ -125,6 +126,7 @@ func (s *Server) ToOption() ServerOption {
 func (s *Server) DebugMap() map[string]any {
 	debugMap := map[string]any{}
 	debugMap["ServerMode"] = helpers.DebugValue(s.ServerMode, false)
+	debugMap["ListenAddress"] = helpers.DebugValue(s.ListenAddress, false)
 	debugMap["HTTPPort"] = helpers.DebugValue(s.HTTPPort, false)
 	debugMap["StaticsFolder"] = helpers.DebugValue(s.StaticsFolder, false)
 	return debugMap
@@ -150,6 +152,13 @@ func (s *Server) WithOptions(opts ...ServerOption) *Server {
 func WithServerMode(serverMode string) ServerOption {
 	return func(s *Server) {
 		s.ServerMode = serverMode
+	}
+}
+
+// WithListenAddress returns an option that can set ListenAddress on a Server
+func WithListenAddress(listenAddress string) ServerOption {
+	return func(s *Server) {
+		s.ListenAddress = listenAddress
 	}
 }
 

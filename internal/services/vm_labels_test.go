@@ -13,9 +13,9 @@ import (
 
 	"github.com/kubev2v/migration-planner/pkg/duckdb_parser"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/services"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
+	"github.com/kubev2v/rvtools-analyser/internal/services"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store/migrations"
 )
 
 var _ = Describe("VMService Labels", func() {

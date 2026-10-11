@@ -14,8 +14,8 @@ import (
 
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 )
 
 const (

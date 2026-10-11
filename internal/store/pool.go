@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	"github.com/kubev2v/rvtools-analyser/pkg/errors"
 
 	pkgstore "github.com/kubev2v/migration-planner/pkg/store"
 	"go.uber.org/zap"

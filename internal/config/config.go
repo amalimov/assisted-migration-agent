@@ -18,6 +18,7 @@ type Configuration struct {
 
 type Server struct {
 	ServerMode    string `debugmap:"visible" default:"dev"`
+	ListenAddress string `debugmap:"visible" default:"127.0.0.1"`
 	HTTPPort      int    `debugmap:"visible" default:"8000"`
 	StaticsFolder string `debugmap:"visible"`
 }

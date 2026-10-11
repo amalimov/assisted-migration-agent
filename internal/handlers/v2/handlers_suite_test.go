@@ -8,8 +8,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	svc "github.com/kubev2v/assisted-migration-agent/internal/services"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	svc "github.com/kubev2v/rvtools-analyser/internal/services"
 )
 
 func TestHandlersV2(t *testing.T) {

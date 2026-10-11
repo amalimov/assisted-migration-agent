@@ -16,9 +16,9 @@ import (
 
 	agentAPI "github.com/kubev2v/migration-planner/api/v1alpha1/agent"
 
-	v2api "github.com/kubev2v/assisted-migration-agent/api/v2"
-	services "github.com/kubev2v/assisted-migration-agent/internal/services"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	v2api "github.com/kubev2v/rvtools-analyser/api/v2"
+	services "github.com/kubev2v/rvtools-analyser/internal/services"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 )
 
 // GetInventory returns the collected inventory for a collection.

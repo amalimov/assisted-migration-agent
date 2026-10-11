@@ -11,10 +11,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	svc "github.com/kubev2v/assisted-migration-agent/internal/services"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	svc "github.com/kubev2v/rvtools-analyser/internal/services"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store/migrations"
 )
 
 // buildTestStore creates a temporary DuckDB populated with the given VMs.

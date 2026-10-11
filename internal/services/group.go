@@ -9,9 +9,9 @@ import (
 
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 
-	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	vmfilter "github.com/kubev2v/rvtools-analyser/internal/filter"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
 )
 
 const (

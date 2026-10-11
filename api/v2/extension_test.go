@@ -1,8 +1,8 @@
 package v2_test
 
 import (
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
+	v2 "github.com/kubev2v/rvtools-analyser/api/v2"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
 	"testing"
 )
 

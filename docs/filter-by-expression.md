@@ -1,6 +1,6 @@
 # VM filter expressions
 
-Use `byExpression` on `GET /api/v2/virtualmachines` or `GET /api/v2/collections/{id}/virtualmachines`. Group filters use the same VM fields. The parser accepts comparisons such as `=`, `!=`, `<`, `>`, `<=`, and `>=`, logical `and`/`or`, `like`, and array membership as described by the generic `pkg/filter` parser.
+Use `byExpression` on `GET /api/v2/virtualmachines` or `GET /api/v2/collections/{id}/virtualmachines`. Group filters use the same VM fields. The parser comes from `github.com/kubev2v/assisted-migration-agent/pkg/filter` and accepts comparisons such as `=`, `!=`, `<`, `>`, `<=`, and `>=`, logical `and`/`or`, `like`, and array membership. This page lists the fields supported by this agent's local mapper.
 
 ```bash
 curl -G 'http://localhost:8000/api/v2/virtualmachines' --data-urlencode "byExpression=cluster = 'production' and memory >= 4096"

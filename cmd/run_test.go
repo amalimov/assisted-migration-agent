@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/config"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
 )
 
 func TestRVToolsConfiguration(t *testing.T) {
@@ -22,9 +22,25 @@ func TestRVToolsConfiguration(t *testing.T) {
 	if cfg.Server.HTTPPort != 8000 {
 		t.Fatalf("unexpected port %d", cfg.Server.HTTPPort)
 	}
+	if cfg.Server.ListenAddress != "127.0.0.1" {
+		t.Fatalf("unexpected listen address %q", cfg.Server.ListenAddress)
+	}
 	command := NewRunCommand(cfg)
+	if command.Flags().Lookup("server-listen-address") == nil {
+		t.Fatal("listen address flag is missing")
+	}
 	if command.Flags().Lookup("rvtools-mode") != nil || command.Flags().Lookup("console-url") != nil {
 		t.Fatal("obsolete modes are still exposed")
+	}
+}
+
+func TestRejectInvalidListenAddress(t *testing.T) {
+	cfg := config.NewConfigurationWithOptionsAndDefaults()
+	cfg.Agent.DataFolder = t.TempDir()
+	cfg.Agent.OpaPoliciesFolder = t.TempDir()
+	cfg.Server.ListenAddress = "not-an-ip"
+	if err := validateConfiguration(cfg); err == nil {
+		t.Fatal("invalid listen address was accepted")
 	}
 }
 

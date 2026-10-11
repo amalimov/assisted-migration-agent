@@ -2,9 +2,9 @@
 
 PODMAN ?= podman
 BINARY_PATH ?= bin/agent
-IMAGE_NAME ?= assisted-migration-agent
+IMAGE_NAME ?= rvtools-analyser
 IMAGE_TAG ?= latest
-CONTAINER_NAME ?= migration-planner-agent
+CONTAINER_NAME ?= rvtools-analyser
 AGENT_VOLUME_NAME ?= agent-data
 DATA_FOLDER ?= $(CURDIR)/data
 OPA_POLICIES_FOLDER ?= $(CURDIR)/policies
@@ -28,7 +28,7 @@ image:
 
 run.container:
 	$(PODMAN) volume create $(AGENT_VOLUME_NAME)
-	$(PODMAN) run -d --name $(CONTAINER_NAME) -p 8000:8000 -v $(AGENT_VOLUME_NAME):/var/lib/agent $(IMAGE_NAME):$(IMAGE_TAG)
+	$(PODMAN) run -d --name $(CONTAINER_NAME) -p 127.0.0.1:8000:8000 -v $(AGENT_VOLUME_NAME):/var/lib/agent $(IMAGE_NAME):$(IMAGE_TAG)
 
 stop.container:
 	$(PODMAN) rm --force $(CONTAINER_NAME)
@@ -41,10 +41,8 @@ e2e:
 
 FUZZ_TIME ?= 30s
 test.fuzz:
-	go test -race ./pkg/filter -fuzz='^FuzzParse$$' -fuzztime=$(FUZZ_TIME)
-	go test -race ./pkg/filter -fuzz='^FuzzParseSecurityProperties$$' -fuzztime=$(FUZZ_TIME)
-	go test -race ./pkg/filter -fuzz='^FuzzIdentifierWhitelist$$' -fuzztime=$(FUZZ_TIME)
-	go test -race ./pkg/work -fuzz='^FuzzPool2$$' -fuzztime=$(FUZZ_TIME)
+	go test -race ./internal/filter -fuzz='^FuzzParseSecurityProperties$$' -fuzztime=$(FUZZ_TIME)
+	go test -race ./internal/filter -fuzz='^FuzzIdentifierWhitelist$$' -fuzztime=$(FUZZ_TIME)
 
 generate:
 	go generate ./api/v2 ./internal/config

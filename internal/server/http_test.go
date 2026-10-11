@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,8 +12,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
-	"github.com/kubev2v/assisted-migration-agent/internal/server"
+	"github.com/kubev2v/rvtools-analyser/internal/config"
+	"github.com/kubev2v/rvtools-analyser/internal/server"
 )
 
 var _ = Describe("HTTP Server", func() {
@@ -84,7 +83,7 @@ var _ = Describe("HTTP Server", func() {
 			}()
 			time.Sleep(100 * time.Millisecond)
 
-			resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/v1/vms", cfg.Server.HTTPPort))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/vms", cfg.Server.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -96,7 +95,7 @@ var _ = Describe("HTTP Server", func() {
 			cfg = &config.Configuration{
 				Server: config.Server{
 					ServerMode:    server.ProductionServer,
-					HTTPPort:      18443,
+					HTTPPort:      18081,
 					StaticsFolder: tempDir,
 				},
 			}
@@ -108,7 +107,7 @@ var _ = Describe("HTTP Server", func() {
 			}
 		})
 
-		It("serves over HTTPS with TLS", func() {
+		It("serves UI-mode API over HTTP", func() {
 			var err error
 			srv, err = server.NewServer(cfg, groups)
 			Expect(err).ToNot(HaveOccurred())
@@ -118,13 +117,7 @@ var _ = Describe("HTTP Server", func() {
 			}()
 			time.Sleep(100 * time.Millisecond)
 
-			client := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				},
-			}
-
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/api/v1/vms", cfg.Server.HTTPPort))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/vms", cfg.Server.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -143,13 +136,7 @@ var _ = Describe("HTTP Server", func() {
 			}()
 			time.Sleep(100 * time.Millisecond)
 
-			client := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				},
-			}
-
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/", cfg.Server.HTTPPort))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", cfg.Server.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -168,13 +155,7 @@ var _ = Describe("HTTP Server", func() {
 			}()
 			time.Sleep(100 * time.Millisecond)
 
-			client := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				},
-			}
-
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/api/v1/nonexistent", cfg.Server.HTTPPort))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/nonexistent", cfg.Server.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(404))
 			_ = resp.Body.Close()
@@ -193,13 +174,7 @@ var _ = Describe("HTTP Server", func() {
 			}()
 			time.Sleep(100 * time.Millisecond)
 
-			client := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				},
-			}
-
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/some/spa/route", cfg.Server.HTTPPort))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/some/spa/route", cfg.Server.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -223,12 +198,7 @@ var _ = Describe("HTTP Server", func() {
 			srv = nil // prevent double stop in AfterEach
 
 			// Assert
-			client := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				},
-			}
-			_, err = client.Get(fmt.Sprintf("https://localhost:%d/api/v1/vms", cfg.Server.HTTPPort))
+			_, err = http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/vms", cfg.Server.HTTPPort))
 			Expect(err).To(HaveOccurred())
 		})
 	})

@@ -46,4 +46,4 @@ RUN chmod +x /app/entrypoint.sh
 USER 1001
 EXPOSE 8000
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["run", "--data-folder", "/var/lib/agent", "--opa-policies-folder", "/app/policies", "--server-mode", "prod", "--server-statics-folder", "/app/static"]
+CMD ["run", "--data-folder", "/var/lib/agent", "--opa-policies-folder", "/app/policies", "--server-mode", "prod", "--server-listen-address", "0.0.0.0", "--server-statics-folder", "/app/static"]

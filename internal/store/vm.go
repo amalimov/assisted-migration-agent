@@ -9,9 +9,9 @@ import (
 	duckdb_models "github.com/kubev2v/migration-planner/pkg/duckdb_parser/models"
 	"go.uber.org/zap"
 
-	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	vmfilter "github.com/kubev2v/rvtools-analyser/internal/filter"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 )
 
 type VMStore struct {

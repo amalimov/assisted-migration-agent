@@ -10,14 +10,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 
 	"github.com/kubev2v/migration-planner/pkg/duckdb_parser"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/services"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
-	"github.com/kubev2v/assisted-migration-agent/test"
+	"github.com/kubev2v/rvtools-analyser/internal/services"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store/migrations"
+	"github.com/kubev2v/rvtools-analyser/test"
 )
 
 var _ = Describe("VMService", func() {

@@ -8,7 +8,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
 )
 
 const (

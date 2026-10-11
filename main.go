@@ -9,9 +9,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/kubev2v/assisted-migration-agent/cmd"
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/pkg/logger"
+	"github.com/kubev2v/rvtools-analyser/cmd"
+	"github.com/kubev2v/rvtools-analyser/internal/config"
 )
 
 // These are set at build time via -ldflags
@@ -24,17 +24,13 @@ var (
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "agent",
-		Short: "Assisted Migration Agent",
+		Short: "RVTools Analyser",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		},
 	}
 
 	// default configuration
 	cfg := config.NewConfigurationWithOptionsAndDefaults(
-		config.WithServer(config.Server{
-			HTTPPort:   8000,
-			ServerMode: "dev",
-		}),
 		config.WithAgent(config.Agent{
 			Version:     version,
 			GitCommit:   gitCommit,

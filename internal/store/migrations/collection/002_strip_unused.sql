@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS vm_inspection_concerns;
+DROP TABLE IF EXISTS vm_inspection_status;
+DROP SEQUENCE IF EXISTS vm_inspection_concerns_seq;
+DROP SEQUENCE IF EXISTS vm_inspection_id_seq;
+DROP SEQUENCE IF EXISTS vm_inspection_status_seq;
+DROP TABLE IF EXISTS outbox;
+DROP SEQUENCE IF EXISTS outbox_id_seq;
+DROP TABLE IF EXISTS rightsizing_vm_utilization;
+DROP TABLE IF EXISTS rightsizing_vm_warnings;
+DROP TABLE IF EXISTS rightsizing_metrics;
+DROP TABLE IF EXISTS rightsizing_reports;
+DROP TABLE IF EXISTS vm_applications;
+ALTER TABLE IF EXISTS vdatastore DROP COLUMN IF EXISTS "Backing Devices";

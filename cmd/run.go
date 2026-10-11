@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -30,14 +31,14 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
-	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
-	v2Handlers "github.com/kubev2v/assisted-migration-agent/internal/handlers/v2"
-	"github.com/kubev2v/assisted-migration-agent/internal/server"
-	service "github.com/kubev2v/assisted-migration-agent/internal/services"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
+	v2 "github.com/kubev2v/rvtools-analyser/api/v2"
+	"github.com/kubev2v/rvtools-analyser/internal/config"
+	"github.com/kubev2v/rvtools-analyser/internal/handlers"
+	v2Handlers "github.com/kubev2v/rvtools-analyser/internal/handlers/v2"
+	"github.com/kubev2v/rvtools-analyser/internal/server"
+	service "github.com/kubev2v/rvtools-analyser/internal/services"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store/migrations"
 )
 
 const apiV2 = "/api/v2"
@@ -60,7 +61,7 @@ func NewRunCommand(cfg *config.Configuration) *cobra.Command {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				zap.S().Infof("Starting HTTP server on port %d", cfg.Server.HTTPPort)
+				zap.S().Infof("Starting HTTP server on %s port %d", cfg.Server.ListenAddress, cfg.Server.HTTPPort)
 				if err := srv.Start(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					zap.S().Errorw("failed to start HTTP server", "error", err)
 					cancel()
@@ -183,6 +184,7 @@ func registerFlags(cmd *cobra.Command, cfg *config.Configuration) {
 	nfs := cobrautil.NewNamedFlagSets(cmd)
 	serverFlags := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Server"))
 	serverFlags.IntVar(&cfg.Server.HTTPPort, "server-http-port", cfg.Server.HTTPPort, "HTTP port")
+	serverFlags.StringVar(&cfg.Server.ListenAddress, "server-listen-address", cfg.Server.ListenAddress, "IP address to listen on")
 	serverFlags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Static UI directory")
 	serverFlags.StringVar(&cfg.Server.ServerMode, "server-mode", cfg.Server.ServerMode, "Server mode: prod or dev")
 	agentFlags := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Agent"))
@@ -200,6 +202,9 @@ func validateConfiguration(cfg *config.Configuration) error {
 	}
 	if cfg.Server.HTTPPort < 1 || cfg.Server.HTTPPort > 65535 {
 		return fmt.Errorf("invalid http-port %d: must be between 1 and 65535", cfg.Server.HTTPPort)
+	}
+	if _, err := netip.ParseAddr(cfg.Server.ListenAddress); err != nil {
+		return fmt.Errorf("invalid server-listen-address %q: must be an IP address", cfg.Server.ListenAddress)
 	}
 	switch config.ServerModeType(cfg.Server.ServerMode) {
 	case config.ServerModeProd:

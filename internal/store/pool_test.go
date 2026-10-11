@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
 )
 
 var _ = Describe("Pool", func() {

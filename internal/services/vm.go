@@ -10,8 +10,8 @@ import (
 	"github.com/kubev2v/migration-planner/pkg/inventory"
 	"github.com/kubev2v/migration-planner/pkg/inventory/converters"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
 )
 
 type VMService struct {

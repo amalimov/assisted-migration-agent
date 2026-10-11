@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	v2 "github.com/kubev2v/rvtools-analyser/api/v2"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 )
 
 const (

@@ -1,6 +1,6 @@
 # Local API (v2)
 
-Base URL: `http://localhost:8000/api/v2` in development, or `https://localhost:8000/api/v2` in production mode. The complete request and response schema is in [openapi.yaml](../api/v2/openapi.yaml).
+Base URL: `http://localhost:8000/api/v2` in both server modes. The `prod` mode also serves the bundled UI over HTTP. The complete request and response schema is in [openapi.yaml](../api/v2/openapi.yaml).
 
 | Operation | Purpose |
 | --- | --- |

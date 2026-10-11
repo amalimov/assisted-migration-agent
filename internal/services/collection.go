@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
 )
 
 type CollectionService struct {

@@ -9,11 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/kubev2v/migration-planner/pkg/inventory/converters"
 
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
-	vmfilter "github.com/kubev2v/assisted-migration-agent/internal/filter"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	services "github.com/kubev2v/assisted-migration-agent/internal/services"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	v2 "github.com/kubev2v/rvtools-analyser/api/v2"
+	vmfilter "github.com/kubev2v/rvtools-analyser/internal/filter"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	services "github.com/kubev2v/rvtools-analyser/internal/services"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 )
 
 // ListGroups returns groups with optional name filtering and pagination.

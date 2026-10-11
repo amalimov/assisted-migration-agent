@@ -12,4 +12,4 @@ Generated API files are `api/v2/spec.gen.go` and `api/v2/types.gen.go`. Configur
 
 Collection and main database migrations live in `internal/store/migrations`. Add a numbered migration for existing installations when changing a schema; changing an old migration only affects new databases. Tests use temporary databases and generated workbooks.
 
-The generic pipeline is in `pkg/work`, with scheduling in `pkg/scheduler`. Filter parsing is in `pkg/filter`; `internal/filter` maps workbook fields to SQL columns. See [scheduler and pipeline notes](docs/scheduler-and-pipelines.md).
+The generic pipeline, scheduler, and filter parser come from the pinned `github.com/kubev2v/assisted-migration-agent` module. Local `internal/filter` maps workbook fields to SQL columns; local `internal/server` and `internal/config` host the HTTP API and UI. See [scheduler and pipeline notes](docs/scheduler-and-pipelines.md).

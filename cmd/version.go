@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
+	"github.com/kubev2v/rvtools-analyser/internal/config"
 )
 
 func NewVersionCommand(cfg *config.Configuration) *cobra.Command {

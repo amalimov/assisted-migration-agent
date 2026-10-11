@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
 )
 
 type InventoryService struct {

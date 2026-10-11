@@ -4,11 +4,11 @@ import (
 	"context"
 	"sync"
 
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 	"github.com/kubev2v/assisted-migration-agent/pkg/scheduler"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/pkg/work"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
 )
 
 type CollectorWorkBuilder interface {

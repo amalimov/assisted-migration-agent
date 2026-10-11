@@ -8,10 +8,10 @@ import (
 	"github.com/kubev2v/migration-planner/pkg/duckdb_parser"
 	"github.com/kubev2v/migration-planner/pkg/opa"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	"github.com/kubev2v/rvtools-analyser/internal/config"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 )
 
 type ServiceManager struct {

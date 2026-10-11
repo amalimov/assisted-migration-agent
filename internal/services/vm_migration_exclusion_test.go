@@ -12,11 +12,11 @@ import (
 
 	"github.com/kubev2v/migration-planner/pkg/duckdb_parser"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
-	"github.com/kubev2v/assisted-migration-agent/internal/services"
-	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
-	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
+	"github.com/kubev2v/rvtools-analyser/internal/models"
+	"github.com/kubev2v/rvtools-analyser/internal/services"
+	"github.com/kubev2v/rvtools-analyser/internal/store"
+	"github.com/kubev2v/rvtools-analyser/internal/store/migrations"
+	srvErrors "github.com/kubev2v/rvtools-analyser/pkg/errors"
 )
 
 var _ = Describe("VMService Migration Exclusion", func() {
