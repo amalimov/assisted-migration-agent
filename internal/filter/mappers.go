@@ -1,4 +1,4 @@
-// Package filter provides VM/vCenter-specific filter field mappers for the generic filter DSL.
+// Package filter maps RVTools workbook fields to the generic filter DSL.
 //
 // This package contains MapFunc implementations that map VM-related filter field names
 // to their corresponding SQL column references in the assisted-migration-agent database schema.
@@ -36,14 +36,6 @@ import (
 //
 //	concern.label, concern.category, concern.assessment
 //
-// vm_inspection_status (i) — inspection.* prefix:
-//
-//	inspection.status, inspection.error
-//
-// vm_inspection_concerns (ic) — inspection_concern.* prefix (latest run only in filter subquery):
-//
-//	inspection_concern.label, inspection_concern.category, inspection_concern.msg
-//
 // vcpu (cpu) — cpu.* prefix:
 //
 //	cpu.hot_add, cpu.hot_remove, cpu.sockets, cpu.cores_per_socket
@@ -62,17 +54,6 @@ import (
 //
 //	datastore.name, datastore.hosts, datastore.address, datastore.object_id,
 //	datastore.free, datastore.mha, datastore.capacity, datastore.type
-//
-// rightsizing_vm_utilization (utilization) — utilization.* prefix:
-//
-//	utilization.provisioned_cpus, utilization.provisioned_memory, utilization.provisioned_disk,
-//	utilization.cpu_avg, utilization.cpu_max, utilization.cpu_latest,
-//	utilization.mem_avg, utilization.mem_max, utilization.mem_latest,
-//	utilization.disk, utilization.confidence
-//
-// vm_applications (va) — application.* prefix:
-//
-//	application, application.name, application.description
 var DefaultMapper filter.MapFunc = func(name string) (string, filter.FieldType, error) {
 	switch strings.ToLower(name) {
 	// vinfo (v) — string fields
@@ -181,20 +162,6 @@ var DefaultMapper filter.MapFunc = func(name string) (string, filter.FieldType, 
 	case "concern.assessment":
 		return `c."Assessment"`, filter.StringField, nil
 
-	// vm_inspection_status (i) — inspection.* prefix
-	case "inspection.status":
-		return `i.status`, filter.StringField, nil
-	case "inspection.error":
-		return `i.error`, filter.StringField, nil
-
-	// vm_inspection_concerns (ic) — inspection_concern.* prefix
-	case "inspection_concern.label":
-		return `ic.label`, filter.StringField, nil
-	case "inspection_concern.category":
-		return `ic.category`, filter.StringField, nil
-	case "inspection_concern.msg":
-		return `ic.msg`, filter.StringField, nil
-
 	// vcpu (cpu) — cpu.* prefix
 	case "cpu.sockets":
 		return `cpu."Sockets"`, filter.NumericField, nil
@@ -253,36 +220,6 @@ var DefaultMapper filter.MapFunc = func(name string) (string, filter.FieldType, 
 	case "datastore.capacity":
 		return `ds."Capacity MiB"`, filter.NumericField, nil
 
-	// rightsizing_vm_utilization (utilization) — utilization.* prefix
-	case "utilization.provisioned_cpus":
-		return "utilization.provisioned_cpus", filter.NumericField, nil
-	case "utilization.provisioned_memory":
-		return "utilization.provisioned_memory_mb", filter.NumericField, nil
-	case "utilization.provisioned_disk":
-		return "utilization.provisioned_disk_kb", filter.NumericField, nil
-	case "utilization.cpu_avg":
-		return "utilization.cpu_avg_pct", filter.NumericField, nil
-	case "utilization.cpu_max":
-		return "utilization.cpu_max_pct", filter.NumericField, nil
-	case "utilization.cpu_latest":
-		return "utilization.cpu_latest_pct", filter.NumericField, nil
-	case "utilization.mem_avg":
-		return "utilization.mem_avg_pct", filter.NumericField, nil
-	case "utilization.mem_max":
-		return "utilization.mem_max_pct", filter.NumericField, nil
-	case "utilization.mem_latest":
-		return "utilization.mem_latest_pct", filter.NumericField, nil
-	case "utilization.disk":
-		return "utilization.disk_pct", filter.NumericField, nil
-	case "utilization.confidence":
-		return "utilization.confidence_pct", filter.NumericField, nil
-
-	// vm_applications (va) — application.* prefix
-	case "application", "application.name":
-		return `va.app_name`, filter.StringField, nil
-	case "application.description":
-		return `va.app_desc`, filter.StringField, nil
-
 	default:
 		return "", 0, fmt.Errorf("unknown filter field: %s", name)
 	}
@@ -308,72 +245,6 @@ var GroupMapper filter.MapFunc = func(name string) (string, filter.FieldType, er
 	}
 }
 
-// ClusterMapper maps cluster-related filter field names to SQL column references.
-//
-// Supported fields:
-//   - cluster_id: cluster identifier
-//   - cluster_name: cluster name
-var ClusterMapper filter.MapFunc = func(name string) (string, filter.FieldType, error) {
-	switch name {
-	case "cluster_id":
-		return "cluster_id", filter.StringField, nil
-	case "cluster_name":
-		return "cluster_name", filter.StringField, nil
-	default:
-		return "", 0, fmt.Errorf("unknown cluster filter field: %s", name)
-	}
-}
-
-// CollectionMapper maps collection DSL field names to SQL column names.
-// Column name strings must stay in sync with constants in internal/store/collection.go.
-//
-// Supported fields:
-//   - id: collection ID (numeric)
-//   - vcenter_id: vCenter identifier
-//   - vcenter: vCenter name
-//   - state: collection state
-//   - active: whether collection is active
-//   - started_at, finished_at, created_at, updated_at: timestamp fields
-//   - error: error message
-var CollectionMapper filter.MapFunc = func(name string) (string, filter.FieldType, error) {
-	switch strings.ToLower(name) {
-	case "id":
-		// BIGINT column — NumericField allows range comparisons (>, <, >=, <=).
-		return "id", filter.NumericField, nil
-	case "vcenter_id":
-		return "vcenter_id", filter.StringField, nil
-	case "vcenter":
-		return "vcenter", filter.StringField, nil
-	case "state":
-		return "state", filter.StringField, nil
-	case "active":
-		return "active", filter.BooleanField, nil
-	case "started_at", "finished_at", "created_at", "updated_at":
-		// TIMESTAMP columns — AnyField skips type validation so both string-literal
-		// equality and ordering comparisons work via DuckDB's implicit casting.
-		return name, filter.AnyField, nil
-	case "error":
-		return "error", filter.StringField, nil
-	default:
-		return "", 0, fmt.Errorf("unknown collection filter field: %s", name)
-	}
-}
-
-var ApplicationMapper filter.MapFunc = func(name string) (string, filter.FieldType, error) {
-	switch strings.ToLower(name) {
-	case "name":
-		return "app_name", filter.StringField, nil
-	case "description":
-		return "app_desc", filter.StringField, nil
-	case "vm_id":
-		return "vm_id", filter.StringField, nil
-	case "vm_name":
-		return "vm_name", filter.StringField, nil
-	default:
-		return "", 0, fmt.Errorf("unknown application filter field: %s", name)
-	}
-}
-
 // ParseWithDefaultMap parses a filter expression using the DefaultMapper (VM fields).
 // This is a convenience wrapper around filter.Parse() for VM filtering operations.
 func ParseWithDefaultMap(src []byte) (sq.Sqlizer, error) {
@@ -384,22 +255,4 @@ func ParseWithDefaultMap(src []byte) (sq.Sqlizer, error) {
 // This is a convenience wrapper around filter.Parse() for group filtering operations.
 func ParseWithGroupMap(src []byte) (sq.Sqlizer, error) {
 	return filter.Parse(src, GroupMapper)
-}
-
-// ParseWithClusterMap parses a filter expression using the ClusterMapper (cluster fields).
-// This is a convenience wrapper around filter.Parse() for cluster filtering operations.
-func ParseWithClusterMap(src []byte) (sq.Sqlizer, error) {
-	return filter.Parse(src, ClusterMapper)
-}
-
-// ParseWithCollectionMap parses a filter expression using the CollectionMapper (collection fields).
-// This is a convenience wrapper around filter.Parse() for collection filtering operations.
-func ParseWithCollectionMap(src []byte) (sq.Sqlizer, error) {
-	return filter.Parse(src, CollectionMapper)
-}
-
-// ParseWithApplicationMap parses a filter expression using the ApplicationMapper (collection fields).
-// This is a convenience wrapper around filter.Parse() for application filtering operations.
-func ParseWithApplicationMap(src []byte) (sq.Sqlizer, error) {
-	return filter.Parse(src, ApplicationMapper)
 }

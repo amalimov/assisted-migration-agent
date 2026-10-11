@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -36,13 +36,11 @@ func main() {
 			ServerMode: "dev",
 		}),
 		config.WithAgent(config.Agent{
-			Version:        version,
-			GitCommit:      gitCommit,
-			UIGitCommit:    uiGitCommit,
-			Mode:           "disconnected",
-			UpdateInterval: 5 * time.Second,
+			Version:     version,
+			GitCommit:   gitCommit,
+			UIGitCommit: uiGitCommit,
+			ID:          uuid.NewString(),
 		}),
-		config.WithAuth(config.Authentication{Enabled: false}),
 		config.WithLogFormat("console"),
 		config.WithLogLevel("debug"),
 	)

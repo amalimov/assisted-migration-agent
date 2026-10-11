@@ -1,4 +1,4 @@
-name: Run e2e tests
+name: RVTools e2e tests
 
 on:
   workflow_dispatch:
@@ -10,66 +10,16 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    name: e2e
-    env:
-      AGENT_IMAGE: assisted-migration-agent:e2e
-      BACKEND_IMAGE: migration-planner-api
-      BACKEND_TAG: e2e
-
     steps:
-      - name: Checkout agent code
-        uses: actions/checkout@v4
-
-      - name: Checkout migration-planner
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          repository: kubev2v/migration-planner
-          path: migration-planner
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.27.0'
-
-      - name: Install Podman
+          go-version-file: go.mod
+      - name: Install DuckDB Excel extension for offline test
         run: |
-          sudo apt-get update
-          sudo apt-get install -y podman
-
-      - name: Start Podman socket
-        run: |
-          systemctl --user enable --now podman.socket
-          echo "PODMAN_SOCKET=unix://$XDG_RUNTIME_DIR/podman/podman.sock" >> $GITHUB_ENV
-
-      - name: Build backend API container
-        run: |
-          cd migration-planner
-          make migration-planner-api-container MIGRATION_PLANNER_IMAGE=${{ env.BACKEND_IMAGE }} MIGRATION_PLANNER_IMAGE_TAG=${{ env.BACKEND_TAG }}
-
-      - name: Build agent container
-        run: |
-          make image IMAGE_NAME=assisted-migration-agent IMAGE_TAG=e2e
-
-      - name: Build e2e binary
-        run: |
-          make build.e2e
-
-      - name: Pull test images
-        run: |
-          podman pull docker.io/library/postgres:17
-          podman pull docker.io/vmware/vcsim:latest
-
-      - name: Download RHCOS ISO
-        run: |
-          mkdir -p iso
-          curl --silent -C - -o iso/rhcos-live-iso.x86_64.iso \
-            https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/latest/rhcos-live-iso.x86_64.iso
-
-      - name: Run e2e tests
-        run: |
-          ./bin/e2e \
-            -backend-image=${{ env.BACKEND_IMAGE }}:${{ env.BACKEND_TAG }} \
-            -agent-image=${{ env.AGENT_IMAGE }} \
-            -podman-socket=${{ env.PODMAN_SOCKET }} \
-            -iso-path=${{ github.workspace }}/iso \
-            --ginkgo.v
+          curl -fsSL https://extensions.duckdb.org/v1.4.3/linux_amd64/excel.duckdb_extension.gz -o /tmp/excel.duckdb_extension.gz
+          gunzip /tmp/excel.duckdb_extension.gz
+          echo '3a5387ebbb0b8e84fea6eae635bad5f7c9832663d6e44f8a2faf9a315092aee2  /tmp/excel.duckdb_extension' | sha256sum -c -
+          echo 'DUCKDB_EXCEL_EXTENSION=/tmp/excel.duckdb_extension' >> "$GITHUB_ENV"
+      - name: Run RVTools API tests
+        run: make e2e

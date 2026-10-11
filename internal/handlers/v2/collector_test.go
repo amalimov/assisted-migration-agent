@@ -24,7 +24,6 @@ import (
 	svc "github.com/kubev2v/assisted-migration-agent/internal/services"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
-	"github.com/kubev2v/assisted-migration-agent/pkg/crypto"
 )
 
 var _ = Describe("GetCollectorStatus handler", func() {
@@ -76,21 +75,15 @@ var _ = Describe("GetCollectorStatus handler", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(collSt.Inventory().Save(ctx, []byte(`{"vms":1}`))).To(Succeed())
 
-		keyMgr, err := crypto.NewKeyManager("")
-		Expect(err).NotTo(HaveOccurred())
-
 		cfg := config.NewConfigurationWithOptionsAndDefaults(
 			config.WithAgent(config.Agent{
-				ID:       uuid.New().String(),
-				SourceID: uuid.New().String(),
-				Mode:     "disconnected",
+				ID: uuid.New().String(),
 			}),
 		)
 
 		mgr := svc.NewServiceManager(
 			svc.WithConfig(cfg),
 			svc.WithPool(pool),
-			svc.WithKeyManager(keyMgr),
 		)
 		Expect(mgr.Initialize()).To(Succeed())
 		defer mgr.Stop(ctx)

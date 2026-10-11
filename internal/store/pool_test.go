@@ -193,41 +193,6 @@ var _ = Describe("Pool", func() {
 		})
 	})
 
-	Context("AttachDatabase / DetachDatabase", func() {
-		It("should attach b to a as readonly after closing b", func() {
-			dbA, err := pool.NewDatabase("a", filepath.Join(tmpDir, "a.duckdb"), time.Now(), store.EagerConnectionInitilization, 0, store.ReadWriteDatabase)
-			Expect(err).NotTo(HaveOccurred())
-			pool.Add(dbA)
-
-			dbB, err := pool.NewDatabase("b", filepath.Join(tmpDir, "b.duckdb"), time.Now(), store.EagerConnectionInitilization, 0, store.ReadWriteDatabase)
-			Expect(err).NotTo(HaveOccurred())
-			pool.Add(dbB)
-
-			// Close B otherwise error occurs
-			stB, err := dbB.Store()
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = stB.Querier().ExecContext(ctx, "CREATE TABLE hello (id INTEGER)")
-			Expect(err).NotTo(HaveOccurred())
-			_, err = stB.Querier().ExecContext(ctx, "INSERT INTO hello VALUES (42)")
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(dbB.Close()).To(Succeed())
-
-			stA, err := dbA.Store()
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(stA.AttachDatabase(ctx, dbB, "b", store.ReadOnlyDatabase)).To(Succeed())
-
-			var val int
-			err = stA.Querier().QueryRowContext(ctx, "SELECT id FROM b.hello").Scan(&val)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(val).To(Equal(42))
-
-			Expect(stA.DetachDatabase(ctx, "b")).To(Succeed())
-		})
-	})
-
 	Context("LatestCollection", func() {
 		It("returns false when pool has only the main database", func() {
 			mainDB, err := pool.NewDatabase(store.MainDatabaseID, filepath.Join(tmpDir, "main.duckdb"), time.Now(), store.EagerConnectionInitilization, 0, store.ReadWriteDatabase)

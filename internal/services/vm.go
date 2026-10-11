@@ -15,12 +15,11 @@ import (
 )
 
 type VMService struct {
-	store    *store.Store
-	eventSrv *EventService
+	store *store.Store
 }
 
 func NewVMService(st *store.Store) *VMService {
-	return &VMService{store: st, eventSrv: NewEventService(st)}
+	return &VMService{store: st}
 }
 
 type SortField struct {
@@ -36,23 +35,7 @@ type VMListParams struct {
 }
 
 func (s *VMService) Get(ctx context.Context, id string) (*models.VM, error) {
-	vm, err := s.store.VM().Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	results, err := s.store.Inspection().ListResults(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) == 0 {
-		return vm, nil
-	}
-
-	vm.InspectionConcerns = results[0].Concerns
-
-	return vm, nil
+	return s.store.VM().Get(ctx, id)
 }
 
 func (s *VMService) List(ctx context.Context, params VMListParams) ([]models.VirtualMachineSummary, int, error) {
@@ -101,7 +84,7 @@ func (s *VMService) GetFilterOptions(ctx context.Context) (models.VMFilterOption
 }
 
 // UpdateMigrationExcluded updates the migration exclusion status for a VM.
-// All mutations (VM update, inventory rebuild, outbox events) happen in a
+// All mutations (VM update and inventory rebuild) happen in a
 // single transaction. BuildInventory sees the uncommitted VM change via the
 // transaction-aware QueryInterceptor.
 func (s *VMService) UpdateMigrationExcluded(ctx context.Context, id string, excluded bool) error {
@@ -179,7 +162,7 @@ func (s *VMService) UpdateMigrationExcludedBatch(ctx context.Context, vmIDs []st
 }
 
 // buildAndSaveMainInventory builds the main (ungrouped) inventory and saves it
-// along with an outbox event. Must be called within a transaction.
+// in the current transaction.
 func (s *VMService) buildAndSaveMainInventory(ctx context.Context) error {
 	mainInventory, err := duckdb_parser.New(s.store.Querier(), nil).BuildInventory(ctx, nil)
 	if err != nil {
@@ -195,7 +178,7 @@ func (s *VMService) buildAndSaveMainInventory(ctx context.Context) error {
 		return fmt.Errorf("updating main inventory: %w", err)
 	}
 
-	return s.eventSrv.AddInventoryUpdateEvent(ctx, mainInventoryData)
+	return nil
 }
 
 // buildAndSaveGroupInventory builds an inventory for a group's matched VMs and
@@ -218,26 +201,7 @@ func (s *VMService) buildAndSaveGroupInventory(ctx context.Context, groupID uuid
 		return fmt.Errorf("updating inventory for group %s: %w", groupID, err)
 	}
 
-	group, err := s.store.Group().Get(ctx, groupID)
-	if err != nil {
-		return fmt.Errorf("getting group %s: %w", groupID, err)
-	}
-	group.Inventory = inv
-
-	if inv == nil {
-		data, err := buildGroupInventoryDeleteEventData(group)
-		if err != nil {
-			return fmt.Errorf("building inventory delete event data: %w", err)
-		}
-		return s.eventSrv.AddGroupInventoryDeleteEvent(ctx, data)
-	}
-
-	data, err := buildGroupInventoryEventData(group)
-	if err != nil {
-		return fmt.Errorf("building inventory event data: %w", err)
-	}
-
-	return s.eventSrv.AddGroupInventoryEvent(ctx, data)
+	return nil
 }
 
 // deduplicateStrings removes duplicate strings from a slice while preserving order.

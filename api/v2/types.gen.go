@@ -10,22 +10,14 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Defines values for AgentModeRequestMode.
+// Defines values for AgentStatusSource.
 const (
-	Connected    AgentModeRequestMode = "connected"
-	Disconnected AgentModeRequestMode = "disconnected"
+	Rvtools AgentStatusSource = "rvtools"
 )
 
-// Defines values for AgentStatusConsoleConnectionStatus.
+// Defines values for AgentStatusStatus.
 const (
-	ConsoleConnectionStatusConnected    AgentStatusConsoleConnectionStatus = "connected"
-	ConsoleConnectionStatusDisconnected AgentStatusConsoleConnectionStatus = "disconnected"
-)
-
-// Defines values for AgentStatusMode.
-const (
-	AgentStatusModeConnected    AgentStatusMode = "connected"
-	AgentStatusModeDisconnected AgentStatusMode = "disconnected"
+	Ready AgentStatusStatus = "ready"
 )
 
 // Defines values for CollectionComparisonDiffDimension.
@@ -37,44 +29,11 @@ const (
 
 // Defines values for CollectorStatusStatus.
 const (
-	CollectorStatusMetricsCollecting CollectorStatusStatus = "collecting metrics"
-	CollectorStatusStatusCollected   CollectorStatusStatus = "collected"
-	CollectorStatusStatusCollecting  CollectorStatusStatus = "collecting"
-	CollectorStatusStatusConnecting  CollectorStatusStatus = "connecting"
-	CollectorStatusStatusError       CollectorStatusStatus = "error"
-	CollectorStatusStatusParsing     CollectorStatusStatus = "parsing"
-	CollectorStatusStatusReady       CollectorStatusStatus = "ready"
-)
-
-// Defines values for ForecastPairStatusState.
-const (
-	ForecastPairStatusStateCanceled  ForecastPairStatusState = "canceled"
-	ForecastPairStatusStateCompleted ForecastPairStatusState = "completed"
-	ForecastPairStatusStateError     ForecastPairStatusState = "error"
-	ForecastPairStatusStatePending   ForecastPairStatusState = "pending"
-	ForecastPairStatusStatePreparing ForecastPairStatusState = "preparing"
-	ForecastPairStatusStateRunning   ForecastPairStatusState = "running"
-)
-
-// Defines values for ForecasterStatusState.
-const (
-	ForecasterStatusStateReady   ForecasterStatusState = "ready"
-	ForecasterStatusStateRunning ForecasterStatusState = "running"
-)
-
-// Defines values for InspectionStatusState.
-const (
-	InspectionStatusStateCanceled  InspectionStatusState = "canceled"
-	InspectionStatusStateCompleted InspectionStatusState = "completed"
-	InspectionStatusStateError     InspectionStatusState = "error"
-	InspectionStatusStatePending   InspectionStatusState = "pending"
-	InspectionStatusStateRunning   InspectionStatusState = "running"
-)
-
-// Defines values for InspectorStatusState.
-const (
-	InspectorStatusStateReady   InspectorStatusState = "ready"
-	InspectorStatusStateRunning InspectorStatusState = "running"
+	CollectorStatusStatusCollected  CollectorStatusStatus = "collected"
+	CollectorStatusStatusCollecting CollectorStatusStatus = "collecting"
+	CollectorStatusStatusError      CollectorStatusStatus = "error"
+	CollectorStatusStatusParsing    CollectorStatusStatus = "parsing"
+	CollectorStatusStatusReady      CollectorStatusStatus = "ready"
 )
 
 // Defines values for VirtualMachineIssueCategory.
@@ -106,63 +65,17 @@ const (
 	Main GetLatestInventoryParamsScope = "main"
 )
 
-// AgentModeRequest defines model for AgentModeRequest.
-type AgentModeRequest struct {
-	Mode AgentModeRequestMode `binding:"required,oneof=connected disconnected" json:"mode"`
-}
-
-// AgentModeRequestMode defines model for AgentModeRequest.Mode.
-type AgentModeRequestMode string
-
 // AgentStatus defines model for AgentStatus.
 type AgentStatus struct {
-	ConsoleConnection struct {
-		// Error Connection error description
-		Error *string `json:"error,omitempty"`
-
-		// Status Current console connection status
-		Status AgentStatusConsoleConnectionStatus `json:"status"`
-	} `json:"consoleConnection"`
-
-	// Mode Target mode for the agent
-	Mode AgentStatusMode `json:"mode"`
-
-	// RvtoolsModeEnabled RVTool mode enabled
-	RvtoolsModeEnabled *bool `json:"rvtoolsModeEnabled,omitempty"`
+	Source AgentStatusSource `json:"source"`
+	Status AgentStatusStatus `json:"status"`
 }
 
-// AgentStatusConsoleConnectionStatus Current console connection status
-type AgentStatusConsoleConnectionStatus string
+// AgentStatusSource defines model for AgentStatus.Source.
+type AgentStatusSource string
 
-// AgentStatusMode Target mode for the agent
-type AgentStatusMode string
-
-// ApplicationListResponse defines model for ApplicationListResponse.
-type ApplicationListResponse struct {
-	Applications []ApplicationOverview `json:"applications"`
-}
-
-// ApplicationOverview defines model for ApplicationOverview.
-type ApplicationOverview struct {
-	// Description Application description
-	Description string `json:"description"`
-
-	// Name Application name
-	Name string `json:"name"`
-
-	// VmCount Number of VMs running this application
-	VmCount int             `json:"vmCount"`
-	Vms     []ApplicationVM `json:"vms"`
-}
-
-// ApplicationVM defines model for ApplicationVM.
-type ApplicationVM struct {
-	// Id VM ID
-	Id string `json:"id"`
-
-	// Name VM name
-	Name string `json:"name"`
-}
+// AgentStatusStatus defines model for AgentStatus.Status.
+type AgentStatusStatus string
 
 // BatchUpdateExclusionRequest defines model for BatchUpdateExclusionRequest.
 type BatchUpdateExclusionRequest struct {
@@ -171,32 +84,6 @@ type BatchUpdateExclusionRequest struct {
 
 	// VmIds VM IDs to update
 	VmIds []string `binding:"required,min=1,dive,required" json:"vmIds"`
-}
-
-// BenchmarkRun defines model for BenchmarkRun.
-type BenchmarkRun struct {
-	CreatedAt       time.Time `json:"createdAt"`
-	DiskSizeGb      int       `json:"diskSizeGb"`
-	DurationSec     float64   `json:"durationSec"`
-	Error           *string   `json:"error,omitempty"`
-	Id              int64     `json:"id"`
-	Iteration       int       `json:"iteration"`
-	Method          string    `json:"method"`
-	PairName        string    `json:"pairName"`
-	PrepDurationSec *float64  `json:"prepDurationSec,omitempty"`
-	SessionId       int64     `json:"sessionId"`
-	SourceDatastore string    `json:"sourceDatastore"`
-	TargetDatastore string    `json:"targetDatastore"`
-	ThroughputMBps  float64   `json:"throughputMBps"`
-}
-
-// CapabilityStatus defines model for CapabilityStatus.
-type CapabilityStatus struct {
-	Capabilities struct {
-		Collector  OperationCapability `json:"collector"`
-		Forecaster OperationCapability `json:"forecaster"`
-		Inspector  OperationCapability `json:"inspector"`
-	} `json:"capabilities"`
 }
 
 // Collection defines model for Collection.
@@ -306,41 +193,6 @@ type CreateGroupRequest struct {
 	Name        string  `binding:"required,min=1,max=100" json:"name"`
 }
 
-// CredentialStatus defines model for CredentialStatus.
-type CredentialStatus struct {
-	// Url vCenter URL the credentials belong to
-	Url string `json:"url"`
-
-	// Username vCenter username
-	Username string `json:"username"`
-
-	// Valid Whether credentials are stored for the returned URL.
-	Valid bool `json:"valid"`
-}
-
-// DatastoreDetail defines model for DatastoreDetail.
-type DatastoreDetail struct {
-	Capabilities   *[]string `json:"capabilities,omitempty"`
-	CapacityGb     float64   `json:"capacityGb"`
-	FreeGb         float64   `json:"freeGb"`
-	NaaDevices     *[]string `json:"naaDevices,omitempty"`
-	Name           string    `json:"name"`
-	StorageArrayId *string   `json:"storageArrayId,omitempty"`
-	StorageModel   *string   `json:"storageModel,omitempty"`
-	StorageVendor  *string   `json:"storageVendor,omitempty"`
-
-	// Type VMFS, NFS, VVol, or OTHER
-	Type string `json:"type"`
-}
-
-// DatastorePairRequest defines model for DatastorePairRequest.
-type DatastorePairRequest struct {
-	Host            *string `json:"host,omitempty"`
-	Name            string  `json:"name"`
-	SourceDatastore string  `json:"sourceDatastore"`
-	TargetDatastore string  `json:"targetDatastore"`
-}
-
 // DeleteLabelGloballyResponse defines model for DeleteLabelGloballyResponse.
 type DeleteLabelGloballyResponse struct {
 	// Affected Number of VMs that had the label removed
@@ -349,58 +201,6 @@ type DeleteLabelGloballyResponse struct {
 	// Label The label that was removed
 	Label string `json:"label"`
 }
-
-// EstimateRange defines model for EstimateRange.
-type EstimateRange struct {
-	// BestCase Duration string (e.g. "1h30m")
-	BestCase string `json:"bestCase"`
-
-	// Expected Duration string (e.g. "2h15m")
-	Expected string `json:"expected"`
-
-	// WorstCase Duration string (e.g. "3h45m")
-	WorstCase string `json:"worstCase"`
-}
-
-// ForecastPairStatus defines model for ForecastPairStatus.
-type ForecastPairStatus struct {
-	CompletedRuns     int                     `json:"completedRuns"`
-	Error             *string                 `json:"error,omitempty"`
-	Host              *string                 `json:"host,omitempty"`
-	PairName          string                  `json:"pairName"`
-	PrepBytesTotal    *int64                  `json:"prepBytesTotal,omitempty"`
-	PrepBytesUploaded *int64                  `json:"prepBytesUploaded,omitempty"`
-	SourceDatastore   string                  `json:"sourceDatastore"`
-	State             ForecastPairStatusState `json:"state"`
-	TargetDatastore   string                  `json:"targetDatastore"`
-	TotalRuns         int                     `json:"totalRuns"`
-}
-
-// ForecastPairStatusState defines model for ForecastPairStatus.State.
-type ForecastPairStatusState string
-
-// ForecastStats defines model for ForecastStats.
-type ForecastStats struct {
-	Ci95Lower   float64       `json:"ci95Lower"`
-	Ci95Upper   float64       `json:"ci95Upper"`
-	EstPer1TB   EstimateRange `json:"estPer1TB"`
-	MaxMBps     float64       `json:"maxMBps"`
-	MeanMBps    float64       `json:"meanMBps"`
-	MedianMBps  float64       `json:"medianMBps"`
-	MinMBps     float64       `json:"minMBps"`
-	PairName    string        `json:"pairName"`
-	SampleCount int           `json:"sampleCount"`
-	StdDevMBps  float64       `json:"stdDevMBps"`
-}
-
-// ForecasterStatus defines model for ForecasterStatus.
-type ForecasterStatus struct {
-	Pairs []ForecastPairStatus  `json:"pairs"`
-	State ForecasterStatusState `json:"state"`
-}
-
-// ForecasterStatusState defines model for ForecasterStatus.State.
-type ForecasterStatusState string
 
 // Group defines model for Group.
 type Group struct {
@@ -459,103 +259,9 @@ type GuestNetwork struct {
 	PrefixLength *int32 `json:"prefixLength,omitempty"`
 }
 
-// InspectionStatus defines model for InspectionStatus.
-type InspectionStatus struct {
-	// Details Human-readable details about the current inspection state
-	Details *string `json:"details,omitempty"`
-
-	// Error Error message when state is error
-	Error *string `json:"error,omitempty"`
-
-	// State Current inspection state
-	State InspectionStatusState `json:"state"`
-}
-
-// InspectionStatusState Current inspection state
-type InspectionStatusState string
-
-// InspectorStatus defines model for InspectorStatus.
-type InspectorStatus struct {
-	// State Inspector state
-	State InspectorStatusState `json:"state"`
-	Vddk  *VddkProperties      `json:"vddk,omitempty"`
-}
-
-// InspectorStatusState Inspector state
-type InspectorStatusState string
-
 // Inventory defines model for Inventory.
 type Inventory struct {
 	Inventory externalRef0.UpdateInventory `json:"inventory"`
-}
-
-// OperationCapability defines model for OperationCapability.
-type OperationCapability struct {
-	// Enabled Whether stored credentials have sufficient privileges
-	Enabled bool `json:"enabled"`
-
-	// MissingPrivileges Specific vSphere privileges that are missing
-	MissingPrivileges *[]string `json:"missingPrivileges,omitempty"`
-}
-
-// PairCapability defines model for PairCapability.
-type PairCapability struct {
-	Capabilities    []string `json:"capabilities"`
-	PairName        string   `json:"pairName"`
-	SourceDatastore string   `json:"sourceDatastore"`
-	TargetDatastore string   `json:"targetDatastore"`
-}
-
-// PairCapabilityRequest defines model for PairCapabilityRequest.
-type PairCapabilityRequest struct {
-	Pairs []DatastorePairRequest `json:"pairs"`
-}
-
-// Process defines model for Process.
-type Process struct {
-	// Name Name of the process
-	Name string `json:"name"`
-
-	// Version Version of the process
-	Version *string `json:"version,omitempty"`
-}
-
-// RightsizingClusterResponse defines model for RightsizingClusterResponse.
-type RightsizingClusterResponse struct {
-	Cluster  RightsizingClusterUtilization `json:"cluster"`
-	ReportId string                        `json:"report_id"`
-}
-
-// RightsizingClusterUtilization defines model for RightsizingClusterUtilization.
-type RightsizingClusterUtilization struct {
-	ClusterId                string  `json:"cluster_id"`
-	ClusterName              string  `json:"cluster_name"`
-	Confidence               float64 `json:"confidence"`
-	CpuAvg                   float64 `json:"cpu_avg"`
-	CpuMax                   float64 `json:"cpu_max"`
-	CpuP95                   float64 `json:"cpu_p95"`
-	Disk                     float64 `json:"disk"`
-	MemAvg                   float64 `json:"mem_avg"`
-	MemMax                   float64 `json:"mem_max"`
-	MemP95                   float64 `json:"mem_p95"`
-	TotalProvisionedCpus     int     `json:"total_provisioned_cpus"`
-	TotalProvisionedDiskKb   float64 `json:"total_provisioned_disk_kb"`
-	TotalProvisionedMemoryMb int     `json:"total_provisioned_memory_mb"`
-	VmCount                  int     `json:"vm_count"`
-}
-
-// StartForecasterRequest defines model for StartForecasterRequest.
-type StartForecasterRequest struct {
-	Concurrency *int                   `json:"concurrency,omitempty"`
-	DiskSizeGb  *int                   `json:"diskSizeGb,omitempty"`
-	Iterations  *int                   `json:"iterations,omitempty"`
-	Pairs       []DatastorePairRequest `json:"pairs"`
-}
-
-// StartInspectionRequest defines model for StartInspectionRequest.
-type StartInspectionRequest struct {
-	// VmIds VM MoRef IDs to inspect
-	VmIds []string `binding:"required,min=1,dive,required" json:"vmIds"`
 }
 
 // UpdateGroupRequest defines model for UpdateGroupRequest.
@@ -576,9 +282,6 @@ type UpdateLabelVMsRequest struct {
 
 // VMFilterOptionsResponse defines model for VMFilterOptionsResponse.
 type VMFilterOptionsResponse struct {
-	// Applications Distinct detected application names
-	Applications []string `json:"applications"`
-
 	// Clusters Distinct cluster names
 	Clusters []string `json:"clusters"`
 
@@ -599,31 +302,6 @@ type VMLabelsResponse struct {
 
 	// Labels Distinct labels currently in use
 	Labels []string `json:"labels"`
-}
-
-// VcenterCredentials defines model for VcenterCredentials.
-type VcenterCredentials struct {
-	// Cacert PEM-encoded CA certificate bundle for verifying the vCenter TLS certificate. Mutually exclusive with skipTls.
-	Cacert   *string `binding:"omitempty" json:"cacert,omitempty"`
-	Password string  `binding:"required,min=1" json:"password"`
-
-	// SkipTls When true, TLS certificate verification is skipped. Must not be set to true alongside cacert — that combination returns 400. When omitted: if cacert is absent the connection skips TLS verification (backwards compatibility); if cacert is provided the connection verifies TLS using that certificate — skipTls need not be sent.
-	SkipTls *bool `json:"skipTls,omitempty"`
-
-	// Url vCenter URL
-	Url      string `binding:"required,url" json:"url"`
-	Username string `binding:"required,min=1" json:"username"`
-}
-
-// VddkProperties defines model for VddkProperties.
-type VddkProperties struct {
-	Bytes *int64 `json:"bytes,omitempty"`
-
-	// Md5 md5 sum of the uploaded tarball
-	Md5 string `json:"md5"`
-
-	// Version The matching vSphere Client version
-	Version string `json:"version"`
 }
 
 // VersionInfo defines model for VersionInfo.
@@ -655,10 +333,6 @@ type VirtualMachine struct {
 	// Id VirtualMachine ID in vCenter
 	Id string `json:"id"`
 
-	// InspectionConcernCount Number of inspection concerns for the latest persisted result
-	InspectionConcernCount *int              `json:"inspectionConcernCount,omitempty"`
-	InspectionStatus       *InspectionStatus `json:"inspectionStatus,omitempty"`
-
 	// IssueCount Number of issues found for this VirtualMachine
 	IssueCount int `json:"issueCount"`
 
@@ -679,24 +353,6 @@ type VirtualMachine struct {
 
 	// Template True if the VirtualMachine is a template
 	Template *bool `json:"template,omitempty"`
-
-	// UtilizationConfidence Data confidence -- sample_count / expected_sample_count x 100
-	UtilizationConfidence *float64 `json:"utilization_confidence,omitempty"`
-
-	// UtilizationCpuMax CPU utilization at max (%); absent when no utilization data
-	UtilizationCpuMax *float64 `json:"utilization_cpu_max,omitempty"`
-
-	// UtilizationCpuP95 CPU utilization at p95 (%); absent when no utilization data
-	UtilizationCpuP95 *float64 `json:"utilization_cpu_p95,omitempty"`
-
-	// UtilizationDisk Disk utilization (%); absent when no utilization data
-	UtilizationDisk *float64 `json:"utilization_disk,omitempty"`
-
-	// UtilizationMemMax Memory utilization at max (%); absent when no utilization data
-	UtilizationMemMax *float64 `json:"utilization_mem_max,omitempty"`
-
-	// UtilizationMemP95 Memory utilization at p95 (%); absent when no utilization data
-	UtilizationMemP95 *float64 `json:"utilization_mem_p95,omitempty"`
 
 	// VCenterID Identifier of the vCenter this VirtualMachine belongs to
 	VCenterID string `json:"vCenterID"`
@@ -752,10 +408,6 @@ type VirtualMachineDetail struct {
 	// Id Unique identifier for the VirtualMachine in vCenter
 	Id string `json:"id"`
 
-	// Inspection VirtualMachines Inspection results
-	Inspection       *VirtualMachineInspectionResults `json:"inspection,omitempty"`
-	InspectionStatus *InspectionStatus                `json:"inspectionStatus,omitempty"`
-
 	// IpAddress Guest primary IP address
 	IpAddress *string                `json:"ipAddress,omitempty"`
 	Issues    *[]VirtualMachineIssue `json:"issues,omitempty"`
@@ -782,9 +434,6 @@ type VirtualMachineDetail struct {
 	// PowerState Current power state (poweredOn, poweredOff, suspended)
 	PowerState string `json:"powerState"`
 
-	// Processes List of processes detected on this VM
-	Processes *[]Process `json:"processes,omitempty"`
-
 	// StorageUsed Storage consumed in bytes
 	StorageUsed *int64 `json:"storageUsed,omitempty"`
 
@@ -795,8 +444,7 @@ type VirtualMachineDetail struct {
 	ToolsRunningStatus *string `json:"toolsRunningStatus,omitempty"`
 
 	// ToolsStatus VMware Tools installation status
-	ToolsStatus *string               `json:"toolsStatus,omitempty"`
-	Utilization *VmUtilizationDetails `json:"utilization,omitempty"`
+	ToolsStatus *string `json:"toolsStatus,omitempty"`
 
 	// Uuid Universally unique identifier assigned by vCenter
 	Uuid *string `json:"uuid,omitempty"`
@@ -833,20 +481,6 @@ type VirtualMachineDisk struct {
 
 	// Shared Whether the disk is shared between multiple VirtualMachines
 	Shared *bool `json:"shared,omitempty"`
-}
-
-// VirtualMachineInspectionConcern defines model for VirtualMachineInspectionConcern.
-type VirtualMachineInspectionConcern struct {
-	Category string `json:"category"`
-
-	// Label Short label identifying the concern
-	Label   string `json:"label"`
-	Message string `json:"message"`
-}
-
-// VirtualMachineInspectionResults VirtualMachines Inspection results
-type VirtualMachineInspectionResults struct {
-	Concerns *[]VirtualMachineInspectionConcern `json:"concerns,omitempty"`
 }
 
 // VirtualMachineIssue defines model for VirtualMachineIssue.
@@ -897,25 +531,6 @@ type VirtualMachineUpdateRequest struct {
 	MigrationExcluded *bool `binding:"omitempty" json:"migrationExcluded,omitempty"`
 }
 
-// VmUtilizationDetails defines model for VmUtilizationDetails.
-type VmUtilizationDetails struct {
-	Confidence          float64 `json:"confidence"`
-	CpuAvg              float64 `json:"cpu_avg"`
-	CpuLatest           float64 `json:"cpu_latest"`
-	CpuMax              float64 `json:"cpu_max"`
-	CpuP95              float64 `json:"cpu_p95"`
-	Disk                float64 `json:"disk"`
-	MemAvg              float64 `json:"mem_avg"`
-	MemLatest           float64 `json:"mem_latest"`
-	MemMax              float64 `json:"mem_max"`
-	MemP95              float64 `json:"mem_p95"`
-	Moid                string  `json:"moid"`
-	ProvisionedCpus     int     `json:"provisioned_cpus"`
-	ProvisionedDiskKb   float64 `json:"provisioned_disk_kb"`
-	ProvisionedMemoryMb int     `json:"provisioned_memory_mb"`
-	VmName              string  `json:"vm_name"`
-}
-
 // CompareCollectionsDiffParams defines parameters for CompareCollectionsDiff.
 type CompareCollectionsDiffParams struct {
 	// Page Page number (1-based). Applied independently to onlyInA and onlyInB.
@@ -954,7 +569,7 @@ type ListGroupsParams struct {
 
 // GetGroupParams defines parameters for GetGroup.
 type GetGroupParams struct {
-	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
 	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
 
 	// Page Page number for pagination
@@ -969,7 +584,7 @@ type ListVirtualMachinesParams struct {
 	// ByExpression Filter by expression
 	ByExpression *string `form:"byExpression,omitempty" json:"byExpression,omitempty"`
 
-	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
 	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
 
 	// Page Page number for pagination
@@ -982,18 +597,6 @@ type ListVirtualMachinesParams struct {
 // StartRvtoolsCollectorMultipartBody defines parameters for StartRvtoolsCollector.
 type StartRvtoolsCollectorMultipartBody struct {
 	Files []openapi_types.File `json:"files"`
-}
-
-// GetForecasterRunsParams defines parameters for GetForecasterRuns.
-type GetForecasterRunsParams struct {
-	// PairName Filter runs by pair name
-	PairName *string `form:"pairName,omitempty" json:"pairName,omitempty"`
-}
-
-// GetForecasterStatsParams defines parameters for GetForecasterStats.
-type GetForecasterStatsParams struct {
-	// PairName Pair name to get statistics for
-	PairName string `form:"pairName" json:"pairName"`
 }
 
 // ListLatestGroupsParams defines parameters for ListLatestGroups.
@@ -1010,7 +613,7 @@ type ListLatestGroupsParams struct {
 
 // GetLatestGroupParams defines parameters for GetLatestGroup.
 type GetLatestGroupParams struct {
-	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
 	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
 
 	// Page Page number for pagination
@@ -1018,17 +621,6 @@ type GetLatestGroupParams struct {
 
 	// PageSize Number of items per page
 	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
-}
-
-// GetInspectorStatusParams defines parameters for GetInspectorStatus.
-type GetInspectorStatusParams struct {
-	// IncludeVddk Include VDDK metadata in the response
-	IncludeVddk *bool `form:"includeVddk,omitempty" json:"includeVddk,omitempty"`
-}
-
-// PutInspectorVddkMultipartBody defines parameters for PutInspectorVddk.
-type PutInspectorVddkMultipartBody struct {
-	File openapi_types.File `json:"file"`
 }
 
 // GetLatestInventoryParams defines parameters for GetLatestInventory.
@@ -1045,7 +637,7 @@ type ListLatestVirtualMachinesParams struct {
 	// ByExpression Filter by expression
 	ByExpression *string `form:"byExpression,omitempty" json:"byExpression,omitempty"`
 
-	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+	// Sort Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
 	Sort *[]string `form:"sort,omitempty" json:"sort,omitempty"`
 
 	// Page Page number for pagination
@@ -1055,32 +647,14 @@ type ListLatestVirtualMachinesParams struct {
 	PageSize *int `form:"pageSize,omitempty" json:"pageSize,omitempty"`
 }
 
-// SetAgentModeJSONRequestBody defines body for SetAgentMode for application/json ContentType.
-type SetAgentModeJSONRequestBody = AgentModeRequest
-
 // StartRvtoolsCollectorMultipartRequestBody defines body for StartRvtoolsCollector for multipart/form-data ContentType.
 type StartRvtoolsCollectorMultipartRequestBody StartRvtoolsCollectorMultipartBody
-
-// PutCredentialsJSONRequestBody defines body for PutCredentials for application/json ContentType.
-type PutCredentialsJSONRequestBody = VcenterCredentials
-
-// StartForecasterJSONRequestBody defines body for StartForecaster for application/json ContentType.
-type StartForecasterJSONRequestBody = StartForecasterRequest
-
-// PostForecasterPairCapabilitiesJSONRequestBody defines body for PostForecasterPairCapabilities for application/json ContentType.
-type PostForecasterPairCapabilitiesJSONRequestBody = PairCapabilityRequest
 
 // CreateLatestGroupJSONRequestBody defines body for CreateLatestGroup for application/json ContentType.
 type CreateLatestGroupJSONRequestBody = CreateGroupRequest
 
 // UpdateLatestGroupJSONRequestBody defines body for UpdateLatestGroup for application/json ContentType.
 type UpdateLatestGroupJSONRequestBody = UpdateGroupRequest
-
-// StartInspectionJSONRequestBody defines body for StartInspection for application/json ContentType.
-type StartInspectionJSONRequestBody = StartInspectionRequest
-
-// PutInspectorVddkMultipartRequestBody defines body for PutInspectorVddk for multipart/form-data ContentType.
-type PutInspectorVddkMultipartRequestBody PutInspectorVddkMultipartBody
 
 // BatchUpdateLatestVMExclusionJSONRequestBody defines body for BatchUpdateLatestVMExclusion for application/json ContentType.
 type BatchUpdateLatestVMExclusionJSONRequestBody = BatchUpdateExclusionRequest

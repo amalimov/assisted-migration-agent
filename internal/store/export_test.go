@@ -5,7 +5,7 @@ import "testing"
 func TestExportStore_SupportedScopes(t *testing.T) {
 	st := NewExportStore(nil)
 	scopes := st.SupportedScopes()
-	want := len(exportScopes) + 1
+	want := len(exportScopes)
 	if len(scopes) != want {
 		t.Fatalf("got %d scopes, want %d", len(scopes), want)
 	}
@@ -14,8 +14,8 @@ func TestExportStore_SupportedScopes(t *testing.T) {
 			t.Fatalf("exportScopes contains unregistered scope %q", scope)
 		}
 	}
-	if !st.IsValidScope("utilization") {
-		t.Fatal("expected utilization scope to be valid")
+	if st.IsValidScope("utilization") {
+		t.Fatal("expected utilization scope to be invalid")
 	}
 	if st.IsValidScope("bogus") {
 		t.Fatal("expected bogus scope to be invalid")

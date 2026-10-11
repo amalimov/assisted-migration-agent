@@ -170,14 +170,6 @@
 //
 //	concern.label, concern.category, concern.assessment
 //
-// vm_inspection_status (i) — inspection.* prefix:
-//
-//	inspection.status, inspection.error
-//
-// vm_inspection_concerns (ic) — inspection_concern.* prefix (latest run only in filter subquery):
-//
-//	inspection_concern.label, inspection_concern.category, inspection_concern.msg
-//
 // vcpu (cpu) — cpu.* prefix:
 //
 //	cpu.hot_add, cpu.hot_remove, cpu.sockets, cpu.cores_per_socket

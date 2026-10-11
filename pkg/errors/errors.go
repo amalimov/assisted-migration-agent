@@ -3,421 +3,85 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
-// ServiceAlreadyStartedError indicates that a work service or pool has already been started.
 type ServiceAlreadyStartedError struct{}
 
 func NewServiceAlreadyStartedError() *ServiceAlreadyStartedError {
 	return &ServiceAlreadyStartedError{}
 }
-
-func (e *ServiceAlreadyStartedError) Error() string {
-	return "service already started"
-}
-
+func (*ServiceAlreadyStartedError) Error() string { return "service already started" }
 func IsServiceAlreadyStartedError(err error) bool {
-	var e *ServiceAlreadyStartedError
-	return errors.As(err, &e)
+	var target *ServiceAlreadyStartedError
+	return errors.As(err, &target)
 }
 
-// ResourceNotFoundError indicates a resource was not found.
-type ResourceNotFoundError struct {
-	Kind string
-	ID   string
-}
+type ResourceNotFoundError struct{ Kind, ID string }
 
-func NewResourceNotFoundError(kind string, id string) *ResourceNotFoundError {
+func NewResourceNotFoundError(kind, id string) *ResourceNotFoundError {
 	return &ResourceNotFoundError{Kind: kind, ID: id}
 }
-
 func NewInventoryNotFoundError() *ResourceNotFoundError {
 	return NewResourceNotFoundError("inventory", "")
 }
-
-func NewConfigurationNotFoundError() *ResourceNotFoundError {
-	return NewResourceNotFoundError("configuration", "")
-}
-
-func NewVddkNotFoundError() *ResourceNotFoundError {
-	return NewResourceNotFoundError("vddk", "")
-}
-
-func NewCredentialsNotFoundError(id string) *ResourceNotFoundError {
-	return NewResourceNotFoundError("credentials", id)
-}
-
-func NewCollectionNotFoundError() *ResourceNotFoundError {
-	return NewResourceNotFoundError("collection", "")
-}
-
 func (e *ResourceNotFoundError) Error() string {
 	if e.ID != "" {
 		return fmt.Sprintf("%s '%s' not found", e.Kind, e.ID)
 	}
 	return fmt.Sprintf("%s not found", e.Kind)
 }
-
 func IsResourceNotFoundError(err error) bool {
-	var e *ResourceNotFoundError
-	return errors.As(err, &e)
+	var target *ResourceNotFoundError
+	return errors.As(err, &target)
 }
 
-// DuplicateResourceError indicates a resource already exists with the same unique identifier.
-type DuplicateResourceError struct {
-	Kind  string
-	Field string
-	Value string
-}
+type DuplicateResourceError struct{ Kind, Field, Value string }
 
 func NewDuplicateResourceError(kind, field, value string) *DuplicateResourceError {
 	return &DuplicateResourceError{Kind: kind, Field: field, Value: value}
 }
-
 func (e *DuplicateResourceError) Error() string {
 	return fmt.Sprintf("%s with %s '%s' already exists", e.Kind, e.Field, e.Value)
 }
-
 func IsDuplicateResourceError(err error) bool {
-	var e *DuplicateResourceError
-	return errors.As(err, &e)
+	var target *DuplicateResourceError
+	return errors.As(err, &target)
 }
 
-// OperationInProgressError indicates that the operation is already running.
-type OperationInProgressError struct {
-	operation string
-}
+type OperationInProgressError struct{ operation string }
 
-func NewOperationInProgressError(op string) *OperationInProgressError {
-	return &OperationInProgressError{
-		operation: op,
-	}
+func NewOperationInProgressError(operation string) *OperationInProgressError {
+	return &OperationInProgressError{operation: operation}
 }
-
-func NewInspectionInProgressError() *OperationInProgressError {
-	return NewOperationInProgressError("inspection")
-}
-
 func NewCollectionInProgressError() *OperationInProgressError {
 	return NewOperationInProgressError("collection")
 }
-
-func NewRightsizingCollectionInProgressError() *OperationInProgressError {
-	return NewOperationInProgressError("rightsizing collection")
-}
-
-func NewVddkUploadInProgressError() *OperationInProgressError {
-	return NewOperationInProgressError("vddk upload")
-}
-
 func (e *OperationInProgressError) Error() string {
 	return fmt.Sprintf("%s already in progress", e.operation)
 }
-
 func IsOperationInProgressError(err error) bool {
-	var e *OperationInProgressError
-	return errors.As(err, &e)
+	var target *OperationInProgressError
+	return errors.As(err, &target)
 }
 
-// InvalidStateError indicates an invalid state for the requested operation.
-type InvalidStateError struct{}
+type ValidationError struct{ Message string }
 
-func NewInvalidStateError() *InvalidStateError {
-	return &InvalidStateError{}
-}
+func NewValidationError(message string) *ValidationError { return &ValidationError{Message: message} }
+func (e *ValidationError) Error() string                 { return e.Message }
+func IsValidationError(err error) bool                   { var target *ValidationError; return errors.As(err, &target) }
 
-func (e *InvalidStateError) Error() string {
-	return "invalid state for this operation"
-}
-
-func IsInvalidStateError(err error) bool {
-	var e *InvalidStateError
-	return errors.As(err, &e)
-}
-
-// ModeConflictError indicates a valid request that conflicts with prior fatal state.
-type ModeConflictError struct {
-	Reason string
-}
-
-func NewModeConflictError(reason string) *ModeConflictError {
-	return &ModeConflictError{Reason: reason}
-}
-
-func (e *ModeConflictError) Error() string {
-	if e.Reason != "" {
-		return fmt.Sprintf("mode change conflict: %s", e.Reason)
-	}
-	return "mode change conflict"
-}
-
-func IsModeConflictError(err error) bool {
-	var e *ModeConflictError
-	return errors.As(err, &e)
-}
-
-func NewVCenterError(err error) *VCenterError {
-	errMsg := err.Error()
-
-	if strings.Contains(errMsg, "Login failure") ||
-		(strings.Contains(errMsg, "incorrect") && strings.Contains(errMsg, "password")) {
-		return &VCenterError{msg: "invalid credentials"}
-	}
-
-	if errMsg == "" {
-		return &VCenterError{msg: "unknown error"}
-	}
-
-	return &VCenterError{msg: errMsg}
-}
-
-// VCenterError indicates the provided credentials are invalid.
-type VCenterError struct {
-	msg string
-}
-
-func (e *VCenterError) Error() string {
-	return e.msg
-}
-
-func IsVCenterError(err error) bool {
-	var e *VCenterError
-	return errors.As(err, &e)
-}
-
-// ConsoleClientError wraps HTTP 4xx errors from the console client.
-type ConsoleClientError struct {
-	StatusCode int
-	Message    string
-}
-
-func NewConsoleClientError(statusCode int, message string) *ConsoleClientError {
-	return &ConsoleClientError{StatusCode: statusCode, Message: message}
-}
-
-func (e *ConsoleClientError) Error() string {
-	return fmt.Sprintf("console client error %d: %s", e.StatusCode, e.Message)
-}
-
-func IsConsoleClientError(err error) bool {
-	var e *ConsoleClientError
-	return errors.As(err, &e)
-}
-
-// InspectorNotRunningError indicates that inspector not currently running
-type InspectorNotRunningError struct{}
-
-func NewInspectorNotRunningError() *InspectorNotRunningError {
-	return &InspectorNotRunningError{}
-}
-
-func (e *InspectorNotRunningError) Error() string {
-	return "inspector not running"
-}
-
-func IsInspectorNotRunningError(err error) bool {
-	var e *InspectorNotRunningError
-	return errors.As(err, &e)
-}
-
-// InspectionLimitReachedError indicates the configured per-cycle VM inspection limit was exceeded.
-type InspectionLimitReachedError struct {
-	Limit int
-}
-
-func NewInspectionLimitReachedError(limit int) *InspectionLimitReachedError {
-	return &InspectionLimitReachedError{Limit: limit}
-}
-
-func (e *InspectionLimitReachedError) Error() string {
-	return fmt.Sprintf("inspection limit reached (%d VMs per cycle)", e.Limit)
-}
-
-func IsInspectionLimitReachedError(err error) bool {
-	var e *InspectionLimitReachedError
-	return errors.As(err, &e)
-}
-
-// InsufficientPrivilegesError indicates the user lacks required vSphere privileges.
-type InsufficientPrivilegesError struct {
-	Missing []string
-}
-
-func NewInsufficientPrivilegesError(missing []string) *InsufficientPrivilegesError {
-	return &InsufficientPrivilegesError{Missing: missing}
-}
-
-func (e *InsufficientPrivilegesError) Error() string {
-	return fmt.Sprintf("insufficient vSphere privileges, missing: %v", e.Missing)
-}
-
-func IsInsufficientPrivilegesError(err error) bool {
-	var e *InsufficientPrivilegesError
-	return errors.As(err, &e)
-}
-
-func GetInsufficientPrivilegesError(err error) *InsufficientPrivilegesError {
-	var e *InsufficientPrivilegesError
-	if errors.As(err, &e) {
-		return e
-	}
-	return nil
-}
-
-// ForecasterNotRunningError indicates the forecaster is not currently running.
-type ForecasterNotRunningError struct{}
-
-func NewForecasterNotRunningError() *ForecasterNotRunningError {
-	return &ForecasterNotRunningError{}
-}
-
-func (e *ForecasterNotRunningError) Error() string {
-	return "forecaster not running"
-}
-
-func IsForecasterNotRunningError(err error) bool {
-	var e *ForecasterNotRunningError
-	return errors.As(err, &e)
-}
-
-// ForecasterLimitReachedError indicates the per-run pair limit was exceeded.
-type ForecasterLimitReachedError struct {
-	Limit int
-}
-
-func NewForecasterLimitReachedError(limit int) *ForecasterLimitReachedError {
-	return &ForecasterLimitReachedError{Limit: limit}
-}
-
-func (e *ForecasterLimitReachedError) Error() string {
-	return fmt.Sprintf("forecaster pair limit reached (%d pairs per run)", e.Limit)
-}
-
-func IsForecasterLimitReachedError(err error) bool {
-	var e *ForecasterLimitReachedError
-	return errors.As(err, &e)
-}
-
-func NewForecasterInProgressError() *OperationInProgressError {
-	return NewOperationInProgressError("forecast")
-}
-
-// ValidationError indicates invalid input.
-type ValidationError struct {
-	Message string
-}
-
-func NewValidationError(msg string) *ValidationError {
-	return &ValidationError{Message: msg}
-}
-
-func (e *ValidationError) Error() string {
-	return e.Message
-}
-
-func IsValidationError(err error) bool {
-	var e *ValidationError
-	return errors.As(err, &e)
-}
-
-// CredentialsNotSetError indicates that required credentials were not set
-type CredentialsNotSetError struct{}
-
-func NewCredentialsNotSetError() *CredentialsNotSetError {
-	return &CredentialsNotSetError{}
-}
-
-func (e *CredentialsNotSetError) Error() string {
-	return "credentials not set"
-}
-
-func IsCredentialsNotSetError(err error) bool {
-	var e *CredentialsNotSetError
-	return errors.As(err, &e)
-}
-
-// UnknownEventKindError indicates an event kind that has no registered handler.
-type UnknownEventKindError struct {
-	Kind string
-}
-
-func NewUnknownEventKindError(kind string) *UnknownEventKindError {
-	return &UnknownEventKindError{Kind: kind}
-}
-
-func (e *UnknownEventKindError) Error() string {
-	return fmt.Sprintf("unknown event kind: %s", e.Kind)
-}
-
-func IsUnknownEventKindError(err error) bool {
-	var e *UnknownEventKindError
-	return errors.As(err, &e)
-}
-
-// InvalidVersionError indicates a version mismatch
-type InvalidVersionError struct {
-	Expected string
-	Actual   string
-}
-
-func NewVddkInvalidVersionError(expected, actual string) *InvalidVersionError {
-	return &InvalidVersionError{
-		Expected: expected,
-		Actual:   actual,
-	}
-}
-
-func (e *InvalidVersionError) Error() string {
-	actual := e.Actual
-	parts := strings.Split(actual, ".")
-	if len(parts) > 2 {
-		actual = strings.Join(parts[:2], ".")
-	}
-
-	return fmt.Sprintf(
-		"vCenter version from your environment: %s. "+
-			"VDDK version uploaded: %s. "+
-			"The VDDK must match the vCenter major.minor version. Upload a compatible VDDK package.",
-		e.Expected, actual,
-	)
-}
-
-func IsInvalidVersionError(err error) bool {
-	var e *InvalidVersionError
-	return errors.As(err, &e)
-}
-
-type InvalidFilterError struct {
-	Expression string
-	Reason     string
-}
+type InvalidFilterError struct{ Expression, Reason string }
 
 func NewInvalidFilterError(expression, reason string) *InvalidFilterError {
 	return &InvalidFilterError{Expression: expression, Reason: reason}
 }
-
 func (e *InvalidFilterError) Error() string {
 	if e.Reason != "" {
 		return fmt.Sprintf("invalid filter expression '%s': %s", e.Expression, e.Reason)
 	}
 	return fmt.Sprintf("invalid filter expression '%s'", e.Expression)
 }
-
 func IsInvalidFilterError(err error) bool {
-	var e *InvalidFilterError
-	return errors.As(err, &e)
-}
-
-func IsCollectionNotFoundError(err error) bool {
-	var e *ResourceNotFoundError
-	if errors.As(err, &e) {
-		return e.Kind == "collection"
-	}
-	return false
-}
-
-func IsCollectionCatalogError(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "Catalog Error") && strings.Contains(msg, "does not exist")
+	var target *InvalidFilterError
+	return errors.As(err, &target)
 }

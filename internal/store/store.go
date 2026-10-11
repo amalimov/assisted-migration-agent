@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -39,30 +38,6 @@ func (s *Store) Querier() QueryInterceptor {
 	return s.qi
 }
 
-// AttachDatabase attaches a database to the current connection with the given access mode.
-// DuckDB does not allow attaching a file that is already open by another connection,
-// so the caller must close the target database before attaching it.
-// See test AttachDatabase in pool_test.go.
-func (s *Store) AttachDatabase(ctx context.Context, db *Database, name string, mode DatabaseAccessMode) error {
-	accessMode := "READ_ONLY"
-	if mode == ReadWriteDatabase {
-		accessMode = "READ_WRITE"
-	}
-	if _, err := s.qi.ExecContext(ctx, fmt.Sprintf("ATTACH '%s' AS %s (%s)", db.Path, name, accessMode)); err != nil {
-		return fmt.Errorf("attaching database %s: %w", name, err)
-	}
-	return nil
-}
-
-// DetachDatabase detach a database from the connection.
-// It does not check whatever the db is attached.
-func (s *Store) DetachDatabase(ctx context.Context, name string) error {
-	if _, err := s.qi.ExecContext(ctx, fmt.Sprintf("DETACH %s", name)); err != nil {
-		return fmt.Errorf("detaching database %s: %w", name, err)
-	}
-	return nil
-}
-
 func (s *Store) VerifyConnection(ctx context.Context) error {
 	var result int
 	return s.qi.QueryRowContext(ctx, "SELECT 1").Scan(&result)
@@ -74,19 +49,11 @@ func (s *Store) Checkpoint(ctx context.Context) error {
 	return err
 }
 
-func (s *Store) Configuration() *ConfigurationStore { return NewConfigurationStore(s.qi) }
-func (s *Store) Inventory() *InventoryStore         { return NewInventoryStore(s.qi) }
-func (s *Store) VM() *VMStore                       { return NewVMStore(s.qi) }
-func (s *Store) Inspection() *InspectionStore       { return NewInspectionStore(s.qi) }
-func (s *Store) Group() *GroupStore                 { return NewGroupStore(s.qi) }
-func (s *Store) Vddk() *VddkStore                   { return NewVddkStore(s.qi) }
-func (s *Store) Outbox() *OutboxStore               { return NewOutboxStore(s.qi) }
-func (s *Store) RightSizing() *RightSizingStore     { return NewRightSizingStore(s.qi) }
-func (s *Store) Forecast() *ForecastStore           { return NewForecastStore(s.qi) }
-func (s *Store) Application() *ApplicationStore     { return NewApplicationStore(s.qi) }
-func (s *Store) Credentials() *CredentialsStore     { return NewCredentialsStore(s.qi) }
-func (s *Store) Collection() *CollectionStore       { return NewCollectionStore(s.qi) }
-func (s *Store) Export() *ExportStore               { return NewExportStore(s.qi) }
+func (s *Store) Inventory() *InventoryStore   { return NewInventoryStore(s.qi) }
+func (s *Store) VM() *VMStore                 { return NewVMStore(s.qi) }
+func (s *Store) Group() *GroupStore           { return NewGroupStore(s.qi) }
+func (s *Store) Collection() *CollectionStore { return NewCollectionStore(s.qi) }
+func (s *Store) Export() *ExportStore         { return NewExportStore(s.qi) }
 
 func (s *Store) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	return s.transactor.WithTx(ctx, fn)

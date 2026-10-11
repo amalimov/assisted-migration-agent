@@ -66,7 +66,6 @@ var _ = Describe("VMStore cross-table filters", func() {
 		Expect(test.InsertVMs(ctx, db)).To(Succeed())
 		Expect(test.InsertVMMemory(ctx, db)).To(Succeed())
 		Expect(test.InsertVMDatastores(ctx, db)).To(Succeed())
-		Expect(test.InsertVMInspections(ctx, db)).To(Succeed())
 	})
 
 	AfterEach(func() {

@@ -74,20 +74,12 @@ var _ = Describe("Migrations", func() {
 	})
 
 	Context("Main migrations", func() {
-		It("should create configuration table", func() {
-			_, err := mainSt.Querier().ExecContext(ctx, `
-				INSERT INTO configuration (id, agent_mode)
-				VALUES (1, 'disconnected')
-			`)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should add skip_tls and ca_cert columns to credentials table", func() {
-			_, err := mainSt.Querier().ExecContext(ctx, `
-				INSERT INTO credentials (id, url, username, password, skip_tls, ca_cert)
-				VALUES ('test-tls', 'https://vc.local', 'u', 'p', true, 'cert')
-			`)
-			Expect(err).NotTo(HaveOccurred())
+		It("does not create Console or credential tables", func() {
+			for _, table := range []string{"configuration", "credentials", "vddk", "forecast_runs"} {
+				var count int
+				Expect(mainSt.Querier().QueryRowContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_name = ?`, table).Scan(&count)).To(Succeed())
+				Expect(count).To(Equal(0))
+			}
 		})
 
 		It("should create collections table", func() {
@@ -161,6 +153,65 @@ var _ = Describe("Migrations", func() {
 			Expect(collDB.Migrate(ctx, func(ctx context.Context, db *sql.DB) error {
 				return migrations.RunCollection(ctx, db, "collection")
 			})).To(Succeed())
+		})
+	})
+
+	Context("Upgrade from the previous schema", func() {
+		It("removes obsolete main tables and preserves collection markers", func() {
+			_, err := mainSt.Querier().ExecContext(ctx, `
+				INSERT INTO collections ("database", state) VALUES ('collection_legacy', 'running');
+				CREATE TABLE credentials (id VARCHAR PRIMARY KEY, url VARCHAR);
+				INSERT INTO credentials VALUES ('old', 'https://example.invalid');
+				DELETE FROM schema_migrations WHERE version = 2;
+			`)
+			Expect(err).NotTo(HaveOccurred())
+			mainDB, err := pool.Get(store.MainDatabaseID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mainDB.Migrate(ctx, migrations.RunMain)).To(Succeed())
+			var state string
+			Expect(mainSt.Querier().QueryRowContext(ctx, `SELECT state FROM collections WHERE "database" = 'collection_legacy'`).Scan(&state)).To(Succeed())
+			Expect(state).To(Equal("running"))
+			var count int
+			Expect(mainSt.Querier().QueryRowContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_name = 'credentials'`).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
+		})
+
+		It("removes obsolete collection tables and preserves inventory, groups, and VM edits", func() {
+			_, err := collSt.Querier().ExecContext(ctx, `
+				INSERT INTO vinfo ("VM ID", "VM", "migration_excluded", "labels") VALUES ('vm-old', 'old VM', true, '["keep"]');
+				INSERT INTO inventory (id, data) VALUES (1, 'old inventory');
+				INSERT INTO groups (id, name, filter) VALUES ('00000000-0000-0000-0000-000000000001', 'keep-group', 'name = ''old VM''');
+				CREATE TABLE vm_inspection_status ("VM ID" VARCHAR PRIMARY KEY, status VARCHAR);
+				INSERT INTO vm_inspection_status VALUES ('vm-old', 'completed');
+				CREATE TABLE rightsizing_reports (id VARCHAR PRIMARY KEY);
+				CREATE TABLE rightsizing_metrics (report_id VARCHAR, FOREIGN KEY (report_id) REFERENCES rightsizing_reports(id));
+				INSERT INTO rightsizing_reports VALUES ('old-report');
+				INSERT INTO rightsizing_metrics VALUES ('old-report');
+				ALTER TABLE vdatastore ADD COLUMN "Backing Devices" VARCHAR;
+				DELETE FROM collection_schema_migrations WHERE version = 2;
+			`)
+			Expect(err).NotTo(HaveOccurred())
+			collDB, err := pool.Get("coll")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(collDB.Migrate(ctx, func(ctx context.Context, db *sql.DB) error {
+				return migrations.RunCollection(ctx, db, "collection")
+			})).To(Succeed())
+			var excluded bool
+			var labels string
+			Expect(collSt.Querier().QueryRowContext(ctx, `SELECT "migration_excluded", "labels" FROM vinfo WHERE "VM ID" = 'vm-old'`).Scan(&excluded, &labels)).To(Succeed())
+			Expect(excluded).To(BeTrue())
+			Expect(labels).To(Equal(`["keep"]`))
+			var count int
+			Expect(collSt.Querier().QueryRowContext(ctx, `SELECT count(*) FROM groups WHERE name = 'keep-group'`).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+			Expect(collSt.Querier().QueryRowContext(ctx, `SELECT count(*) FROM inventory WHERE id = 1`).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(1))
+			for _, table := range []string{"vm_inspection_status", "rightsizing_reports", "rightsizing_metrics"} {
+				Expect(collSt.Querier().QueryRowContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_name = ?`, table).Scan(&count)).To(Succeed())
+				Expect(count).To(Equal(0))
+			}
+			Expect(collSt.Querier().QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name = 'vdatastore' AND column_name = 'Backing Devices'`).Scan(&count)).To(Succeed())
+			Expect(count).To(Equal(0))
 		})
 	})
 })

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
@@ -14,6 +16,7 @@ import (
 
 var (
 	addr         = flag.String("addr", "http://localhost:8000", "agent address")
+	xlsx         = flag.String("xlsx", "", "RVTools workbook to upload in each round")
 	apiPrefix    = flag.String("api-prefix", "/api/v2", "API path prefix")
 	pollInterval = flag.Duration("poll-interval", 5*time.Second, "polling interval")
 	timeout      = flag.Duration("timeout", 10*time.Minute, "max wait per collection")
@@ -21,6 +24,10 @@ var (
 
 func main() {
 	flag.Parse()
+	if *xlsx == "" {
+		log("usage: go run ./tools/leaktest -xlsx /path/to/export.xlsx")
+		os.Exit(2)
+	}
 
 	log("=== DB Connection Leak Test ===")
 	log("agent: %s", *addr)
@@ -43,7 +50,7 @@ func main() {
 	}()
 
 	log("")
-	log("--- Round 2: second collection (leak would cause attach failure here) ---")
+	log("--- Round 2: second collection ---")
 	if !startCollection() {
 		return
 	}
@@ -58,12 +65,46 @@ func main() {
 }
 
 func startCollection() bool {
-	status, body := doRequest("POST", "/collector", "{}")
-	if status != http.StatusAccepted && status != http.StatusOK {
-		log("FAIL: POST /collector → %d: %s", status, body)
+	file, err := os.Open(*xlsx)
+	if err != nil {
+		log("FAIL: opening workbook: %v", err)
 		return false
 	}
-	log("POST /collector → %d", status)
+	defer file.Close()
+	var bodyBuf bytes.Buffer
+	writer := multipart.NewWriter(&bodyBuf)
+	part, err := writer.CreateFormFile("files", "leaktest.xlsx")
+	if err != nil {
+		log("FAIL: multipart form: %v", err)
+		return false
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		log("FAIL: reading workbook: %v", err)
+		return false
+	}
+	if err := writer.Close(); err != nil {
+		log("FAIL: multipart form: %v", err)
+		return false
+	}
+	req, err := http.NewRequest(http.MethodPost, *addr+*apiPrefix+"/collector/rvtools", &bodyBuf)
+	if err != nil {
+		log("FAIL: request: %v", err)
+		return false
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log("FAIL: upload: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+	response, _ := io.ReadAll(resp.Body)
+	status, body := resp.StatusCode, string(response)
+	if status != http.StatusAccepted && status != http.StatusOK {
+		log("FAIL: POST /collector/rvtools → %d: %s", status, body)
+		return false
+	}
+	log("POST /collector/rvtools → %d", status)
 	return true
 }
 
@@ -97,11 +138,11 @@ func pollUntilDone(label string) bool {
 		}
 
 		switch state {
-		case "collected", "ready":
+		case "collected":
 			return true
 		case "error":
 			log("[%s] collection ended with error: %s", label, errMsg)
-			return true
+			return false
 		}
 
 		time.Sleep(*pollInterval)

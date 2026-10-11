@@ -1,7 +1,5 @@
 package config
 
-import "time"
-
 type ServerModeType string
 
 const (
@@ -9,14 +7,11 @@ const (
 	ServerModeDev  ServerModeType = "dev"
 )
 
-//go:generate go run github.com/ecordell/optgen -output zz_generated.configuration.go . Configuration Server Agent Console Authentication
+//go:generate go run github.com/ecordell/optgen -output zz_generated.configuration.go . Configuration Server Agent
 type Configuration struct {
-	Server  Server         `debugmap:"visible"`
-	Agent   Agent          `debugmap:"visible"`
-	Auth    Authentication `debugmap:"visible"`
-	Console Console        `debugmap:"visible"`
+	Server Server `debugmap:"visible"`
+	Agent  Agent  `debugmap:"visible"`
 
-	// Log
 	LogFormat string `debugmap:"visible"`
 	LogLevel  string `debugmap:"visible"`
 }
@@ -28,25 +23,10 @@ type Server struct {
 }
 
 type Agent struct {
-	Mode                string        `debugmap:"visible" default:"disconnected"`
-	ID                  string        `debugmap:"visible"`
-	SourceID            string        `debugmap:"visible"`
-	Version             string        `debugmap:"visible" default:"v0.0.0"`
-	GitCommit           string        `debugmap:"visible" default:"unknown"`
-	UIGitCommit         string        `debugmap:"visible" default:"unknown"`
-	DataFolder          string        `debugmap:"visible"`
-	OpaPoliciesFolder   string        `debugmap:"visible"`
-	UpdateInterval      time.Duration `debugmap:"visible" default:"5s"`
-	LegacyStatusEnabled bool          `debugmap:"visible" default:"true"`
-	RetainCollections   int           `debugmap:"visible" default:"1"`
-	RVToolsMode         bool          `debugmap:"visible" default:"false"`
-}
-
-type Console struct {
-	URL string `debugmap:"visible" default:"http://localhost:7443"`
-}
-
-type Authentication struct {
-	Enabled     bool   `debugmap:"visible" default:"true"`
-	JWTFilePath string `debugmap:"visible"`
+	ID                string `debugmap:"visible"`
+	Version           string `debugmap:"visible" default:"v0.0.0"`
+	GitCommit         string `debugmap:"visible" default:"unknown"`
+	UIGitCommit       string `debugmap:"visible" default:"unknown"`
+	DataFolder        string `debugmap:"visible"`
+	OpaPoliciesFolder string `debugmap:"visible"`
 }

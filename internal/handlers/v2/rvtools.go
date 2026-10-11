@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,11 +17,6 @@ import (
 // StartRvtoolsCollector accepts RVTools Excel files and starts a collection pipeline.
 // StartRvtoolsCollector is available only in rvtools mode
 func (h *Handler) StartRvtoolsCollector(c *gin.Context) {
-	if !h.cfg.Agent.RVToolsMode {
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "only available in rvtools mode"})
-		return
-	}
-
 	form, err := c.MultipartForm()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart form"})
@@ -35,7 +31,8 @@ func (h *Handler) StartRvtoolsCollector(c *gin.Context) {
 
 	var savedPaths []string
 	for _, fh := range files {
-		destPath := filepath.Join(h.cfg.Agent.DataFolder, fmt.Sprintf("rvtools_%d_%s", time.Now().UnixNano(), fh.Filename))
+		filename := filepath.Base(strings.ReplaceAll(fh.Filename, "\\", "/"))
+		destPath := filepath.Join(h.cfg.Agent.DataFolder, fmt.Sprintf("rvtools_%d_%s", time.Now().UnixNano(), filename))
 		if err := c.SaveUploadedFile(fh, destPath); err != nil {
 			for _, p := range savedPaths {
 				_ = os.Remove(p)
@@ -48,6 +45,9 @@ func (h *Handler) StartRvtoolsCollector(c *gin.Context) {
 
 	status, err := h.svc.StartRVToolsCollecting(savedPaths)
 	if err != nil {
+		for _, p := range savedPaths {
+			_ = os.Remove(p)
+		}
 		if srvErrors.IsOperationInProgressError(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return

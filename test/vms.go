@@ -92,21 +92,14 @@ type Memory struct {
 }
 
 type Datastore struct {
-	Name           string
-	Hosts          string
-	Address        string
-	ObjectID       string
-	FreeMiB        int64
-	MHA            bool
-	CapacityMiB    int64
-	Type           string
-	BackingDevices string // JSON array of NAA device IDs, e.g. '["naa.600a..."]'
-}
-
-type Inspection struct {
-	VMID   string
-	Status string
-	Error  string
+	Name        string
+	Hosts       string
+	Address     string
+	ObjectID    string
+	FreeMiB     int64
+	MHA         bool
+	CapacityMiB int64
+	Type        string
 }
 
 var Memories = []Memory{
@@ -116,13 +109,7 @@ var Memories = []Memory{
 }
 
 var Datastores = []Datastore{
-	{"datastore1", "esxi-01.local", "10.0.0.1", "datastore-001", 524288, false, 1048576, "VMFS", `["naa.600a098038313954492458313031344c"]`},
-}
-
-var Inspections = []Inspection{
-	{"vm-001", "completed", ""},
-	{"vm-003", "completed", ""},
-	{"vm-007", "failed", "timeout connecting to VM"},
+	{"datastore1", "esxi-01.local", "10.0.0.1", "datastore-001", 524288, false, 1048576, "VMFS"},
 }
 
 var Concerns = []Concern{
@@ -134,23 +121,6 @@ var Concerns = []Concern{
 	{"vm-007", "concern-006", "Storage warning", "Information", "VM storage usage is at 75%. Monitor storage capacity and consider expansion if needed."},
 }
 
-// Utilization holds rightsizing utilization fixture data.
-type Utilization struct {
-	VMID      string
-	CpuMaxPct float64
-	MemMaxPct float64
-	DiskPct   float64
-}
-
-// Utilizations provides three VMs with known utilization values for sort testing.
-// vm-001: low CPU/mem/disk; vm-003: high CPU/mem/disk; vm-005: mid values; others have no data.
-var Utilizations = []Utilization{
-	{"vm-001", 10.0, 20.0, 15.0},
-	{"vm-003", 80.0, 70.0, 60.0},
-	{"vm-005", 45.0, 50.0, 40.0},
-}
-
-// InsertVMs inserts all test VM data into the database.
 func InsertVMs(ctx context.Context, db *sql.DB) error {
 	for _, vm := range VMs {
 		_, err := db.ExecContext(ctx, `
@@ -229,52 +199,9 @@ func InsertVMMemory(ctx context.Context, db *sql.DB) error {
 func InsertVMDatastores(ctx context.Context, db *sql.DB) error {
 	for _, ds := range Datastores {
 		_, err := db.ExecContext(ctx, `
-			INSERT INTO vdatastore ("Name", "Hosts", "Address", "Object ID", "Free MiB", "MHA", "Capacity MiB", "Type", "Backing Devices")
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, ds.Name, ds.Hosts, ds.Address, ds.ObjectID, ds.FreeMiB, ds.MHA, ds.CapacityMiB, ds.Type, ds.BackingDevices)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// InsertVMInspections inserts vm_inspection_status fixture data.
-func InsertVMInspections(ctx context.Context, db *sql.DB) error {
-	for _, ins := range Inspections {
-		_, err := db.ExecContext(ctx, `
-			INSERT INTO vm_inspection_status ("VM ID", status, error)
-			VALUES (?, ?, ?)
-		`, ins.VMID, ins.Status, ins.Error)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// InsertVMUtilization inserts a completed rightsizing report and per-VM utilization rows.
-// Only VMs in the Utilizations slice get data; the rest will have NULL utilization columns.
-func InsertVMUtilization(ctx context.Context, db *sql.DB) error {
-	reportID := "report-001"
-	_, err := db.ExecContext(ctx, `
-		INSERT INTO rightsizing_reports
-			(id, vcenter, cluster_id, interval_id, window_start, window_end,
-			 expected_sample_count, expected_batch_count, written_batch_count)
-		VALUES (?, 'vcenter-test', '', 1,
-			'2024-01-01 00:00:00+00', '2024-01-02 00:00:00+00',
-			288, 1, 1)
-	`, reportID)
-	if err != nil {
-		return err
-	}
-
-	for _, u := range Utilizations {
-		_, err := db.ExecContext(ctx, `
-			INSERT INTO rightsizing_vm_utilization
-				(report_id, moid, vm_name, cpu_max_pct, mem_max_pct, disk_pct)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, reportID, u.VMID, u.VMID, u.CpuMaxPct, u.MemMaxPct, u.DiskPct)
+			INSERT INTO vdatastore ("Name", "Hosts", "Address", "Object ID", "Free MiB", "MHA", "Capacity MiB", "Type")
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, ds.Name, ds.Hosts, ds.Address, ds.ObjectID, ds.FreeMiB, ds.MHA, ds.CapacityMiB, ds.Type)
 		if err != nil {
 			return err
 		}

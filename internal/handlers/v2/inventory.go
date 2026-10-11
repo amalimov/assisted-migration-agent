@@ -99,8 +99,8 @@ func (h *Handler) getInventory(c *gin.Context, invSvc *services.InventoryService
 
 // getInventoryBundle writes a ZIP archive containing the main inventory
 // (inventory.json) and every group subset inventory (subsets/<groupId>.json).
-// The subset files reuse the agent-facing SourceSubsetUpdate shape so the SaaS
-// upload endpoint consumes exactly what the connected flow pushes.
+// The subset files retain the existing SourceSubsetUpdate JSON shape for
+// consumers of the local inventory bundle.
 func (h *Handler) getInventoryBundle(c *gin.Context, invSvc *services.InventoryService) {
 	ctx := c.Request.Context()
 	log := zap.S().Named("inventory_handler")

@@ -2,8 +2,6 @@
 package config
 
 import (
-	"time"
-
 	defaults "github.com/creasty/defaults"
 	helpers "github.com/ecordell/optgen/helpers"
 )
@@ -34,8 +32,6 @@ func (c *Configuration) ToOption() ConfigurationOption {
 	return func(to *Configuration) {
 		to.Server = c.Server
 		to.Agent = c.Agent
-		to.Auth = c.Auth
-		to.Console = c.Console
 		to.LogFormat = c.LogFormat
 		to.LogLevel = c.LogLevel
 	}
@@ -46,8 +42,6 @@ func (c *Configuration) DebugMap() map[string]any {
 	debugMap := map[string]any{}
 	debugMap["Server"] = helpers.DebugValue(c.Server, false)
 	debugMap["Agent"] = helpers.DebugValue(c.Agent, false)
-	debugMap["Auth"] = helpers.DebugValue(c.Auth, false)
-	debugMap["Console"] = helpers.DebugValue(c.Console, false)
 	debugMap["LogFormat"] = helpers.DebugValue(c.LogFormat, false)
 	debugMap["LogLevel"] = helpers.DebugValue(c.LogLevel, false)
 	return debugMap
@@ -80,20 +74,6 @@ func WithServer(server Server) ConfigurationOption {
 func WithAgent(agent Agent) ConfigurationOption {
 	return func(c *Configuration) {
 		c.Agent = agent
-	}
-}
-
-// WithAuth returns an option that can set Auth on a Configuration
-func WithAuth(auth Authentication) ConfigurationOption {
-	return func(c *Configuration) {
-		c.Auth = auth
-	}
-}
-
-// WithConsole returns an option that can set Console on a Configuration
-func WithConsole(console Console) ConfigurationOption {
-	return func(c *Configuration) {
-		c.Console = console
 	}
 }
 
@@ -211,36 +191,24 @@ func NewAgentWithOptionsAndDefaults(opts ...AgentOption) *Agent {
 // ToOption returns a new AgentOption that sets the values from the passed in Agent
 func (a *Agent) ToOption() AgentOption {
 	return func(to *Agent) {
-		to.Mode = a.Mode
 		to.ID = a.ID
-		to.SourceID = a.SourceID
 		to.Version = a.Version
 		to.GitCommit = a.GitCommit
 		to.UIGitCommit = a.UIGitCommit
 		to.DataFolder = a.DataFolder
 		to.OpaPoliciesFolder = a.OpaPoliciesFolder
-		to.UpdateInterval = a.UpdateInterval
-		to.LegacyStatusEnabled = a.LegacyStatusEnabled
-		to.RetainCollections = a.RetainCollections
-		to.RVToolsMode = a.RVToolsMode
 	}
 }
 
 // DebugMap returns a map form of Agent for debugging
 func (a *Agent) DebugMap() map[string]any {
 	debugMap := map[string]any{}
-	debugMap["Mode"] = helpers.DebugValue(a.Mode, false)
 	debugMap["ID"] = helpers.DebugValue(a.ID, false)
-	debugMap["SourceID"] = helpers.DebugValue(a.SourceID, false)
 	debugMap["Version"] = helpers.DebugValue(a.Version, false)
 	debugMap["GitCommit"] = helpers.DebugValue(a.GitCommit, false)
 	debugMap["UIGitCommit"] = helpers.DebugValue(a.UIGitCommit, false)
 	debugMap["DataFolder"] = helpers.DebugValue(a.DataFolder, false)
 	debugMap["OpaPoliciesFolder"] = helpers.DebugValue(a.OpaPoliciesFolder, false)
-	debugMap["UpdateInterval"] = helpers.DebugValue(a.UpdateInterval, false)
-	debugMap["LegacyStatusEnabled"] = helpers.DebugValue(a.LegacyStatusEnabled, false)
-	debugMap["RetainCollections"] = helpers.DebugValue(a.RetainCollections, false)
-	debugMap["RVToolsMode"] = helpers.DebugValue(a.RVToolsMode, false)
 	return debugMap
 }
 
@@ -260,24 +228,10 @@ func (a *Agent) WithOptions(opts ...AgentOption) *Agent {
 	return a
 }
 
-// WithMode returns an option that can set Mode on a Agent
-func WithMode(mode string) AgentOption {
-	return func(a *Agent) {
-		a.Mode = mode
-	}
-}
-
 // WithID returns an option that can set ID on a Agent
 func WithID(iD string) AgentOption {
 	return func(a *Agent) {
 		a.ID = iD
-	}
-}
-
-// WithSourceID returns an option that can set SourceID on a Agent
-func WithSourceID(sourceID string) AgentOption {
-	return func(a *Agent) {
-		a.SourceID = sourceID
 	}
 }
 
@@ -313,158 +267,5 @@ func WithDataFolder(dataFolder string) AgentOption {
 func WithOpaPoliciesFolder(opaPoliciesFolder string) AgentOption {
 	return func(a *Agent) {
 		a.OpaPoliciesFolder = opaPoliciesFolder
-	}
-}
-
-// WithUpdateInterval returns an option that can set UpdateInterval on a Agent
-func WithUpdateInterval(updateInterval time.Duration) AgentOption {
-	return func(a *Agent) {
-		a.UpdateInterval = updateInterval
-	}
-}
-
-// WithLegacyStatusEnabled returns an option that can set LegacyStatusEnabled on a Agent
-func WithLegacyStatusEnabled(legacyStatusEnabled bool) AgentOption {
-	return func(a *Agent) {
-		a.LegacyStatusEnabled = legacyStatusEnabled
-	}
-}
-
-// WithRetainCollections returns an option that can set RetainCollections on a Agent
-func WithRetainCollections(retainCollections int) AgentOption {
-	return func(a *Agent) {
-		a.RetainCollections = retainCollections
-	}
-}
-
-// WithRVToolsMode returns an option that can set RVToolsMode on a Agent
-func WithRVToolsMode(rVToolsMode bool) AgentOption {
-	return func(a *Agent) {
-		a.RVToolsMode = rVToolsMode
-	}
-}
-
-type ConsoleOption func(c *Console)
-
-// NewConsoleWithOptions creates a new Console with the passed in options set
-func NewConsoleWithOptions(opts ...ConsoleOption) *Console {
-	c := &Console{}
-	for _, o := range opts {
-		o(c)
-	}
-	return c
-}
-
-// NewConsoleWithOptionsAndDefaults creates a new Console with the passed in options set starting from the defaults
-func NewConsoleWithOptionsAndDefaults(opts ...ConsoleOption) *Console {
-	c := &Console{}
-	defaults.MustSet(c)
-	for _, o := range opts {
-		o(c)
-	}
-	return c
-}
-
-// ToOption returns a new ConsoleOption that sets the values from the passed in Console
-func (c *Console) ToOption() ConsoleOption {
-	return func(to *Console) {
-		to.URL = c.URL
-	}
-}
-
-// DebugMap returns a map form of Console for debugging
-func (c *Console) DebugMap() map[string]any {
-	debugMap := map[string]any{}
-	debugMap["URL"] = helpers.DebugValue(c.URL, false)
-	return debugMap
-}
-
-// ConsoleWithOptions configures an existing Console with the passed in options set
-func ConsoleWithOptions(c *Console, opts ...ConsoleOption) *Console {
-	for _, o := range opts {
-		o(c)
-	}
-	return c
-}
-
-// WithOptions configures the receiver Console with the passed in options set
-func (c *Console) WithOptions(opts ...ConsoleOption) *Console {
-	for _, o := range opts {
-		o(c)
-	}
-	return c
-}
-
-// WithURL returns an option that can set URL on a Console
-func WithURL(uRL string) ConsoleOption {
-	return func(c *Console) {
-		c.URL = uRL
-	}
-}
-
-type AuthenticationOption func(a *Authentication)
-
-// NewAuthenticationWithOptions creates a new Authentication with the passed in options set
-func NewAuthenticationWithOptions(opts ...AuthenticationOption) *Authentication {
-	a := &Authentication{}
-	for _, o := range opts {
-		o(a)
-	}
-	return a
-}
-
-// NewAuthenticationWithOptionsAndDefaults creates a new Authentication with the passed in options set starting from the defaults
-func NewAuthenticationWithOptionsAndDefaults(opts ...AuthenticationOption) *Authentication {
-	a := &Authentication{}
-	defaults.MustSet(a)
-	for _, o := range opts {
-		o(a)
-	}
-	return a
-}
-
-// ToOption returns a new AuthenticationOption that sets the values from the passed in Authentication
-func (a *Authentication) ToOption() AuthenticationOption {
-	return func(to *Authentication) {
-		to.Enabled = a.Enabled
-		to.JWTFilePath = a.JWTFilePath
-	}
-}
-
-// DebugMap returns a map form of Authentication for debugging
-func (a *Authentication) DebugMap() map[string]any {
-	debugMap := map[string]any{}
-	debugMap["Enabled"] = helpers.DebugValue(a.Enabled, false)
-	debugMap["JWTFilePath"] = helpers.DebugValue(a.JWTFilePath, false)
-	return debugMap
-}
-
-// AuthenticationWithOptions configures an existing Authentication with the passed in options set
-func AuthenticationWithOptions(a *Authentication, opts ...AuthenticationOption) *Authentication {
-	for _, o := range opts {
-		o(a)
-	}
-	return a
-}
-
-// WithOptions configures the receiver Authentication with the passed in options set
-func (a *Authentication) WithOptions(opts ...AuthenticationOption) *Authentication {
-	for _, o := range opts {
-		o(a)
-	}
-	return a
-}
-
-// WithEnabled returns an option that can set Enabled on a Authentication
-func WithEnabled(enabled bool) AuthenticationOption {
-	return func(a *Authentication) {
-		a.Enabled = enabled
-	}
-}
-
-// WithJWTFilePath returns an option that can set JWTFilePath on a Authentication
-func WithJWTFilePath(jWTFilePath string) AuthenticationOption {
-	return func(a *Authentication) {
-		a.JWTFilePath = jWTFilePath
 	}
 }

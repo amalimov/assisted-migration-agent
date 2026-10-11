@@ -2,11 +2,7 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	sq "github.com/Masterminds/squirrel"
@@ -31,18 +27,7 @@ type FilterOption = sq.Sqlizer
 
 // List returns VM summaries with filters, sorting, and pagination.
 func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOption) ([]models.VirtualMachineSummary, error) {
-	builder := vmOutputQuery.
-		Columns(
-			`u.cpu_p95_pct AS cpu_p95_pct`,
-			`u.mem_p95_pct AS mem_p95_pct`,
-			`u.cpu_max_pct AS cpu_max_pct`,
-			`u.mem_max_pct AS mem_max_pct`,
-			`u.disk_pct    AS disk_pct`,
-			`u.confidence_pct AS confidence_pct`,
-		).
-		LeftJoin(`rightsizing_vm_utilization u ON u.moid = v."VM ID" AND u.report_id = (` +
-			`SELECT id FROM rightsizing_reports WHERE written_batch_count > 0 ORDER BY created_at DESC LIMIT 1` +
-			`)`)
+	builder := vmOutputQuery
 
 	// Apply external filters via subquery (filters reference table aliases in vmFilterSubquery)
 	if filter != nil {
@@ -77,8 +62,6 @@ func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOptio
 	var vms []models.VirtualMachineSummary
 	for rows.Next() {
 		var vm models.VirtualMachineSummary
-		var sqlErr string
-		var inspectionConcernCount int
 		var groups StringArray
 		var migrationExcluded bool
 		var labels StringArray
@@ -91,29 +74,15 @@ func (s *VMStore) List(ctx context.Context, filter sq.Sqlizer, opts ...ListOptio
 			&vm.Memory,
 			&vm.DiskSize,
 			&vm.IssueCount,
-			&vm.InspectionStatus.State,
-			&vm.InspectionStatus.Details,
 			&vm.IsTemplate,
 			&vm.IsMigratable,
-			&sqlErr,
-			&inspectionConcernCount,
 			&groups,
 			&migrationExcluded,
 			&labels,
-			&vm.UtilizationCpuP95,
-			&vm.UtilizationMemP95,
-			&vm.UtilizationCpuMax,
-			&vm.UtilizationMemMax,
-			&vm.UtilizationDisk,
-			&vm.UtilizationConfidence,
 		)
 		if err != nil {
 			return nil, err
 		}
-		if sqlErr != "" {
-			vm.InspectionStatus.Error = errors.New(sqlErr)
-		}
-		vm.InspectionConcernCount = inspectionConcernCount
 		vm.Groups = groups
 		vm.MigrationExcluded = migrationExcluded
 		vm.Labels = labels
@@ -146,7 +115,7 @@ func (s *VMStore) Count(ctx context.Context, filter sq.Sqlizer) (int, error) {
 	return count, err
 }
 
-// Get returns full VM details by ID, including utilization data from the latest rightsizing report.
+// Get returns full VM details by ID, from the RVTools workbook.
 func (s *VMStore) Get(ctx context.Context, id string) (*models.VM, error) {
 	rows, err := s.db.QueryContext(ctx, vmGetQuery, id)
 	if err != nil {
@@ -163,17 +132,6 @@ func (s *VMStore) Get(ctx context.Context, id string) (*models.VM, error) {
 
 	var pvm duckdb_models.VM
 	var groups StringArray
-	var (
-		uMoid                                               sql.NullString
-		uVmName                                             sql.NullString
-		uProvCpus                                           sql.NullInt64
-		uProvMemMb                                          sql.NullInt64
-		uProvDiskKb                                         sql.NullFloat64
-		uCpuAvg, uCpuP95, uCpuMax, uCpuLatest               sql.NullFloat64
-		uMemAvg, uMemP95, uMemMax, uMemLatest               sql.NullFloat64
-		uDisk, uConfidence                                  sql.NullFloat64
-		inspectionState, inspectionDetails, inspectionError string
-	)
 
 	if err := rows.Scan(
 		&pvm.ID, &pvm.Name, &pvm.Folder, &pvm.Host, &pvm.UUID,
@@ -188,11 +146,6 @@ func (s *VMStore) Get(ctx context.Context, id string) (*models.VM, error) {
 		&pvm.CpuHotAddEnabled, &pvm.CpuHotRemoveEnabled, &pvm.CpuSockets,
 		&pvm.CoresPerSocket, &pvm.MemoryHotAddEnabled, &pvm.BalloonedMemory,
 		&pvm.Disks, &pvm.NICs, &pvm.Networks, &pvm.Concerns,
-		&uMoid, &uVmName, &uProvCpus, &uProvMemMb, &uProvDiskKb,
-		&uCpuAvg, &uCpuP95, &uCpuMax, &uCpuLatest,
-		&uMemAvg, &uMemP95, &uMemMax, &uMemLatest,
-		&uDisk, &uConfidence, &pvm.GuestApps,
-		&inspectionState, &inspectionDetails, &inspectionError,
 	); err != nil {
 		return nil, fmt.Errorf("scanning VM %s: %w", id, err)
 	}
@@ -203,31 +156,6 @@ func (s *VMStore) Get(ctx context.Context, id string) (*models.VM, error) {
 
 	result := fromDB(pvm)
 	result.Groups = groups
-	result.InspectionStatus.State = models.InspectionState(inspectionState)
-	result.InspectionStatus.Details = inspectionDetails
-	if inspectionError != "" {
-		result.InspectionStatus.Error = errors.New(inspectionError)
-	}
-
-	if uMoid.Valid {
-		result.Utilization = &models.VmUtilizationDetails{
-			MOID:                uMoid.String,
-			VMName:              uVmName.String,
-			ProvisionedCpus:     int(uProvCpus.Int64),
-			ProvisionedMemoryMb: int(uProvMemMb.Int64),
-			ProvisionedDiskKb:   uProvDiskKb.Float64,
-			CpuAvg:              uCpuAvg.Float64,
-			CpuP95:              uCpuP95.Float64,
-			CpuMax:              uCpuMax.Float64,
-			CpuLatest:           uCpuLatest.Float64,
-			MemAvg:              uMemAvg.Float64,
-			MemP95:              uMemP95.Float64,
-			MemMax:              uMemMax.Float64,
-			MemLatest:           uMemLatest.Float64,
-			Disk:                uDisk.Float64,
-			Confidence:          uConfidence.Float64,
-		}
-	}
 
 	return &result, nil
 }
@@ -236,8 +164,8 @@ func (s *VMStore) Get(ctx context.Context, id string) (*models.VM, error) {
 func (s *VMStore) GetFilterOptions(ctx context.Context) (models.VMFilterOptions, error) {
 	row := s.db.QueryRowContext(ctx, vmFilterOptionsQuery)
 
-	var clusters, datacenters, concernLabels, concernCategories, applications StringArray
-	if err := row.Scan(&clusters, &datacenters, &concernLabels, &concernCategories, &applications); err != nil {
+	var clusters, datacenters, concernLabels, concernCategories StringArray
+	if err := row.Scan(&clusters, &datacenters, &concernLabels, &concernCategories); err != nil {
 		return models.VMFilterOptions{}, err
 	}
 
@@ -246,56 +174,7 @@ func (s *VMStore) GetFilterOptions(ctx context.Context) (models.VMFilterOptions,
 		Datacenters:       datacenters,
 		ConcernLabels:     concernLabels,
 		ConcernCategories: concernCategories,
-		Applications:      applications,
 	}, nil
-}
-
-// GetGuestApps returns all VMs with their guest application names.
-func (s *VMStore) GetGuestApps(ctx context.Context) ([]models.VMGuestApps, error) {
-	query, args, err := sq.Select(
-		`v."VM ID"`,
-		`v."VM"`,
-		`COALESCE(v."guest_apps", '[]')`,
-	).From("vinfo v").ToSql()
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var result []models.VMGuestApps
-	for rows.Next() {
-		var id, name, guestAppsJSON string
-		if err := rows.Scan(&id, &name, &guestAppsJSON); err != nil {
-			return nil, err
-		}
-
-		var apps []struct {
-			Name string `json:"name"`
-		}
-		if err := json.Unmarshal([]byte(guestAppsJSON), &apps); err != nil {
-			return nil, fmt.Errorf("parsing guest_apps for VM %s: %w", id, err)
-		}
-
-		appNames := make([]string, 0, len(apps))
-		for _, a := range apps {
-			if a.Name != "" {
-				appNames = append(appNames, a.Name)
-			}
-		}
-
-		result = append(result, models.VMGuestApps{
-			ID:       id,
-			Name:     name,
-			AppNames: appNames,
-		})
-	}
-
-	return result, rows.Err()
 }
 
 // normalizeCategory validates and normalizes an issue category (case-insensitive).
@@ -362,14 +241,6 @@ func fromDB(pvm duckdb_models.VM) models.VM {
 		})
 	}
 
-	guestApps := make([]models.GuestApp, 0, len(pvm.GuestApps))
-	for _, g := range pvm.GuestApps {
-		guestApps = append(guestApps, models.GuestApp{
-			Name:    g.Name,
-			Version: g.Version,
-		})
-	}
-
 	return models.VM{
 		ID:                    pvm.ID,
 		Name:                  pvm.Name,
@@ -397,7 +268,6 @@ func fromDB(pvm duckdb_models.VM) models.VM {
 		NICs:                  nics,
 		Issues:                issues,
 		Labels:                pvm.Labels,
-		GuestApps:             guestApps,
 	}
 }
 
@@ -462,20 +332,6 @@ func WithSort(sorts []SortParam) ListOption {
 		"diskSize":     "disk_size",
 		"memory":       "memory",
 		"issues":       "issue_count",
-		"cpuUsage":     "cpu_max_pct",
-		"ramUsage":     "mem_max_pct",
-		"diskUsage":    "disk_pct",
-		"cpuAvg":       "cpu_avg_pct",
-		"memAvg":       "mem_avg_pct",
-	}
-
-	// Utilization columns are nullable: always sort NULLs last regardless of direction.
-	nullsLastColumns := map[string]bool{
-		"cpu_max_pct": true,
-		"mem_max_pct": true,
-		"disk_pct":    true,
-		"cpu_avg_pct": true,
-		"mem_avg_pct": true,
 	}
 
 	return func(b sq.SelectBuilder) sq.SelectBuilder {
@@ -490,49 +346,12 @@ func WithSort(sorts []SortParam) ListOption {
 				dir = "DESC"
 			}
 			clause := col + " " + dir
-			if nullsLastColumns[col] {
-				clause += " NULLS LAST"
-			}
+
 			orderClauses = append(orderClauses, clause)
 		}
 		orderClauses = append(orderClauses, "id")
 		return b.OrderBy(orderClauses...)
 	}
-}
-
-// GetFolders returns a list of distinct folders from the vinfo table.
-func (s *VMStore) GetFolders(ctx context.Context) ([]models.Folder, error) {
-	builder := sq.Select(
-		`COALESCE("Folder ID", '') AS id`,
-		`COALESCE("Folder", '') AS name`,
-	).Distinct().
-		From("vinfo").
-		Where(`COALESCE("Folder ID", "Folder", '') != ''`).
-		OrderBy("name")
-
-	query, args, err := builder.ToSql()
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	var folders []models.Folder
-	for rows.Next() {
-		var folder models.Folder
-		if err := rows.Scan(&folder.ID, &folder.Name); err != nil {
-			return nil, err
-		}
-		folders = append(folders, folder)
-	}
-
-	return folders, rows.Err()
 }
 
 // UpdateMigrationExcluded sets the migration_excluded flag for a VM in vinfo table.
@@ -764,86 +583,6 @@ func (s *VMStore) GetAllLabels(ctx context.Context) ([]string, []int, error) {
 	return labels, counts, rows.Err()
 }
 
-// sourceCatalog returns the DuckDB catalog name of the current (source) database.
-// When a second database is ATTACHed, DuckDB requires fully-qualified references
-// (catalog.schema.table) to resolve ambiguity between tables that share the same name
-// in both databases. The catalog name matches the database filename without extension
-// and is authoritative via current_catalog().
-func (s *VMStore) sourceCatalog(ctx context.Context) (string, error) {
-	var catalog string
-	if err := s.db.QueryRowContext(ctx, "SELECT current_catalog()").Scan(&catalog); err != nil {
-		return "", fmt.Errorf("querying current catalog: %w", err)
-	}
-	return catalog, nil
-}
-
-// CopyLabelsToAttached copies user-assigned labels from this store's vinfo into the attached
-// database's vinfo, for VMs present in both. Labels whose keys appear in excludeLabels are
-// omitted. VMs absent from the attached database are silently skipped.
-func (s *VMStore) CopyLabelsToAttached(ctx context.Context, attachAlias string, excludeLabels map[string]bool) error {
-	cat, err := s.sourceCatalog(ctx)
-	if err != nil {
-		return err
-	}
-	srcVinfo := cat + ".main.vinfo"
-	exclusionArr := buildExclusionArray(excludeLabels)
-	filterExpr := fmt.Sprintf(
-		`list_filter(CAST(%s."labels" AS VARCHAR[]), x -> NOT list_contains(CAST(%s AS VARCHAR[]), x))`,
-		srcVinfo, exclusionArr,
-	)
-	query, args, err := sq.Update(attachAlias+".vinfo").
-		Set(`"labels"`, sq.Expr(filterExpr)).
-		From(srcVinfo).
-		Where(sq.Expr(srcVinfo + `."VM ID" = ` + attachAlias + `.vinfo."VM ID"`)).
-		Where(sq.Expr(srcVinfo + `."labels" != '[]'`)).
-		ToSql()
-	if err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, query, args...)
-	return err
-}
-
-// CopyMigrationExclusionToAttached sets migration_excluded=true in the attached schema's vinfo
-// for every VM that is excluded in this store. VMs absent from the attached schema are silently skipped.
-func (s *VMStore) CopyMigrationExclusionToAttached(ctx context.Context, attachAlias string) error {
-	cat, err := s.sourceCatalog(ctx)
-	if err != nil {
-		return err
-	}
-	srcVinfo := cat + ".main.vinfo"
-	query, args, err := sq.Update(attachAlias+".vinfo").
-		Set(`"migration_excluded"`, true).
-		From(srcVinfo).
-		Where(sq.Expr(srcVinfo + `."VM ID" = ` + attachAlias + `.vinfo."VM ID"`)).
-		Where(sq.Eq{srcVinfo + `."migration_excluded"`: true}).
-		ToSql()
-	if err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, query, args...)
-	return err
-}
-
-// LabelNewVMsInAttached adds label to every VM in the attached schema whose VM ID does not
-// appear in this store's vinfo. These are VMs that are new to the current collection run.
-func (s *VMStore) LabelNewVMsInAttached(ctx context.Context, attachAlias string, label string) error {
-	cat, err := s.sourceCatalog(ctx)
-	if err != nil {
-		return err
-	}
-	srcVinfo := cat + ".main.vinfo"
-	query, args, err := sq.Update(attachAlias+".vinfo").
-		Set(`"labels"`, sq.Expr(`list_distinct(list_append(CAST("labels" AS VARCHAR[]), ?))`, label)).
-		Where(sq.Expr(`"VM ID" NOT IN (SELECT "VM ID" FROM ` + srcVinfo + `)`)).
-		ToSql()
-	if err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, query, args...)
-	return err
-}
-
 // AddLabel adds a label to a VM's labels array (idempotent - no duplicates).
 func (s *VMStore) AddLabel(ctx context.Context, vmID string, label string) error {
 	// Use DuckDB's list functions to add label without creating duplicates
@@ -1050,19 +789,6 @@ func (s *VMStore) RemoveLabelBatch(ctx context.Context, vmIDs []string, label st
 // buildExclusionArray builds a DuckDB array literal from the keys of a string set.
 // Used in list_filter lambda expressions to exclude system-managed labels.
 // Values are single-quote-escaped for safe embedding in SQL.
-func buildExclusionArray(labels map[string]bool) string {
-	if len(labels) == 0 {
-		return "[]"
-	}
-	parts := make([]string, 0, len(labels))
-	for l := range labels {
-		parts = append(parts, "'"+strings.ReplaceAll(l, "'", "''")+"'")
-	}
-	sort.Strings(parts) // deterministic order
-	return "[" + strings.Join(parts, ", ") + "]"
-}
-
-// deduplicateVMIDs removes duplicate VM IDs from a slice while preserving order.
 func deduplicateVMIDs(input []string) []string {
 	seen := make(map[string]bool)
 	result := make([]string, 0, len(input))

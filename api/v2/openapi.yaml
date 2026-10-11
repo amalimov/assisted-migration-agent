@@ -6,7 +6,7 @@ servers:
   - url: /api/v2
 tags:
   - name: Agent
-    description: Agent status and mode management
+    description: Local agent status
   - name: Collections
     description: Collection database management
   - name: Collector
@@ -17,14 +17,6 @@ tags:
     description: Virtual machine queries across all vCenters
   - name: Groups
     description: VirtualMachine group management
-  - name: Applications
-    description: Detected application inventory
-  - name: Rightsizing
-    description: Rightsizing reports and cluster/VM utilization
-  - name: Inspector
-    description: Deep VM inspection lifecycle and VDDK management
-  - name: Credentials
-    description: vCenter credential management
   - name: Version
     description: Agent version information
 paths:
@@ -43,32 +35,6 @@ paths:
                 $ref: '#/components/schemas/AgentStatus'
         '500':
           description: Internal server error
-    post:
-      tags: [Agent]
-      summary: Change agent mode
-      operationId: setAgentMode
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AgentModeRequest'
-      responses:
-        '200':
-          description: Mode changed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentStatus'
-        '400':
-          description: Invalid request
-        '409':
-          description: Conflict
-        '500':
-          description: Internal server error
-
-  # ── Latest-collection shortcuts ─────────────────────────────────────
-  # Mirrors of /collections/{id}/... that resolve the latest collection automatically.
   /virtualmachines:
     get:
       tags: [VirtualMachines]
@@ -82,7 +48,7 @@ paths:
             type: string
         - name: sort
           in: query
-          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
           schema:
             type: array
             items:
@@ -272,54 +238,6 @@ paths:
         '500':
           description: Internal server error
 
-  /virtualmachines/{vmId}/inspection:
-    delete:
-      tags: [VirtualMachines]
-      summary: Cancel deep inspection for a specific VirtualMachine
-      operationId: cancelVirtualMachineInspection
-      parameters:
-        - name: vmId
-          in: path
-          required: true
-          description: VirtualMachine ID
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Inspection canceled for the VirtualMachine
-        '400':
-          description: Inspector not running
-        '404':
-          description: VirtualMachine not found in inspection queue
-        '409':
-          description: A collection or report is in progress
-        '500':
-          description: Internal server error
-
-  /virtualmachines/{vmId}/utilization:
-    get:
-      tags: [Rightsizing]
-      summary: Get utilization breakdown for a specific VM from the latest collection
-      operationId: getLatestVMUtilization
-      parameters:
-        - name: vmId
-          in: path
-          required: true
-          description: VirtualMachine MoRef ID
-          schema:
-            type: string
-      responses:
-        '200':
-          description: VM utilization details
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VmUtilizationDetails'
-        '404':
-          description: No collections or no utilization data for this VM
-        '500':
-          description: Internal server error
-
   /groups:
     get:
       tags: [Groups]
@@ -400,7 +318,7 @@ paths:
             type: string
         - name: sort
           in: query
-          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
           schema:
             type: array
             items:
@@ -481,30 +399,6 @@ paths:
         '500':
           description: Internal server error
 
-  /groups/{groupId}/applications:
-    get:
-      tags: [Groups]
-      summary: List detected applications for a group
-      operationId: listGroupApplications
-      parameters:
-        - name: groupId
-          in: path
-          required: true
-          description: Group ID
-          schema:
-            type: string
-      responses:
-        '200':
-          description: List of detected applications
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApplicationListResponse'
-        '404':
-          description: No collections or group not found
-        '500':
-          description: Internal server error
-
   /inventory:
     get:
       tags: [Inventories]
@@ -567,23 +461,6 @@ paths:
 
   # ── Collectors ─────────────────────────────────────────────────────────
   /collector:
-    post:
-      tags: [Collector]
-      summary: Start a collection
-      operationId: startCollector
-      responses:
-        '202':
-          description: Collection started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CollectorStatus'
-        '400':
-          description: Invalid request
-        '409':
-          description: Collection already in progress
-        '500':
-          description: Internal server error
     get:
       tags: [Collector]
       summary: Get collector status
@@ -686,7 +563,7 @@ paths:
             type: string
         - name: sort
           in: query
-          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
           schema:
             type: array
             items:
@@ -799,38 +676,6 @@ paths:
         '500':
           description: Internal server error
 
-  /collections/{id}/virtualmachines/{vmId}/utilization:
-    get:
-      tags: [VirtualMachines]
-      summary: Get utilization breakdown for a specific VM
-      operationId: getVMUtilization
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Collection ID
-          schema:
-            type: string
-        - name: vmId
-          in: path
-          required: true
-          description: VirtualMachine MoRef ID
-          schema:
-            type: string
-      responses:
-        '200':
-          description: VM utilization details
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VmUtilizationDetails'
-        '404':
-          description: Collection not found or no utilization data for this VM
-        '500':
-          description: Internal server error
-
-
-  # ── Export ─────────────────────────────────────────────────────────────
   /collections/{id}/export:
     get:
       tags: [Collections]
@@ -876,32 +721,6 @@ paths:
         '500':
           description: Internal server error
 
-  # ── Applications ───────────────────────────────────────────────────────
-  /collections/{id}/applications:
-    get:
-      tags: [Applications]
-      summary: List detected applications in a collection
-      operationId: listApplications
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Collection ID
-          schema:
-            type: string
-      responses:
-        '200':
-          description: List of detected applications
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApplicationListResponse'
-        '404':
-          description: Collection not found
-        '500':
-          description: Internal server error
-
-  # ── Groups ─────────────────────────────────────────────────────────────
   /collections/{id}/groups:
     get:
       tags: [Groups]
@@ -971,7 +790,7 @@ paths:
             type: string
         - name: sort
           in: query
-          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, diskSize, memory, issues, cpuUsage, diskUsage, ramUsage, cpuAvg, memAvg.
+          description: Sort fields with direction (e.g., "name:asc", "cluster:desc"). Valid fields are name, vCenterState, cluster, datacenter, diskSize, memory, issues.
           schema:
             type: array
             items:
@@ -1004,40 +823,6 @@ paths:
         '500':
           description: Internal server error
 
-  /collections/{id}/clusters/{clusterId}/utilization:
-    get:
-      tags: [Rightsizing]
-      summary: Get latest cluster utilization by cluster ID
-      operationId: getClusterUtilization
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Collection ID
-          schema:
-            type: string
-        - name: clusterId
-          in: path
-          required: true
-          description: vSphere MoRef (e.g. "domain-c123") or generated cluster ID
-          schema:
-            type: string
-            pattern: '^(domain-c\d+|cluster-[0-9a-f]{16})$'
-      responses:
-        '200':
-          description: Cluster utilization data from the latest completed rightsizing report
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RightsizingClusterResponse'
-        '400':
-          description: Invalid cluster_id format
-        '404':
-          description: Collection not found, no completed report, or cluster not found
-        '500':
-          description: Internal server error
-
-  # ── Collection Comparison ───────────────────────────────────────────────
   /collections/compare/{aId}/{bId}:
     get:
       tags: [Collections]
@@ -1123,410 +908,6 @@ paths:
         '500':
           description: Internal server error
 
-  # ── Inspector ───────────────────────────────────────────────────────────
-  /inspector:
-    post:
-      tags: [Inspector]
-      summary: Start deep inspection for VMs
-      operationId: startInspection
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StartInspectionRequest'
-      responses:
-        '202':
-          description: Inspection started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InspectorStatus'
-        '400':
-          description: Invalid request (no VMs, no VDDK, no credentials)
-        '409':
-          description: Inspector already running
-        '500':
-          description: Internal server error
-    get:
-      tags: [Inspector]
-      summary: Get inspector status
-      operationId: getInspectorStatus
-      parameters:
-        - name: includeVddk
-          in: query
-          required: false
-          description: Include VDDK metadata in the response
-          schema:
-            type: boolean
-      responses:
-        '200':
-          description: Inspector status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InspectorStatus'
-        '409':
-          description: Report generation in progress
-        '500':
-          description: Internal server error
-    delete:
-      tags: [Inspector]
-      summary: Stop inspector
-      operationId: stopInspection
-      responses:
-        '200':
-          description: Inspector stopped
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InspectorStatus'
-        '404':
-          description: Inspector not running
-        '409':
-          description: Report generation in progress
-        '500':
-          description: Internal server error
-
-  /inspector/vddk:
-    put:
-      tags: [Inspector]
-      summary: Upload VDDK tarball
-      operationId: putInspectorVddk
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - file
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '200':
-          description: VDDK uploaded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VddkProperties'
-        '400':
-          description: Invalid VDDK
-        '409':
-          description: Upload already in progress
-        '413':
-          description: File too large (max 64MB)
-        '500':
-          description: Internal server error
-    get:
-      tags: [Inspector]
-      summary: Get VDDK upload status
-      operationId: getInspectorVddkStatus
-      responses:
-        '200':
-          description: VDDK metadata
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VddkProperties'
-        '404':
-          description: No VDDK uploaded
-        '500':
-          description: Internal server error
-
-  # ── Credentials ────────────────────────────────────────────────────────
-  /credentials:
-    put:
-      tags: [Credentials]
-      summary: Store vCenter credentials
-      operationId: putCredentials
-      description: >-
-        Validates credentials against vSphere, encrypts with disk-based key,
-        and stores in the local database as the active credential set.
-        A subsequent PUT overwrites the previously stored credentials.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VcenterCredentials'
-      responses:
-        '201':
-          description: Credentials created and stored
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CredentialStatus'
-        '200':
-          description: Credentials validated and stored
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CredentialStatus'
-        '400':
-          description: Invalid credentials or unreachable vCenter
-        '500':
-          description: Internal server error
-    get:
-      tags: [Credentials]
-      summary: Get stored credential status
-      operationId: getCredentials
-      description: >-
-        Returns stored credential metadata (URL only). Never exposes
-        username or password. This endpoint does not revalidate credentials
-        against vSphere.
-      responses:
-        '200':
-          description: Credential status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CredentialStatus'
-        '404':
-          description: No credentials stored
-        '500':
-          description: Internal server error
-    delete:
-      tags: [Credentials]
-      summary: Delete stored credentials
-      operationId: deleteCredentials
-      description: Removes all stored vCenter credentials from the database.
-      responses:
-        '204':
-          description: Credentials deleted
-        '500':
-          description: Internal server error
-
-  /credentials/capabilities:
-    get:
-      tags: [Credentials]
-      summary: Check vSphere operation capabilities
-      operationId: getCredentialCapabilities
-      description: >-
-        Checks vSphere privileges for all operations (collector, inspector,
-        forecaster) using stored credentials. Single live vSphere check, no caching.
-      responses:
-        '200':
-          description: Capability status per operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CapabilityStatus'
-        '404':
-          description: No credentials stored
-        '500':
-          description: Internal server error
-
-  # ── Forecaster ──────────────────────────────────────────────────────────
-  /forecaster:
-    post:
-      tags: [Forecaster]
-      summary: Start benchmark
-      operationId: startForecaster
-      description: Starts async benchmarking for one or more datastore pairs.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StartForecasterRequest'
-      responses:
-        '202':
-          description: Benchmark started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ForecasterStatus'
-        '400':
-          description: Invalid credentials, validation error, or pair limit exceeded
-        '409':
-          description: Another benchmark is already running
-        '500':
-          description: Internal server error
-    get:
-      tags: [Forecaster]
-      summary: Poll forecaster status
-      operationId: getForecasterStatus
-      description: Returns current service state with per-pair progress details.
-      responses:
-        '200':
-          description: Current forecaster status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ForecasterStatus'
-        '500':
-          description: Internal server error
-    delete:
-      tags: [Forecaster]
-      summary: Cancel benchmark
-      operationId: stopForecaster
-      description: Stops the running benchmark. Already-completed runs are preserved in the database.
-      responses:
-        '202':
-          description: Benchmark canceled, service returned to ready
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ForecasterStatus'
-        '404':
-          description: No benchmark is running
-        '500':
-          description: Internal server error
-
-  /forecaster/pairs/{name}:
-    delete:
-      tags: [Forecaster]
-      summary: Cancel a single pair
-      operationId: stopForecasterPair
-      description: Cancels the benchmark for a specific pair by name. The forecaster continues running if other pairs are still active.
-      parameters:
-        - name: name
-          in: path
-          required: true
-          description: Pair name as specified in the start request
-          schema:
-            type: string
-      responses:
-        '202':
-          description: Pair canceled
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  pairName:
-                    type: string
-                  state:
-                    type: string
-                    enum: [canceled]
-        '404':
-          description: No benchmark running, or pair not found / already finished
-        '500':
-          description: Internal server error
-
-  /forecaster/datastores:
-    get:
-      tags: [Forecaster]
-      summary: List available datastores
-      operationId: getForecasterDatastores
-      description: Returns datastores from the forklift-collected inventory with storage vendor and capability information derived from NAA device identifiers.
-      responses:
-        '200':
-          description: List of datastores
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/DatastoreDetail'
-        '400':
-          description: No collection available
-        '500':
-          description: Internal server error
-
-  /forecaster/capabilities:
-    post:
-      tags: [Forecaster]
-      summary: Compute pair capabilities
-      operationId: postForecasterPairCapabilities
-      description: Computes which offload methods are feasible for specific source-target datastore pairs based on vendor support and storage array topology derived from the forklift-collected inventory.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PairCapabilityRequest'
-      responses:
-        '200':
-          description: Capabilities per pair
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PairCapability'
-        '400':
-          description: Datastore not found
-        '500':
-          description: Internal server error
-
-  /forecaster/runs:
-    get:
-      tags: [Forecaster]
-      summary: List benchmark runs
-      operationId: getForecasterRuns
-      description: Returns individual benchmark iterations. Optionally filtered by pair name.
-      parameters:
-        - name: pairName
-          in: query
-          required: false
-          description: Filter runs by pair name
-          schema:
-            type: string
-      responses:
-        '200':
-          description: List of benchmark runs
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BenchmarkRun'
-        '500':
-          description: Internal server error
-
-  /forecaster/runs/{id}:
-    delete:
-      tags: [Forecaster]
-      summary: Delete a benchmark run
-      operationId: deleteForecasterRun
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Run ID
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '204':
-          description: Run deleted
-        '400':
-          description: Invalid run ID
-        '404':
-          description: Run not found
-        '500':
-          description: Internal server error
-
-  /forecaster/stats:
-    get:
-      tags: [Forecaster]
-      summary: Get throughput statistics
-      operationId: getForecasterStats
-      description: Returns computed statistics for a datastore pair's benchmark results. Primary endpoint for the UI to display migration time estimates.
-      parameters:
-        - name: pairName
-          in: query
-          required: true
-          description: Pair name to get statistics for
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Throughput statistics
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ForecastStats'
-        '400':
-          description: Missing pairName parameter
-        '500':
-          description: Internal server error
-
-  # ── Version ────────────────────────────────────────────────────────────
   /version:
     get:
       tags: [Version]
@@ -1696,31 +1077,26 @@ components:
     CollectorStatus:
       type: object
       required:
-        - status
+      - status
       properties:
         status:
           type: string
           enum:
-            - ready
-            - connecting
-            - collecting
-            - collecting metrics
-            - parsing
-            - collected
-            - error
+          - ready
+          - collecting
+          - parsing
+          - collected
+          - error
           x-enum-varnames:
-            - CollectorStatusStatusReady
-            - CollectorStatusStatusConnecting
-            - CollectorStatusStatusCollecting
-            - CollectorStatusMetricsCollecting
-            - CollectorStatusStatusParsing
-            - CollectorStatusStatusCollected
-            - CollectorStatusStatusError
+          - CollectorStatusStatusReady
+          - CollectorStatusStatusCollecting
+          - CollectorStatusStatusParsing
+          - CollectorStatusStatusCollected
+          - CollectorStatusStatusError
         error:
           type: string
           description: Error message when status is error
 
-    # ── Inventories ──────────────────────────────────────────────────────
     Inventory:
       type: object
       required:
@@ -1729,109 +1105,18 @@ components:
         inventory:
           $ref: 'https://raw.githubusercontent.com/kubev2v/migration-planner/a7aa1fcda3ed7acbb05e4636f39c4d764e82b6ac/api/v1alpha1/openapi.yaml#/components/schemas/UpdateInventory'
 
-    # ── VCenter Credentials ──────────────────────────────────────────────
-    VcenterCredentials:
-      required:
-        - url
-        - username
-        - password
-      properties:
-        url:
-          type: string
-          format: uri
-          description: vCenter URL
-          x-oapi-codegen-extra-tags:
-            binding: "required,url"
-        username:
-          type: string
-          minLength: 1
-          x-oapi-codegen-extra-tags:
-            binding: "required,min=1"
-        password:
-          type: string
-          format: password
-          minLength: 1
-          x-oapi-codegen-extra-tags:
-            binding: "required,min=1"
-        cacert:
-          type: string
-          description: >-
-            PEM-encoded CA certificate bundle for verifying the vCenter TLS
-            certificate. Mutually exclusive with skipTls.
-          x-oapi-codegen-extra-tags:
-            binding: "omitempty"
-        skipTls:
-          type: boolean
-          description: >-
-            When true, TLS certificate verification is skipped. Must not be set
-            to true alongside cacert — that combination returns 400. When
-            omitted: if cacert is absent the connection skips TLS verification
-            (backwards compatibility); if cacert is provided the connection
-            verifies TLS using that certificate — skipTls need not be sent.
-
-    CredentialStatus:
-      type: object
-      required:
-        - url
-        - username
-        - valid
-      properties:
-        url:
-          type: string
-          description: vCenter URL the credentials belong to
-        username:
-          type: string
-          description: vCenter username
-        valid:
-          type: boolean
-          description: Whether credentials are stored for the returned URL.
-
-    OperationCapability:
-      type: object
-      required:
-        - enabled
-      properties:
-        enabled:
-          type: boolean
-          description: Whether stored credentials have sufficient privileges
-        missingPrivileges:
-          type: array
-          items:
-            type: string
-          description: Specific vSphere privileges that are missing
-
-    CapabilityStatus:
-      type: object
-      required:
-        - capabilities
-      properties:
-        capabilities:
-          type: object
-          required:
-            - collector
-            - inspector
-            - forecaster
-          properties:
-            collector:
-              $ref: '#/components/schemas/OperationCapability'
-            inspector:
-              $ref: '#/components/schemas/OperationCapability'
-            forecaster:
-              $ref: '#/components/schemas/OperationCapability'
-
-    # ── Virtual Machines ─────────────────────────────────────────────────
     VirtualMachine:
       type: object
       required:
-        - name
-        - id
-        - vCenterID
-        - vCenterState
-        - cluster
-        - datacenter
-        - diskSize
-        - memory
-        - issueCount
+      - name
+      - id
+      - vCenterID
+      - vCenterState
+      - cluster
+      - datacenter
+      - diskSize
+      - memory
+      - issueCount
       properties:
         name:
           type: string
@@ -1868,12 +1153,6 @@ components:
         template:
           type: boolean
           description: True if the VirtualMachine is a template
-        inspectionStatus:
-          description: Current inspection status of the virtual machine
-          $ref: '#/components/schemas/InspectionStatus'
-        inspectionConcernCount:
-          type: integer
-          description: Number of inspection concerns for the latest persisted result
         migrationExcluded:
           type: boolean
           description: Whether this VM is excluded from migration
@@ -1889,48 +1168,24 @@ components:
             type: string
             minLength: 1
             maxLength: 100
-            pattern: '\S'
+            pattern: \S
           description: User-defined labels for this VM
           x-oapi-codegen-extra-tags:
-            binding: "omitempty,dive,min=1,max=100"
-        utilization_cpu_p95:
-          type: number
-          format: double
-          description: CPU utilization at p95 (%); absent when no utilization data
-        utilization_mem_p95:
-          type: number
-          format: double
-          description: Memory utilization at p95 (%); absent when no utilization data
-        utilization_cpu_max:
-          type: number
-          format: double
-          description: CPU utilization at max (%); absent when no utilization data
-        utilization_mem_max:
-          type: number
-          format: double
-          description: Memory utilization at max (%); absent when no utilization data
-        utilization_disk:
-          type: number
-          format: double
-          description: Disk utilization (%); absent when no utilization data
-        utilization_confidence:
-          type: number
-          format: double
-          description: Data confidence -- sample_count / expected_sample_count x 100
+            binding: omitempty,dive,min=1,max=100
 
     VirtualMachineDetail:
       type: object
       required:
-        - id
-        - name
-        - vCenterID
-        - powerState
-        - connectionState
-        - cpuCount
-        - coresPerSocket
-        - memoryMB
-        - disks
-        - nics
+      - id
+      - name
+      - vCenterID
+      - powerState
+      - connectionState
+      - cpuCount
+      - coresPerSocket
+      - memoryMB
+      - disks
+      - nics
       properties:
         id:
           type: string
@@ -2009,19 +1264,16 @@ components:
           type: boolean
           description: Whether this VM is excluded from migration
           default: false
-        inspectionStatus:
-          description: Current inspection status of the virtual machine
-          $ref: '#/components/schemas/InspectionStatus'
         labels:
           type: array
           items:
             type: string
             minLength: 1
             maxLength: 100
-            pattern: '\S'
+            pattern: \S
           description: User-defined labels for this VM
           x-oapi-codegen-extra-tags:
-            binding: "omitempty,dive,min=1,max=100"
+            binding: omitempty,dive,min=1,max=100
         faultToleranceEnabled:
           type: boolean
           description: Whether Fault Tolerance is enabled
@@ -2054,27 +1306,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VirtualMachineIssue'
-        inspection:
-          $ref: '#/components/schemas/VirtualMachineInspectionResults'
-        utilization:
-          $ref: '#/components/schemas/VmUtilizationDetails'
-        processes:
-          type: array
-          items:
-            $ref: '#/components/schemas/Process'
-          description: List of processes detected on this VM
-
-    Process:
-      type: object
-      required:
-        - name
-      properties:
-        name:
-          type: string
-          description: Name of the process
-        version:
-          type: string
-          description: Version of the process
 
     VirtualMachineListResponse:
       type: object
@@ -2196,59 +1427,6 @@ components:
             - VirtualMachineIssueCategoryError
             - VirtualMachineIssueCategoryOther
 
-    # ── Inspection ───────────────────────────────────────────────────────
-    InspectionStatus:
-      type: object
-      required:
-        - state
-      properties:
-        state:
-          type: string
-          enum:
-            - pending
-            - running
-            - completed
-            - canceled
-            - error
-          x-enum-varnames:
-            - InspectionStatusStatePending
-            - InspectionStatusStateRunning
-            - InspectionStatusStateCompleted
-            - InspectionStatusStateCanceled
-            - InspectionStatusStateError
-          description: Current inspection state
-        details:
-          type: string
-          description: Human-readable details about the current inspection state
-        error:
-          type: string
-          description: Error message when state is error
-
-    VirtualMachineInspectionResults:
-      type: object
-      description: VirtualMachines Inspection results
-      properties:
-        concerns:
-          type: array
-          items:
-            $ref: '#/components/schemas/VirtualMachineInspectionConcern'
-
-    VirtualMachineInspectionConcern:
-      type: object
-      required:
-        - message
-        - category
-        - label
-      properties:
-        label:
-          type: string
-          description: Short label identifying the concern
-        message:
-          type: string
-        category:
-          type: string
-
-    # ── Groups ───────────────────────────────────────────────────────────
     Group:
       type: object
       required:
@@ -2364,53 +1542,6 @@ components:
           minLength: 1
           x-oapi-codegen-extra-tags:
             binding: "omitempty,min=1"
-    # ── Applications ─────────────────────────────────────────────────────
-    ApplicationListResponse:
-      type: object
-      required:
-        - applications
-      properties:
-        applications:
-          type: array
-          items:
-            $ref: '#/components/schemas/ApplicationOverview'
-
-    ApplicationOverview:
-      type: object
-      required:
-        - name
-        - description
-        - vmCount
-        - vms
-      properties:
-        name:
-          type: string
-          description: Application name
-        description:
-          type: string
-          description: Application description
-        vmCount:
-          type: integer
-          description: Number of VMs running this application
-        vms:
-          type: array
-          items:
-            $ref: '#/components/schemas/ApplicationVM'
-
-    ApplicationVM:
-      type: object
-      required:
-        - id
-        - name
-      properties:
-        id:
-          type: string
-          description: VM ID
-        name:
-          type: string
-          description: VM name
-
-    # ── VM Operations ───────────────────────────────────────────────────
     VirtualMachineUpdateRequest:
       type: object
       properties:
@@ -2447,11 +1578,10 @@ components:
     VMFilterOptionsResponse:
       type: object
       required:
-        - clusters
-        - datacenters
-        - concernLabels
-        - concernCategories
-        - applications
+      - clusters
+      - datacenters
+      - concernLabels
+      - concernCategories
       properties:
         clusters:
           type: array
@@ -2473,11 +1603,6 @@ components:
           items:
             type: string
           description: Distinct concern categories
-        applications:
-          type: array
-          items:
-            type: string
-          description: Distinct detected application names
 
     VMLabelsResponse:
       type: object
@@ -2531,489 +1656,18 @@ components:
     AgentStatus:
       type: object
       required:
-        - mode
-        - consoleConnection
+      - status
+      - source
       properties:
-        mode:
+        status:
           type: string
           enum:
-            - connected
-            - disconnected
-          x-enum-varnames:
-            - AgentStatusModeConnected
-            - AgentStatusModeDisconnected
-          description: Target mode for the agent
-        consoleConnection:
-          type: object
-          required:
-            - status
-          properties:
-            status:
-              type: string
-              enum:
-                - connected
-                - disconnected
-              x-enum-varnames:
-                - ConsoleConnectionStatusConnected
-                - ConsoleConnectionStatusDisconnected
-              description: Current console connection status
-            error:
-              type: string
-              description: Connection error description
-        rvtoolsModeEnabled:
-          type: boolean
-          description: RVTool mode enabled
-
-    AgentModeRequest:
-      type: object
-      required:
-        - mode
-      properties:
-        mode:
+          - ready
+        source:
           type: string
           enum:
-            - connected
-            - disconnected
-          x-oapi-codegen-extra-tags:
-            binding: "required,oneof=connected disconnected"
+          - rvtools
 
-    # ── Rightsizing ──────────────────────────────────────────────────────
-    RightsizingClusterUtilization:
-      type: object
-      required:
-        - cluster_id
-        - cluster_name
-        - vm_count
-        - cpu_avg
-        - cpu_p95
-        - cpu_max
-        - mem_avg
-        - mem_p95
-        - mem_max
-        - disk
-        - confidence
-        - total_provisioned_cpus
-        - total_provisioned_memory_mb
-        - total_provisioned_disk_kb
-      properties:
-        cluster_id:
-          type: string
-        cluster_name:
-          type: string
-        vm_count:
-          type: integer
-        cpu_avg:
-          type: number
-          format: double
-        cpu_p95:
-          type: number
-          format: double
-        cpu_max:
-          type: number
-          format: double
-        mem_avg:
-          type: number
-          format: double
-        mem_p95:
-          type: number
-          format: double
-        mem_max:
-          type: number
-          format: double
-        disk:
-          type: number
-          format: double
-        confidence:
-          type: number
-          format: double
-        total_provisioned_cpus:
-          type: integer
-        total_provisioned_memory_mb:
-          type: integer
-        total_provisioned_disk_kb:
-          type: number
-          format: double
-
-    RightsizingClusterResponse:
-      type: object
-      required:
-        - report_id
-        - cluster
-      properties:
-        report_id:
-          type: string
-        cluster:
-          $ref: '#/components/schemas/RightsizingClusterUtilization'
-
-    VmUtilizationDetails:
-      type: object
-      required:
-        - moid
-        - vm_name
-        - provisioned_cpus
-        - provisioned_memory_mb
-        - provisioned_disk_kb
-        - cpu_avg
-        - cpu_p95
-        - cpu_max
-        - cpu_latest
-        - mem_avg
-        - mem_p95
-        - mem_max
-        - mem_latest
-        - disk
-        - confidence
-      properties:
-        moid:
-          type: string
-        vm_name:
-          type: string
-        provisioned_cpus:
-          type: integer
-        provisioned_memory_mb:
-          type: integer
-        provisioned_disk_kb:
-          type: number
-          format: double
-        cpu_avg:
-          type: number
-          format: double
-        cpu_p95:
-          type: number
-          format: double
-        cpu_max:
-          type: number
-          format: double
-        cpu_latest:
-          type: number
-          format: double
-        mem_avg:
-          type: number
-          format: double
-        mem_p95:
-          type: number
-          format: double
-        mem_max:
-          type: number
-          format: double
-        mem_latest:
-          type: number
-          format: double
-        disk:
-          type: number
-          format: double
-        confidence:
-          type: number
-          format: double
-
-    # ── Inspector ────────────────────────────────────────────────────────
-    StartInspectionRequest:
-      type: object
-      required:
-        - vmIds
-      properties:
-        vmIds:
-          type: array
-          items:
-            type: string
-          description: VM MoRef IDs to inspect
-          x-oapi-codegen-extra-tags:
-            binding: "required,min=1,dive,required"
-
-    InspectorStatus:
-      type: object
-      required:
-        - state
-      properties:
-        state:
-          type: string
-          enum:
-            - ready
-            - running
-          x-enum-varnames:
-            - InspectorStatusStateReady
-            - InspectorStatusStateRunning
-          description: Inspector state
-        vddk:
-          $ref: '#/components/schemas/VddkProperties'
-
-    VddkProperties:
-      type: object
-      required:
-        - version
-        - md5
-      properties:
-        version:
-          type: string
-          description: The matching vSphere Client version
-        md5:
-          type: string
-          description: md5 sum of the uploaded tarball
-        bytes:
-          type: integer
-          format: int64
-
-    # ── Forecaster ────────────────────────────────────────────────────────
-    ForecasterStatus:
-      type: object
-      required:
-        - state
-        - pairs
-      properties:
-        state:
-          type: string
-          enum:
-            - ready
-            - running
-        pairs:
-          type: array
-          items:
-            $ref: '#/components/schemas/ForecastPairStatus'
-
-    ForecastPairStatus:
-      type: object
-      required:
-        - state
-        - pairName
-        - sourceDatastore
-        - targetDatastore
-        - completedRuns
-        - totalRuns
-      properties:
-        state:
-          type: string
-          enum:
-            - pending
-            - preparing
-            - running
-            - completed
-            - canceled
-            - error
-        error:
-          type: string
-        pairName:
-          type: string
-        sourceDatastore:
-          type: string
-        targetDatastore:
-          type: string
-        host:
-          type: string
-        completedRuns:
-          type: integer
-        totalRuns:
-          type: integer
-        prepBytesTotal:
-          type: integer
-          format: int64
-        prepBytesUploaded:
-          type: integer
-          format: int64
-
-    BenchmarkRun:
-      type: object
-      required:
-        - id
-        - sessionId
-        - pairName
-        - sourceDatastore
-        - targetDatastore
-        - iteration
-        - diskSizeGb
-        - durationSec
-        - throughputMBps
-        - method
-        - createdAt
-      properties:
-        id:
-          type: integer
-          format: int64
-        sessionId:
-          type: integer
-          format: int64
-        pairName:
-          type: string
-        sourceDatastore:
-          type: string
-        targetDatastore:
-          type: string
-        iteration:
-          type: integer
-        diskSizeGb:
-          type: integer
-        prepDurationSec:
-          type: number
-          format: double
-        durationSec:
-          type: number
-          format: double
-        throughputMBps:
-          type: number
-          format: double
-        method:
-          type: string
-        error:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-
-    ForecastStats:
-      type: object
-      required:
-        - pairName
-        - sampleCount
-        - meanMBps
-        - medianMBps
-        - minMBps
-        - maxMBps
-        - stdDevMBps
-        - ci95Lower
-        - ci95Upper
-        - estPer1TB
-      properties:
-        pairName:
-          type: string
-        sampleCount:
-          type: integer
-        meanMBps:
-          type: number
-          format: double
-        medianMBps:
-          type: number
-          format: double
-        minMBps:
-          type: number
-          format: double
-        maxMBps:
-          type: number
-          format: double
-        stdDevMBps:
-          type: number
-          format: double
-        ci95Lower:
-          type: number
-          format: double
-        ci95Upper:
-          type: number
-          format: double
-        estPer1TB:
-          $ref: '#/components/schemas/EstimateRange'
-
-    EstimateRange:
-      type: object
-      required:
-        - bestCase
-        - expected
-        - worstCase
-      properties:
-        bestCase:
-          type: string
-          description: Duration string (e.g. "1h30m")
-        expected:
-          type: string
-          description: Duration string (e.g. "2h15m")
-        worstCase:
-          type: string
-          description: Duration string (e.g. "3h45m")
-
-    DatastorePairRequest:
-      type: object
-      required:
-        - name
-        - sourceDatastore
-        - targetDatastore
-      properties:
-        name:
-          type: string
-        sourceDatastore:
-          type: string
-        targetDatastore:
-          type: string
-        host:
-          type: string
-
-    StartForecasterRequest:
-      type: object
-      required:
-        - pairs
-      properties:
-        pairs:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/DatastorePairRequest'
-        diskSizeGb:
-          type: integer
-        iterations:
-          type: integer
-        concurrency:
-          type: integer
-
-    PairCapabilityRequest:
-      type: object
-      required:
-        - pairs
-      properties:
-        pairs:
-          type: array
-          items:
-            $ref: '#/components/schemas/DatastorePairRequest'
-
-    DatastoreDetail:
-      type: object
-      required:
-        - name
-        - type
-        - capacityGb
-        - freeGb
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-          description: "VMFS, NFS, VVol, or OTHER"
-        capacityGb:
-          type: number
-          format: double
-        freeGb:
-          type: number
-          format: double
-        storageVendor:
-          type: string
-        storageModel:
-          type: string
-        storageArrayId:
-          type: string
-        naaDevices:
-          type: array
-          items:
-            type: string
-        capabilities:
-          type: array
-          items:
-            type: string
-
-    PairCapability:
-      type: object
-      required:
-        - pairName
-        - sourceDatastore
-        - targetDatastore
-        - capabilities
-      properties:
-        pairName:
-          type: string
-        sourceDatastore:
-          type: string
-        targetDatastore:
-          type: string
-        capabilities:
-          type: array
-          items:
-            type: string
-
-    # ── Version ──────────────────────────────────────────────────────────
     VersionInfo:
       type: object
       required:

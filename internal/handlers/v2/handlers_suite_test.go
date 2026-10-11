@@ -34,15 +34,7 @@ type stubServiceProvider struct {
 	groupSvc *svc.GroupService
 }
 
-func (s *stubServiceProvider) ConsoleService() *svc.Console                     { return nil }
-func (s *stubServiceProvider) CollectionService() *svc.CollectionService        { return nil }
-func (s *stubServiceProvider) InspectorService() (*svc.InspectorService, error) { return nil, nil }
-func (s *stubServiceProvider) VddkService() *svc.VddkService                    { return nil }
-func (s *stubServiceProvider) CredentialsService() *svc.CredentialsService      { return nil }
-func (s *stubServiceProvider) ForecasterService() *svc.ForecasterService        { return nil }
-func (s *stubServiceProvider) ApplicationService(_ string) (*svc.ApplicationService, error) {
-	return nil, nil
-}
+func (s *stubServiceProvider) CollectionService() *svc.CollectionService { return nil }
 func (s *stubServiceProvider) ComparisonService(aId, bId string) (*svc.ComparisonService, error) {
 	return nil, nil
 }
@@ -56,25 +48,13 @@ func (s *stubServiceProvider) GroupService(_ string) (*svc.GroupService, error) 
 func (s *stubServiceProvider) InventoryService(_ string) (*svc.InventoryService, error) {
 	return nil, nil
 }
-func (s *stubServiceProvider) RightsizingService(_ string) (*svc.RightsizingService, error) {
-	return nil, nil
-}
 func (s *stubServiceProvider) LatestVirtualMachineService() (*svc.VMService, error) { return nil, nil }
 func (s *stubServiceProvider) LatestGroupService() (*svc.GroupService, error)       { return s.groupSvc, nil }
 func (s *stubServiceProvider) LatestInventoryService() (*svc.InventoryService, error) {
 	return nil, nil
 }
-func (s *stubServiceProvider) LatestRightsizingService() (*svc.RightsizingService, error) {
-	return nil, nil
-}
-func (s *stubServiceProvider) LatestApplicationService() (*svc.ApplicationService, error) {
-	return nil, nil
-}
 func (s *stubServiceProvider) GetCollectorStatus() models.CollectorStatus {
 	return models.CollectorStatus{State: models.CollectorStateReady}
-}
-func (s *stubServiceProvider) StartCollecting(_ context.Context) (models.CollectorStatus, error) {
-	return models.CollectorStatus{State: models.CollectorStateReady}, nil
 }
 func (s *stubServiceProvider) DeleteData(_ context.Context) error { return nil }
 func (s *stubServiceProvider) Stop(_ context.Context)             {}

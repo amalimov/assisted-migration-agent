@@ -33,6 +33,7 @@ func NewCollectorService(builder CollectorWorkBuilder) *CollectorService {
 func (c *CollectorService) GetStatus() models.CollectorStatus {
 	c.mu.Lock()
 	p := c.pipeline
+	done := c.done
 	c.mu.Unlock()
 
 	if p != nil {
@@ -44,11 +45,34 @@ func (c *CollectorService) GetStatus() models.CollectorStatus {
 			return models.CollectorStatus{ID: c.ID, State: models.CollectorStateError, Error: result.Err}
 		}
 		s := p.State()
+		// The final work unit sets Collected before Finalize adds the database
+		// to the pool. Keep reporting progress until it is queryable.
+		if s.State == models.CollectorStateCollected && done != nil {
+			select {
+			case <-done:
+			default:
+				s.State = models.CollectorStateParsing
+			}
+		}
 		s.ID = c.ID
 		return s
 	}
 
 	return models.CollectorStatus{ID: c.ID, State: models.CollectorStateReady}
+}
+
+func (c *CollectorService) IsRunning() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done == nil {
+		return false
+	}
+	select {
+	case <-c.done:
+		return false
+	default:
+		return true
+	}
 }
 
 func (c *CollectorService) Start(ctx context.Context) error {

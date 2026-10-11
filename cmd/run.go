@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,101 +22,63 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	"github.com/go-extras/cobraflags"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/jzelinskie/cobrautil/v2"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"go.uber.org/zap"
-
-	"github.com/go-extras/cobraflags"
-
 	"github.com/kubev2v/migration-planner/pkg/opa"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 
 	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
 	v2Handlers "github.com/kubev2v/assisted-migration-agent/internal/handlers/v2"
-	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/server"
 	service "github.com/kubev2v/assisted-migration-agent/internal/services"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
-	"github.com/kubev2v/assisted-migration-agent/pkg/console"
-	"github.com/kubev2v/assisted-migration-agent/pkg/crypto"
 )
 
-const (
-	apiV2 string = "/api/v2"
-)
+const apiV2 = "/api/v2"
 
 func NewRunCommand(cfg *config.Configuration) *cobra.Command {
 	runCmd := &cobra.Command{
-		Use:   "run",
-		Short: "Run agent",
-		Args:  cobra.NoArgs,
-		Example: `  # Run agent in disconnected mode
-  agent run --agent-id 550e8400-e29b-41d4-a716-446655440000 --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8
-
-  # Run agent in connected mode with authentication
-  agent run --mode connected --agent-id 550e8400-e29b-41d4-a716-446655440000 --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8 --authentication-enabled --authentication-jwt-filepath /path/to/jwt
-
-  # Run agent in production mode
-  agent run --agent-id 550e8400-e29b-41d4-a716-446655440000 --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8 --server-mode prod --server-statics-folder /var/www/statics`,
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			return validateConfiguration(cfg)
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			zap.S().Infow("using configuration",
-				"agent", helpers.Flatten(cfg.Agent.DebugMap()),
-				"server", helpers.Flatten(cfg.Server.DebugMap()),
-				"console", helpers.Flatten(cfg.Console.DebugMap()),
-				"auth", helpers.Flatten(cfg.Auth.DebugMap()),
-			)
-
+		Use: "run", Short: "Run the RVTools agent", Args: cobra.NoArgs,
+		Example: "agent run --data-folder ./data --opa-policies-folder ./data/policies",
+		PreRunE: func(_ *cobra.Command, _ []string) error { return validateConfiguration(cfg) },
+		RunE: func(_ *cobra.Command, _ []string) error {
+			zap.S().Infow("using configuration", "agent", helpers.Flatten(cfg.Agent.DebugMap()), "server", helpers.Flatten(cfg.Server.DebugMap()))
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT)
-			wg := sync.WaitGroup{}
-			wg.Add(1)
-
+			defer cancel()
 			srv, cleanup, err := initV2(cfg)
 			if err != nil {
 				return err
 			}
 			defer cleanup()
-
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
-				defer func() {
-					wg.Done()
-					cancel()
-				}()
+				defer wg.Done()
 				zap.S().Infof("Starting HTTP server on port %d", cfg.Server.HTTPPort)
-
-				if err := srv.Start(ctx); err != nil {
-					if !errors.Is(err, http.ErrServerClosed) {
-						zap.S().Fatalw("failed to start http server", "error", err)
-					}
+				if err := srv.Start(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					zap.S().Errorw("failed to start HTTP server", "error", err)
+					cancel()
 				}
 			}()
-
 			go func() {
 				<-ctx.Done()
-				stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
+				stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer stopCancel()
 				srv.Stop(stopCtx)
 			}()
-
 			<-ctx.Done()
 			wg.Wait()
-
-			zap.S().Info("server shutdown")
-
 			return nil
 		},
 	}
-
 	registerFlags(runCmd, cfg)
 	cobraflags.CobraOnInitialize("AGENT", runCmd)
-
 	return runCmd
 }
 
@@ -124,90 +87,33 @@ func initV2(cfg *config.Configuration) (*server.Server, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize OPA validator: %w", err)
 	}
-
 	pool, err := initPool(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	consoleClient, km, err := initShared(cfg)
-	if err != nil {
-		return nil, nil, err
+	mgr := service.NewServiceManager(service.WithConfig(cfg), service.WithPool(pool), service.WithOpaValidator(opaValidator))
+	if err := mgr.Initialize(); err != nil {
+		pool.Close()
+		return nil, nil, fmt.Errorf("failed to initialize service: %w", err)
 	}
-
-	v2SvcMgr := service.NewServiceManager(
-		service.WithConfig(cfg),
-		service.WithPool(pool),
-		service.WithConsoleClient(consoleClient),
-		service.WithKeyManager(km),
-		service.WithOpaValidator(opaValidator),
-	)
-	if err := v2SvcMgr.Initialize(); err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize v2 service: %w", err)
-	}
-
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		handlers.RegisterValidators(v)
 	}
-
-	var v2H v2.ServerInterface
-	if cfg.Agent.RVToolsMode {
-		zap.S().Info("rvtools mode enabled: credentials, inspector, and vCenter collector endpoints are disabled")
-		v2H = v2Handlers.NewRVToolsHandler(*cfg, v2SvcMgr)
-	} else {
-		v2H = v2Handlers.NewHandler(*cfg, v2SvcMgr)
-	}
-
+	handler := v2Handlers.NewHandler(*cfg, mgr)
 	swagger, err := v2.GetSwagger()
 	if err != nil {
+		pool.Close()
 		return nil, nil, fmt.Errorf("failed to load v2 swagger spec: %w", err)
 	}
-
 	srv, err := server.NewServer(cfg, map[string]server.APIGroup{
-		apiV2: {
-			Swagger: swagger,
-			RegisterFn: func(router *gin.RouterGroup) {
-				v2.RegisterHandlers(router, v2H)
-			},
-		},
+		apiV2: {Swagger: swagger, RegisterFn: func(router *gin.RouterGroup) { v2.RegisterHandlers(router, handler) }},
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create http server: %w", err)
-	}
-
-	cleanup := func() {
-		v2SvcMgr.Stop(context.Background())
 		pool.Close()
-		zap.S().Info("v2 service and pool closed")
+		return nil, nil, fmt.Errorf("failed to create HTTP server: %w", err)
 	}
-
+	cleanup := func() { mgr.Stop(context.Background()); pool.Close() }
 	return srv, cleanup, nil
-}
-
-func initShared(cfg *config.Configuration) (*console.Client, *crypto.KeyManager, error) {
-	jwt := ""
-	if cfg.Auth.Enabled {
-		data, err := os.ReadFile(cfg.Auth.JWTFilePath)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read agent's jwt: %w", err)
-		}
-		if len(data) == 0 {
-			return nil, nil, errors.New("failed to read agent's jwt. the JWT is empty")
-		}
-		jwt = strings.TrimSpace(string(data))
-	}
-
-	consoleClient, err := console.NewConsoleClient(cfg.Console.URL, jwt)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create console client: %w", err)
-	}
-
-	keyManager, err := crypto.NewKeyManager(cfg.Agent.DataFolder)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize key manager: %w", err)
-	}
-
-	return consoleClient, keyManager, nil
 }
 
 func initPool(cfg *config.Configuration) (*store.Pool, error) {
@@ -231,6 +137,7 @@ func initPool(cfg *config.Configuration) (*store.Pool, error) {
 	}
 
 	matches, _ := filepath.Glob(filepath.Join(cfg.Agent.DataFolder, "collection_*.duckdb"))
+	sort.Strings(matches)
 	for _, match := range matches {
 		name := strings.TrimSuffix(filepath.Base(match), ".duckdb")
 		tsStr := strings.TrimPrefix(name, "collection_")
@@ -241,6 +148,9 @@ func initPool(cfg *config.Configuration) (*store.Pool, error) {
 		}
 
 		createdAt := time.Unix(ts, 0)
+		if len(tsStr) > 10 {
+			createdAt = time.Unix(0, ts)
+		}
 		hash := sha256.Sum256([]byte(match))
 		id := hex.EncodeToString(hash[:])[:6]
 		db, err := pool.NewDatabase(id, match, createdAt, store.LazyConnectionInitilization, 512, store.ReadWriteDatabase)
@@ -269,21 +179,15 @@ func initPool(cfg *config.Configuration) (*store.Pool, error) {
 	return pool, nil
 }
 
-func registerFlags(cmd *cobra.Command, config *config.Configuration) {
+func registerFlags(cmd *cobra.Command, cfg *config.Configuration) {
 	nfs := cobrautil.NewNamedFlagSets(cmd)
-
-	serverFlagSet := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Server"))
-	registerServerFlags(serverFlagSet, config)
-
-	authenticationFlagSet := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Authentication"))
-	registerAuthenticationFlags(authenticationFlagSet, config)
-
-	agentFlagSet := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Agent"))
-	registerAgentFlags(agentFlagSet, config)
-
-	consoleFlagSet := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Console"))
-	registerConsoleFlags(consoleFlagSet, config)
-
+	serverFlags := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Server"))
+	serverFlags.IntVar(&cfg.Server.HTTPPort, "server-http-port", cfg.Server.HTTPPort, "HTTP port")
+	serverFlags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Static UI directory")
+	serverFlags.StringVar(&cfg.Server.ServerMode, "server-mode", cfg.Server.ServerMode, "Server mode: prod or dev")
+	agentFlags := nfs.FlagSet(color.New(color.FgBlue, color.Bold).Sprint("Agent"))
+	agentFlags.StringVar(&cfg.Agent.DataFolder, "data-folder", cfg.Agent.DataFolder, "Persistent data directory")
+	agentFlags.StringVar(&cfg.Agent.OpaPoliciesFolder, "opa-policies-folder", cfg.Agent.OpaPoliciesFolder, "OPA policies directory")
 	nfs.AddFlagSets(cmd)
 }
 
@@ -291,97 +195,25 @@ func validateConfiguration(cfg *config.Configuration) error {
 	if cfg.Agent.DataFolder == "" {
 		return errors.New("data folder must be set")
 	}
-
-	if config.ServerModeType(cfg.Server.ServerMode) == config.ServerModeProd && cfg.Server.StaticsFolder == "" {
-		return errors.New("statics folder must be set when server mode is production")
+	if cfg.Agent.OpaPoliciesFolder == "" {
+		return errors.New("OPA policies folder must be set")
 	}
-
 	if cfg.Server.HTTPPort < 1 || cfg.Server.HTTPPort > 65535 {
 		return fmt.Errorf("invalid http-port %d: must be between 1 and 65535", cfg.Server.HTTPPort)
 	}
-
-	if cfg.Auth.Enabled && cfg.Auth.JWTFilePath == "" {
-		return errors.New("authentication-jwt-filepath must be set when authentication is enabled")
-	}
-
 	switch config.ServerModeType(cfg.Server.ServerMode) {
-	case config.ServerModeProd, config.ServerModeDev:
+	case config.ServerModeProd:
+		if cfg.Server.StaticsFolder == "" {
+			return errors.New("statics folder must be set when server mode is production")
+		}
+	case config.ServerModeDev:
 	default:
 		return fmt.Errorf("invalid server mode %q: must be %q or %q", cfg.Server.ServerMode, config.ServerModeProd, config.ServerModeDev)
 	}
-
-	// validate flags for rvtools mode
-	// In rvtools mode:
-	// - we don't care about agent-id and source-id.
-	// - only v2 api
-	// - connected / disconnected ignored. the agent is in disconnected only
-	if cfg.Agent.RVToolsMode {
-		if cfg.Agent.Mode == "connected" {
-			zap.S().Info("In rvtools-mode, connected mode ignored. The agent is running only in disconnected mode")
-		}
-
-		if cfg.Agent.Version == "v1" {
-			return fmt.Errorf("RVTools mode is available only in api v2")
-		}
-
-		cfg.Agent.Mode = "disconnected"
-		// need to set random UUIDs here because console service.
+	if cfg.Agent.ID == "" {
 		cfg.Agent.ID = uuid.NewString()
-		cfg.Agent.SourceID = uuid.NewString()
-
-		return nil
-	}
-
-	if err := validateUUID(cfg.Agent.ID, "agent-id"); err != nil {
-		return err
-	}
-	if err := validateUUID(cfg.Agent.SourceID, "source-id"); err != nil {
-		return err
-	}
-
-	switch models.AgentMode(cfg.Agent.Mode) {
-	case models.AgentModeConnected, models.AgentModeDisconnected:
-	default:
-		return fmt.Errorf("invalid mode %q: must be %q or %q", cfg.Agent.Mode, models.AgentModeConnected, models.AgentModeDisconnected)
-	}
-
-	return nil
-}
-
-func validateUUID(value, name string) error {
-	if value == "" {
-		return fmt.Errorf("%s cannot be empty", name)
-	}
-	if _, err := uuid.Parse(value); err != nil {
-		return fmt.Errorf("%s must be a valid UUID: %w", name, err)
 	}
 	return nil
-}
-
-func registerServerFlags(flagSet *pflag.FlagSet, config *config.Configuration) {
-	flagSet.IntVar(&config.Server.HTTPPort, "server-http-port", config.Server.HTTPPort, "Port on which the HTTP server is listening")
-	flagSet.StringVar(&config.Server.StaticsFolder, "server-statics-folder", config.Server.StaticsFolder, "Path to statics folder")
-	flagSet.StringVar(&config.Server.ServerMode, "server-mode", config.Server.ServerMode, "Server mode: either prod or dev. If prod the statics folder must be set")
-}
-
-func registerAuthenticationFlags(flagSet *pflag.FlagSet, config *config.Configuration) {
-	flagSet.BoolVar(&config.Auth.Enabled, "authentication-enabled", config.Auth.Enabled, "Enable authentication when connecting to console")
-	flagSet.StringVar(&config.Auth.JWTFilePath, "authentication-jwt-filepath", config.Auth.JWTFilePath, "Path of the jwt file")
-}
-
-func registerAgentFlags(flagSet *pflag.FlagSet, config *config.Configuration) {
-	flagSet.StringVar(&config.Agent.Mode, "mode", config.Agent.Mode, "Agent mode: connected or disconnected")
-	flagSet.StringVar(&config.Agent.OpaPoliciesFolder, "opa-policies-folder", config.Agent.OpaPoliciesFolder, "Path to the OPA policies folder")
-	flagSet.StringVar(&config.Agent.ID, "agent-id", config.Agent.ID, "Unique identifier (UUID) for this agent")
-	flagSet.StringVar(&config.Agent.SourceID, "source-id", config.Agent.SourceID, "Source identifier (UUID) for this agent")
-	flagSet.StringVar(&config.Agent.Version, "version", config.Agent.Version, "Agent version to report to console")
-	flagSet.StringVar(&config.Agent.DataFolder, "data-folder", config.Agent.DataFolder, "Path to the persistent data folder")
-	flagSet.BoolVar(&config.Agent.RVToolsMode, "rvtools-mode", config.Agent.RVToolsMode, "RVTool mode: enabled or disabled (default: disable)")
-}
-
-func registerConsoleFlags(flagSet *pflag.FlagSet, config *config.Configuration) {
-	flagSet.StringVar(&config.Console.URL, "console-url", config.Console.URL, "URL of console.redhat.com")
-	flagSet.DurationVar(&config.Agent.UpdateInterval, "console-update-interval", config.Agent.UpdateInterval, "Interval for console status updates")
 }
 
 // cleanupStaleCollections removes leftover collection markers and their DuckDB

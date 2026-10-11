@@ -43,7 +43,7 @@ func (f *rvtoolsWorkFactory) Build() work.WorkBuilder[models.CollectorStatus, mo
 
 	var collectionDb *store.Database
 	var parser *duckdb_parser.Parser
-	database := fmt.Sprintf("collection_%d", time.Now().Unix())
+	database := fmt.Sprintf("collection_%d", time.Now().UnixNano())
 
 	units := []work.WorkUnit[models.CollectorStatus, models.CollectorResult]{
 		// 1. Provision: record collection marker, create and migrate the collection DB.
@@ -183,12 +183,11 @@ func (f *rvtoolsWorkFactory) Build() work.WorkBuilder[models.CollectorStatus, mo
 			}
 
 			log.Info("inventory created from rvtools data")
-			r.Inventory = invBytes
 			return r, nil
 		},
 	})
 
-	// 4. Publish: write an inventory-update event to the outbox.
+	// 4. Mark the local collection complete.
 	units = append(units, work.WorkUnit[models.CollectorStatus, models.CollectorResult]{
 		Status: func() models.CollectorStatus {
 			return models.CollectorStatus{State: models.CollectorStateCollected}

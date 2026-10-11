@@ -1,218 +1,37 @@
-# Assisted Migration Agent
+# RVTools Migration Planner Agent
 
-An agent for collecting vSphere inventory data and reporting to the Migration Planner console.
+This agent imports RVTools `.xlsx` workbooks into local DuckDB collections. It serves inventory, VM and group queries, labels, migration exclusion, comparison, and CSV/XLSX exports through a local API. No vCenter or Console connection is needed.
 
-## Build
+## Build and start
 
 ```bash
 make build
+make setup-opa-policies
+mkdir -p data
+bin/agent run --data-folder "$PWD/data" --opa-policies-folder "$PWD/policies"
 ```
 
-This produces the binary at `bin/agent`.
+The default server uses HTTP on port 8000. Add `--server-mode prod --server-statics-folder /path/to/ui` to serve the UI over HTTPS with a self-signed certificate. `make image` builds an image with the UI, policies, and DuckDB Excel extension. `make run.container` starts it with a persistent volume.
 
-## Run
+The DuckDB Excel extension must be installed or cached in the data directory for workbook imports. The container seeds the matching extension at startup, so imports work without runtime network access.
 
-### Basic Usage
+## Import a workbook
+
+From the repository root, with the example export present:
 
 ```bash
-bin/agent run --agent-id <uuid> --source-id <uuid> --opa-policies-folder <path>
+curl -sS -X POST -F 'files=@RVTools_export_all_2026-08-31_15.58.31.xlsx' http://localhost:8000/api/v2/collector/rvtools
 ```
 
-Required flags:
-- `--agent-id` and `--source-id` must be valid UUIDs
-- `--opa-policies-folder` must point to a directory containing OPA policy files for VM validation
-
-### Examples
-
-Run in disconnected mode (default):
+Each request creates one collection. Several `files` parts in one request are combined into one collection. Poll for `"status":"collected"`, then list VMs:
 
 ```bash
-bin/agent run \
-  --agent-id 550e8400-e29b-41d4-a716-446655440000 \
-  --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8 \
-  --opa-policies-folder /path/to/policies
+curl -sS http://localhost:8000/api/v2/collector
+curl -sS 'http://localhost:8000/api/v2/virtualmachines?page=1&pageSize=20'
 ```
 
-Run in connected mode with authentication:
-
-```bash
-bin/agent run \
-  --agent-id 550e8400-e29b-41d4-a716-446655440000 \
-  --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8 \
-  --opa-policies-folder /path/to/policies \
-  --mode connected \
-  --authentication-enabled \
-  --authentication-jwt-filepath /path/to/jwt
-```
-
-Run in production mode with persistent storage:
-
-```bash
-bin/agent run \
-  --agent-id 550e8400-e29b-41d4-a716-446655440000 \
-  --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8 \
-  --opa-policies-folder /var/lib/agent/policies \
-  --server-mode prod \
-  --server-statics-folder /var/www/statics \
-  --data-folder /var/lib/agent
-```
-
-## Command Line Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--agent-id` | *required* | Unique identifier (UUID) for this agent |
-| `--source-id` | *required* | Source identifier (UUID) for this agent |
-| `--mode` | `disconnected` | `connected` \| `disconnected` |
-| `--data-folder` | — | Path to persistent data folder (uses in-memory if not set) |
-| `--opa-policies-folder` | *required* | Path to OPA policies folder for VM validation |
-| `--version` | `v0.0.0` | Agent version to report to console |
-| `--legacy-status-enabled` | `true` | Use legacy status like waiting-for-credentials |
-| `--server-http-port` | `8000` | HTTP server port |
-| `--server-mode` | `dev` | `dev` \| `prod` (prod enables HTTPS with self-signed certs) |
-| `--server-statics-folder` | — | Path to static files (required when `--server-mode=prod`) |
-| `--console-url` | `http://localhost:7443` | Migration planner console URL |
-| `--console-update-interval` | `5s` | Status update interval |
-| `--authentication-enabled` | `true` | Enable console authentication |
-| `--authentication-jwt-filepath` | — | Path to JWT file (required when `--authentication-enabled`) |
-| `--log-format` | `console` | `console` \| `json` |
-| `--log-level` | `debug` | `debug` \| `info` \| `warn` \| `error` |
+List collection IDs with `GET /api/v2/collections`. After two imports, compare them with `GET /api/v2/collections/compare/{aId}/{bId}` and `GET /api/v2/collections/compare/{aId}/{bId}/total`. Completed collections are loaded from the data directory after restart.
 
 ## Development
 
-### Local Setup
-
-Before running the agent locally, set up the required dependencies:
-
-```bash
-# Download OPA policies (required for VM validation)
-make setup-opa-policies
-
-# Build the Alpine filler image (required for forecaster benchmarks)
-# Prerequisites: qemu-img, curl, guestfish, genisoimage
-make build-filler-image
-```
-
-When running locally, point the agent to the filler image assets:
-
-```bash
-AGENT_ASSETS_DIR=pkg/vmware/assets make run
-```
-
-> Both of these are handled automatically during container builds (see Containerfile).
-
-### Tests
-
-Run tests:
-
-```bash
-make test
-```
-
-Run linter:
-
-```bash
-make lint
-```
-
-Format code:
-
-```bash
-make format
-```
-
-Run all validations:
-
-```bash
-make validate-all
-```
-
-## E2E Tests
-
-E2E tests require a built agent container image. Before running tests, build the latest image:
-
-```bash
-make image
-```
-
-### Make Targets
-
-| Target | Description |
-|--------|-------------|
-| `make e2e` | Run e2e tests (default: container mode) |
-| `make e2e.container` | Run e2e tests in container mode using Podman |
-| `make e2e.vm` | Run e2e tests in VM mode (infrastructure managed externally) |
-| `make e2e.container.clean` | Remove all e2e test containers and volumes |
-
-### E2E Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-infra-mode` | `container` | Infrastructure mode: `container` (Podman) or `vm` (externally managed) |
-| `-agent-image` | — | Agent container image to test |
-| `-backend-image` | — | Backend container image (migration-planner-api) |
-| `-backend-agent-endpoint` | `http://localhost:7443` | Agent endpoint on backend (port 7443) |
-| `-backend-user-endpoint` | `http://localhost:3443` | User endpoint on backend (port 3443) |
-| `-agent-proxy-url` | `http://localhost:8080` | Agent proxy URL |
-| `-agent-api-url` | `https://localhost:8000` | Agent local API URL |
-| `-podman-socket` | `unix:///run/user/1000/podman/podman.sock` | Podman socket path |
-| `-iso-path` | — | Path to directory containing `rhcos-live-iso.x86_64.iso` |
-
-Containers are automatically kept running when tests fail, allowing you to inspect logs and debug issues. Use `make e2e.container.clean` to remove them after debugging.
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `E2E_AGENT_IMAGE` | `quay.io/kubev2v/assisted-migration-agent:latest` | Agent image to use |
-| `E2E_BACKEND_IMAGE` | `quay.io/kubev2v/migration-planner-api:latest` | Backend image to use |
-| `E2E_ISO_PATH` | Current directory | Path containing the RHCOS ISO |
-| `E2E_INFRA_MODE` | `container` | Infrastructure mode |
-
-### Examples
-
-Run e2e tests with a custom agent image:
-
-```bash
-make image
-E2E_AGENT_IMAGE=quay.io/myrepo/agent:dev make e2e
-```
-
-Clean up after failed tests:
-
-```bash
-make e2e.container.clean
-```
-
-## Testing Against Stage
-
-To test the agent against the staging backend, you need to generate a JWT token and run the agent with authentication enabled.
-
-### Generate JWT Token
-
-Use the migration-planner CLI to generate a JWT:
-
-```bash
-../migration-planner/bin/planner sso token \
-  --org 12345678 \
-  --private-key ./privatekey \
-  --username your-username \
-  --source-id <source-uuid> \
-  --kid <key-id> > ./jwt
-```
-
-### Run Agent with Stage Backend
-
-The `--agent-id` can be any valid UUID. Generate one with `uuidgen`.
-
-```bash
-bin/agent run \
-  --legacy-status-enabled \
-  --agent-id $(uuidgen) \
-  --source-id <source-uuid> \
-  --opa-policies-folder ./policies \
-  --data-folder . \
-  --authentication-enabled \
-  --authentication-jwt-filepath ./jwt \
-  --console-url https://console.stage.redhat.com/api/migration-assessment/
-```
+`make test` runs the Go tests. `make e2e` runs the RVTools upload and comparison test. Set `DUCKDB_EXCEL_EXTENSION` to the path of a DuckDB v1.4.3 Linux AMD64 Excel extension when the extension is not already present in `local-data/`; the test copies it into a temporary data directory. See [API documentation](docs/api.md) and [filter expressions](docs/filter-by-expression.md).

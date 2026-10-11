@@ -32,7 +32,6 @@ import (
 	svc "github.com/kubev2v/assisted-migration-agent/internal/services"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/internal/store/migrations"
-	"github.com/kubev2v/assisted-migration-agent/pkg/crypto"
 )
 
 var _ = Describe("Inventory handler", func() {
@@ -79,21 +78,15 @@ var _ = Describe("Inventory handler", func() {
 			seed(collSt)
 		}
 
-		keyMgr, err := crypto.NewKeyManager("")
-		Expect(err).NotTo(HaveOccurred())
-
 		cfg := config.NewConfigurationWithOptionsAndDefaults(
 			config.WithAgent(config.Agent{
-				ID:       agentID,
-				SourceID: uuid.New().String(),
-				Mode:     "disconnected",
+				ID: agentID,
 			}),
 		)
 
 		mgr := svc.NewServiceManager(
 			svc.WithConfig(cfg),
 			svc.WithPool(pool),
-			svc.WithKeyManager(keyMgr),
 		)
 		Expect(mgr.Initialize()).To(Succeed())
 		stop = func() { mgr.Stop(ctx) }
