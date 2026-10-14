@@ -13,8 +13,8 @@
 //	│  ┌─────────────────────┐        ┌─────────────────────┐       │
 //	│  │ HTTPS :8000         │        │ HTTP :8000          │       │
 //	│  │ Self-signed cert    │        │ No TLS              │       │
-//	│  │ Static file serving │        │ Optional UI         │       │
-//	│  │ SPA fallback        │        │                     │       │
+//	│  │ External static UI  │        │ API only            │       │
+//	│  │ Optional SPA route  │        │                     │       │
 //	│  └─────────────────────┘        └─────────────────────┘       │
 //	│                                                               │
 //	├───────────────────────────────────────────────────────────────┤
@@ -35,14 +35,14 @@
 // Development Mode (ServerMode = "dev"):
 //   - HTTP only (no TLS)
 //   - Gin runs in debug mode
-//   - API endpoints and optional embedded UI
+//   - API endpoints
 //
 // Production Mode (ServerMode = "prod"):
 //   - HTTPS with auto-generated self-signed certificate (1 year validity)
 //   - Gin runs in release mode
-//   - Static file serving from StaticsFolder or an embedded UI
-//   - SPA fallback: non-API routes serve index.html
-//   - API 404s return JSON error response
+//   - Static file serving from StaticsFolder when configured
+//   - SPA fallback when StaticsFolder is configured: non-API routes serve index.html
+//   - API 404s return JSON when StaticsFolder is configured
 //
 // # Server Lifecycle
 //
@@ -53,7 +53,7 @@
 //	})
 //
 // Each API group's callback receives a RouterGroup with its configured prefix.
-// The Analyzer uses NewServerWithAssets with its /api/v1 group and embedded UI.
+// The Analyzer uses NewServerWithConfig with its /api/v1 group.
 //
 // Starting:
 //

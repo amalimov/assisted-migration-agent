@@ -33,7 +33,7 @@ func NewRunCommand(cfg *config.AnalyzerConfiguration) *cobra.Command {
 	flags.StringVar(&cfg.OpaPoliciesFolder, "opa-policies-folder", cfg.OpaPoliciesFolder, "Folder containing RVTools validation policies")
 	flags.IntVar(&cfg.Server.HTTPPort, "server-http-port", cfg.Server.HTTPPort, "Analyzer HTTP port")
 	flags.StringVar(&cfg.Server.ServerMode, "server-mode", cfg.Server.ServerMode, "Server mode: dev or prod")
-	flags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Optional UI static files folder")
+	flags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Optional separately built static files folder (production mode)")
 	cobraflags.CobraOnInitialize("ANALYZER", cmd)
 	return cmd
 }

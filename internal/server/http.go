@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"path"
 	"strings"
@@ -46,15 +45,6 @@ func NewServer(cfg *config.Configuration, groups map[string]APIGroup) (*Server, 
 
 // NewServerWithConfig creates an HTTP server without requiring Agent configuration.
 func NewServerWithConfig(cfg config.Server, groups map[string]APIGroup) (*Server, error) {
-	return newServer(cfg, groups, nil)
-}
-
-// NewServerWithAssets serves a product's embedded UI alongside its API.
-func NewServerWithAssets(cfg config.Server, groups map[string]APIGroup, assets fs.FS) (*Server, error) {
-	return newServer(cfg, groups, assets)
-}
-
-func newServer(cfg config.Server, groups map[string]APIGroup, assets fs.FS) (*Server, error) {
 	gin.SetMode(gin.DebugMode)
 	if cfg.ServerMode == ProductionServer {
 		gin.SetMode(gin.ReleaseMode)
@@ -82,10 +72,6 @@ func newServer(cfg config.Server, groups map[string]APIGroup, assets fs.FS) (*Se
 			}
 			c.File(path.Join(cfg.StaticsFolder, "index.html"))
 		})
-	} else if assets != nil {
-		if err := registerEmbeddedAssets(engine, assets); err != nil {
-			return nil, err
-		}
 	}
 
 	if cfg.ServerMode == ProductionServer {
@@ -126,28 +112,6 @@ func newServer(cfg config.Server, groups map[string]APIGroup, assets fs.FS) (*Se
 	}
 
 	return &Server{srv: srv}, nil
-}
-
-func registerEmbeddedAssets(engine *gin.Engine, assets fs.FS) error {
-	index, err := fs.ReadFile(assets, "index.html")
-	if err != nil {
-		return fmt.Errorf("read embedded UI: %w", err)
-	}
-	staticFiles, err := fs.Sub(assets, "assets")
-	if err != nil {
-		return fmt.Errorf("open embedded UI assets: %w", err)
-	}
-	engine.StaticFS("/assets", http.FS(staticFiles))
-	serveIndex := func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", index) }
-	engine.GET("/", serveIndex)
-	engine.NoRoute(func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, "/api") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "API endpoint not found"})
-			return
-		}
-		serveIndex(c)
-	})
-	return nil
 }
 
 // Start starts the HTTP or HTTPS server based on TLS configuration.

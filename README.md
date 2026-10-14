@@ -1,6 +1,6 @@
 # Assisted Migration Agent and RVTools Analyzer
 
-This repository builds two products. The Assisted Migration Agent collects vSphere inventory and reports to the Migration Planner console. The standalone RVTools Analyzer reads RVTools exports locally and serves its own API and web UI.
+This repository builds two products. The Assisted Migration Agent collects vSphere inventory and reports to the Migration Planner console. The standalone RVTools Analyzer reads RVTools exports locally and serves its own API.
 
 | Product | Command | HTTP API | Container build |
 | --- | --- | --- | --- |
@@ -31,11 +31,17 @@ bin/rvtools-analyzer run \
   --data-folder ./analyzer-data
 ```
 
-The web UI is served at `http://localhost:8000/` in development mode. Upload one or more RVTools `.xlsx` files there or send them to `POST /api/v1/collector/rvtools`. Use `GET /api/v1/collector` to check collection progress, `GET /api/v1/collections` to list analyses, and `GET /api/v1/virtualmachines` to query the latest analysis. `GET /api/v1/status` reports Analyzer readiness. The full Analyzer contract is in [`api/analyzer/v1/openapi.yaml`](api/analyzer/v1/openapi.yaml).
+The Analyzer currently serves its API without a bundled UI. Upload one or more RVTools `.xlsx` files to `POST /api/v1/collector/rvtools`:
 
-The Analyzer uses its own data folder and does not require Agent or source IDs, console credentials, or a separately hosted UI. `--server-http-port` changes the listening port. `--server-mode prod` enables HTTPS with a self-signed certificate. Native runs may need network access once to obtain DuckDB's SQLite scanner extension; the Analyzer container includes that extension.
+```bash
+curl -F 'files=@/path/to/rvtools.xlsx' http://localhost:8000/api/v1/collector/rvtools
+```
 
-Build the container locally with `make image.analyzer`. Its embedded UI, OPA policies, and DuckDB extension are packaged in the image. Mount `/var/lib/analyzer` to persist uploads and collections. The Agent container remains available through `make image`.
+Use `GET /api/v1/collector` to check collection progress, `GET /api/v1/collections` to list analyses, and `GET /api/v1/virtualmachines` to query the latest analysis. `GET /api/v1/status` reports Analyzer readiness. The full Analyzer contract is in [`api/analyzer/v1/openapi.yaml`](api/analyzer/v1/openapi.yaml).
+
+The Analyzer uses its own data folder and does not require Agent or source IDs or console credentials. `--server-http-port` changes the listening port. `--server-mode prod` enables HTTPS with a self-signed certificate. Native runs may need network access once to obtain DuckDB's SQLite scanner extension; the Analyzer container includes that extension.
+
+Build the container locally with `make image.analyzer`. Its OPA policies and DuckDB extension are packaged in the image. Mount `/var/lib/analyzer` to persist uploads and collections. The Agent container remains available through `make image`.
 
 ## Agent run
 
