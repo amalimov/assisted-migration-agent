@@ -1,4 +1,4 @@
-// Package server provides the HTTP server for the assisted-migration-agent.
+// Package server provides the shared HTTP server for the Agent and RVTools Analyzer.
 //
 // The server uses the Gin web framework and supports two modes of operation:
 // development (HTTP) and production (HTTPS with auto-generated TLS certificates).
@@ -13,7 +13,7 @@
 //	│  ┌─────────────────────┐        ┌─────────────────────┐       │
 //	│  │ HTTPS :8000         │        │ HTTP :8000          │       │
 //	│  │ Self-signed cert    │        │ No TLS              │       │
-//	│  │ Static file serving │        │ API only            │       │
+//	│  │ Static file serving │        │ Optional UI         │       │
 //	│  │ SPA fallback        │        │                     │       │
 //	│  └─────────────────────┘        └─────────────────────┘       │
 //	│                                                               │
@@ -24,7 +24,7 @@
 //	│  │  Recovery (panic recovery with zap logging)             │  │
 //	│  └─────────────────────────────────────────────────────────┘  │
 //	├───────────────────────────────────────────────────────────────┤
-//	│                       Router (/api/v2)                        │
+//	│                 Product API router groups                     │
 //	│  ┌─────────────────────────────────────────────────────────┐  │
 //	│  │  Handlers (registered via callback)                     │  │
 //	│  └─────────────────────────────────────────────────────────┘  │
@@ -35,12 +35,12 @@
 // Development Mode (ServerMode = "dev"):
 //   - HTTP only (no TLS)
 //   - Gin runs in debug mode
-//   - API endpoints only
+//   - API endpoints and optional embedded UI
 //
 // Production Mode (ServerMode = "prod"):
 //   - HTTPS with auto-generated self-signed certificate (1 year validity)
 //   - Gin runs in release mode
-//   - Static file serving from StaticsFolder
+//   - Static file serving from StaticsFolder or an embedded UI
 //   - SPA fallback: non-API routes serve index.html
 //   - API 404s return JSON error response
 //
@@ -48,11 +48,12 @@
 //
 // Creation:
 //
-//	server, err := server.NewServer(cfg, func(router *gin.RouterGroup) {
-//	    v1.RegisterHandlers(router, handler)
+//	server, err := server.NewServer(cfg, map[string]server.APIGroup{
+//	    "/api/v2": {Swagger: swagger, RegisterFn: registerAgentHandlers},
 //	})
 //
-// The registerHandlerFn callback receives a RouterGroup prefixed with /api/v2.
+// Each API group's callback receives a RouterGroup with its configured prefix.
+// The Analyzer uses NewServerWithAssets with its /api/v1 group and embedded UI.
 //
 // Starting:
 //
@@ -82,9 +83,9 @@
 //   - Logs panic details with stack trace
 //   - Returns 500 Internal Server Error
 //
-// # Static File Serving (Production Only)
+// # Static File Serving
 //
-// In production mode, the server serves:
+// When production mode specifies StaticsFolder, the server serves:
 //
 //	/static/*     → StaticsFolder/
 //	/             → StaticsFolder/index.html
@@ -110,8 +111,8 @@
 //	    },
 //	}
 //
-//	srv, err := server.NewServer(cfg, func(router *gin.RouterGroup) {
-//	    v2.RegisterHandlers(router, myHandler)
+//	srv, err := server.NewServer(cfg, map[string]server.APIGroup{
+//	    "/api/v2": {Swagger: swagger, RegisterFn: registerAgentHandlers},
 //	})
 //	if err != nil {
 //	    log.Fatal(err)

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RVTools Analyzer</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Standalone analysis</p>
+      <h1>RVTools Analyzer</h1>
+      <p>Upload an RVTools export to analyze virtual machines locally.</p>
+    </header>
+
+    <section aria-labelledby="upload-title">
+      <h2 id="upload-title">New analysis</h2>
+      <form id="upload-form">
+        <label for="files">RVTools Excel files</label>
+        <input id="files" name="files" type="file" accept=".xlsx,.xls" multiple required>
+        <button type="submit">Analyze files</button>
+      </form>
+      <p id="message" role="status"></p>
+      <p>Collection status: <strong id="collector-status">Loading…</strong></p>
+    </section>
+
+    <section aria-labelledby="collections-title">
+      <div class="section-heading">
+        <h2 id="collections-title">Collections</h2>
+        <button id="refresh" type="button" class="secondary">Refresh</button>
+      </div>
+      <ul id="collections"></ul>
+    </section>
+
+    <section aria-labelledby="vms-title">
+      <div class="section-heading">
+        <h2 id="vms-title">Virtual machines</h2>
+        <a id="export-link" hidden>Export collection</a>
+      </div>
+      <p id="vm-summary">Select a collection to see its virtual machines.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Cluster</th><th>Memory</th><th>Issues</th></tr></thead>
+          <tbody id="virtual-machines"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

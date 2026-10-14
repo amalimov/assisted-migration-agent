@@ -18,6 +18,7 @@ import (
 
 type ServiceManager struct {
 	cfg           *config.Configuration
+	dataFolder    string
 	consoleClient *console.Client
 	keyMgr        *crypto.KeyManager
 	pool          *store.Pool
@@ -39,6 +40,13 @@ type ServiceManagerOption func(*ServiceManager)
 func WithConfig(cfg *config.Configuration) ServiceManagerOption {
 	return func(m *ServiceManager) {
 		m.cfg = cfg
+		m.dataFolder = cfg.Agent.DataFolder
+	}
+}
+
+func WithDataFolder(dataFolder string) ServiceManagerOption {
+	return func(m *ServiceManager) {
+		m.dataFolder = dataFolder
 	}
 }
 
@@ -122,6 +130,18 @@ func (m *ServiceManager) Initialize() error {
 	return nil
 }
 
+// InitializeAnalyzer wires only the services needed for local RVTools analysis.
+func (m *ServiceManager) InitializeAnalyzer() error {
+	if m.pool == nil {
+		return errors.New("pool is required")
+	}
+	if m.dataFolder == "" {
+		return errors.New("data folder is required")
+	}
+	m.collection = NewCollectionService(m.pool)
+	return nil
+}
+
 func (m *ServiceManager) GetCollectorStatus() models.CollectorStatus {
 	m.mu.Lock()
 	collector := m.collector
@@ -196,7 +216,7 @@ func (m *ServiceManager) StartRVToolsCollecting(rvtoolFiles []string) (models.Co
 		return models.CollectorStatus{}, srvErrors.NewCollectionInProgressError()
 	}
 
-	factory, err := newRvtoolWorkFactory(m.pool, rvtoolFiles, m.cfg.Agent.DataFolder, m.validator)
+	factory, err := newRvtoolWorkFactory(m.pool, rvtoolFiles, m.dataFolder, m.validator)
 	if err != nil {
 		return models.CollectorStatus{}, err
 	}
@@ -394,16 +414,25 @@ func (m *ServiceManager) Stop(ctx context.Context) {
 
 // DeleteData deletes all the collections.
 func (m *ServiceManager) DeleteData(ctx context.Context) error {
-	// stop service manager
-	m.Stop(ctx)
-
-	// wipe out data
-	if err := m.collection.DeleteAll(ctx); err != nil {
+	if err := m.DeleteCollections(ctx); err != nil {
 		return err
 	}
 
 	// switch agent in disconnected mode
 	if err := m.console.SetMode(ctx, models.AgentModeDisconnected); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// DeleteCollections stops local work and removes collection databases.
+func (m *ServiceManager) DeleteCollections(ctx context.Context) error {
+	// stop service manager
+	m.Stop(ctx)
+
+	// wipe out data
+	if err := m.collection.DeleteAll(ctx); err != nil {
 		return err
 	}
 

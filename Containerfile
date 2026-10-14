@@ -45,7 +45,7 @@ ARG PLANNER_AGENT_VERSION=v0.0.0
 # Build the agent with UI git commit
 RUN UI_GIT_COMMIT=$(cat /tmp/ui-git-commit.txt) && \
     echo "Building with UI_GIT_COMMIT=${UI_GIT_COMMIT}" && \
-    make build PLANNER_AGENT_GIT_COMMIT=${PLANNER_AGENT_GIT_COMMIT} PLANNER_AGENT_VERSION=${PLANNER_AGENT_VERSION} UI_GIT_COMMIT=${UI_GIT_COMMIT} BINARY_PATH=/tmp/agent
+    make build GO_BUILD_FLAGS=-buildvcs=false PLANNER_AGENT_GIT_COMMIT=${PLANNER_AGENT_GIT_COMMIT} PLANNER_AGENT_VERSION=${PLANNER_AGENT_VERSION} UI_GIT_COMMIT=${UI_GIT_COMMIT} BINARY_PATH=/tmp/agent
 
 
 # =============================================================================

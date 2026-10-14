@@ -1,15 +1,21 @@
 # Contributing
 
-Thanks for contributing. This guide covers repository structure, coding conventions, and the patterns used throughout the agent.
+Thanks for contributing. This guide covers repository structure, coding conventions, and the patterns used by the Agent and standalone RVTools Analyzer.
 
 ## Project Layout
 
 ```text
-api/           OpenAPI specs and generated API types/routes
-cmd/           CLI commands
+api/           Product OpenAPI specs and generated API types/routes
+  agent/v2/    Agent HTTP contract
+  analyzer/v1/ Analyzer HTTP contract
+cmd/           Product CLI entry points
+  agent/       Agent Cobra tree
+  rvtools-analyzer/ Analyzer Cobra tree
 internal/
+  app/         Product composition and startup (agent/, analyzer/)
+  bootstrap/   Shared database bootstrap
   config/      Configuration
-  handlers/    HTTP handlers (v1, v2)
+  handlers/    Product HTTP adapters (agent/, analyzer/)
   models/      Data models (including WorkUnit, WorkBuilder)
   services/    Business logic and async orchestration
   store/       Data persistence (DuckDB)
@@ -26,6 +32,8 @@ pkg/
 - `internal/` is private to this module.
 - `pkg/` holds reusable packages that can be shared outside this repository.
 - Services are long-lived, stateful components wired through `ServiceManager`.
+- Product commands call their matching `internal/app` package. Product app and handler packages may import shared services and storage; shared packages must not import product app, handler, or API packages. Express product differences through composition and injected dependencies rather than mode checks in shared services.
+- The repository decision is recorded in [`docs/adr/0001-agent-and-rvtools-analyzer.md`](docs/adr/0001-agent-and-rvtools-analyzer.md).
 
 ## Code Style
 
@@ -111,7 +119,8 @@ Every HTTP endpoint must be defined in the OpenAPI spec. Do not add handler-only
 Use the versioned spec as the source of truth:
 
 - `api/v1/openapi.yaml`
-- `api/v2/openapi.yaml`
+- `api/agent/v2/openapi.yaml`
+- `api/analyzer/v1/openapi.yaml`
 
 Those specs define:
 
@@ -120,7 +129,7 @@ Those specs define:
 - status codes
 - validation rules, including `x-oapi-codegen-extra-tags`
 
-The generated files in `api/*/types.gen.go` and `api/*/spec.gen.go` are derived artifacts. Do not edit them by hand. Update the relevant `openapi.yaml`, then run `make generate`.
+The generated `types.gen.go` and `spec.gen.go` files in each product's API package are derived artifacts. Do not edit them by hand. Update the relevant `openapi.yaml`, then run `make generate`.
 
 ### REST semantics matter
 
@@ -161,7 +170,7 @@ This ensures the user gets a `400` for a malformed filter instead of a `500` fro
 
 Services implement the business logic layer. They sit between handlers and the store, owning domain rules and models, state transitions, and cross-store coordination.
 
-`ServiceManager` is the central dependency injector. It creates all service instances in dependency order inside `Initialize()`, wiring cross-dependencies (e.g. `CollectorService` depends on `InventoryService`). Handlers receive services through `ServiceManager` getter methods.
+`ServiceManager` wires shared services in dependency order. The Agent calls `Initialize()` for its full service graph; the Analyzer calls `InitializeAnalyzer()` for the services it needs. Handlers receive services through `ServiceManager` getter methods.
 
 Services wired through `ServiceManager` are long-lived and respond to HTTP requests. Not every service belongs in the manager. `CredentialsService`, for example, is a shared dependency used by other services to get and save encrypted credentials — it does not respond to any request directly. It is created by its consumers, not by `ServiceManager`. See `internal/services/doc.go` for details.
 
@@ -487,7 +496,7 @@ The non-blocking send covers both cases:
 
 ## Quick Summary for Agents
 
-- Start API changes in `api/v1/openapi.yaml` or `api/v2/openapi.yaml`, not in handlers. Generated files in `api/*/*.gen.go` are not hand-edited. Run `make generate` after spec changes.
+- Start API changes in `api/v1/openapi.yaml`, `api/agent/v2/openapi.yaml`, or `api/analyzer/v1/openapi.yaml`, not in handlers. Generated API files are not hand-edited. Run `make generate` after spec changes.
 - Keep REST semantics strict: resource-oriented paths, correct HTTP verbs, and status codes that match the behavior.
 - Use typed errors from `pkg/errors` when callers need to branch on them. Add both a constructor and a checker.
 - Handlers validate input and return 400 on bad requests. Zero business logic — call the service and map the result to HTTP.

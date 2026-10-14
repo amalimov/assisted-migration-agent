@@ -142,7 +142,7 @@ func (f *rvtoolsWorkFactory) Build() work.WorkBuilder[models.CollectorStatus, mo
 					return r, r.Err
 				}
 
-				if err := os.Remove(file); err != nil {
+				if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 					log.Warnw("failed to remove rvtools file", "file", file, "error", err)
 				}
 
@@ -201,7 +201,7 @@ func (f *rvtoolsWorkFactory) Build() work.WorkBuilder[models.CollectorStatus, mo
 
 	finalize := func(ctx context.Context, result models.CollectorResult) error {
 		for _, file := range f.rvToolsFiles {
-			if err := os.Remove(file); err != nil {
+			if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 				zap.S().Warnw("failed to remove rvtools file", "file", file, "error", err)
 			}
 		}
