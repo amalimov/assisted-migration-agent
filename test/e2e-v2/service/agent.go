@@ -14,7 +14,7 @@ import (
 
 	"github.com/kubev2v/migration-planner/api/v1alpha1"
 
-	v2 "github.com/kubev2v/assisted-migration-agent/api/agent/v2"
+	v2 "github.com/kubev2v/assisted-migration-agent/agent/api/v2"
 )
 
 type AgentSvc struct {

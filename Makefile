@@ -12,7 +12,7 @@ FORKLIFT_POLICIES_TMP_DIR ?= /tmp/forklift-policies
 
 BINARY_NAME=agent
 BINARY_PATH=bin/$(BINARY_NAME)
-MAIN_PATH=./cmd/agent
+MAIN_PATH=./agent/cmd
 ANALYZER_BINARY_PATH ?= bin/rvtools-analyzer
 
 IMAGE_NAME ?= assisted-migration-agent
@@ -69,7 +69,7 @@ build.agent: build
 
 build.analyzer:
 	@echo "Building RVTools Analyzer..."
-	go build $(GO_BUILD_FLAGS) -ldflags="-X main.gitCommit=${ANALYZER_GIT_COMMIT} -X main.version=${ANALYZER_VERSION}" -o $(ANALYZER_BINARY_PATH) ./cmd/rvtools-analyzer
+	go build $(GO_BUILD_FLAGS) -ldflags="-X main.gitCommit=${ANALYZER_GIT_COMMIT} -X main.version=${ANALYZER_VERSION}" -o $(ANALYZER_BINARY_PATH) ./analyzer/cmd
 	@echo "Build complete: $(ANALYZER_BINARY_PATH)"
 
 build.e2e:
@@ -112,7 +112,7 @@ image:
 		--build-arg AGENT_UI_IMAGE=$(AGENT_UI_IMAGE) \
 		--build-arg AGENT_UI_IMAGE_TAG=$(AGENT_UI_IMAGE_TAG) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) \
-		-f Containerfile .
+		-f agent/Containerfile .
 	@echo "✅ Image built: $(IMAGE_NAME):$(IMAGE_TAG)"
 
 ANALYZER_IMAGE_NAME ?= rvtools-analyzer
@@ -122,7 +122,7 @@ image.analyzer:
 		--build-arg ANALYZER_GIT_COMMIT=$(ANALYZER_GIT_COMMIT) \
 		--build-arg ANALYZER_VERSION=$(ANALYZER_VERSION) \
 		-t $(ANALYZER_IMAGE_NAME):$(ANALYZER_IMAGE_TAG) \
-		-f Containerfile.analyzer .
+		-f analyzer/Containerfile .
 
 # Run container image locally
 # Usage: make run.image AGENT_ID=<uuid> SOURCE_ID=<uuid>

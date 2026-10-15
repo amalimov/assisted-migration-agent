@@ -5,17 +5,22 @@ Thanks for contributing. This guide covers repository structure, coding conventi
 ## Project Layout
 
 ```text
-api/           Product OpenAPI specs and generated API types/routes
-  agent/v2/    Agent HTTP contract
-  analyzer/v1/ Analyzer HTTP contract
-cmd/           Product CLI entry points
-  agent/       Agent Cobra tree
-  rvtools-analyzer/ Analyzer Cobra tree
+agent/
+  api/v2/     Agent HTTP contract and generated API types/routes
+  cmd/        Agent Cobra tree and main.go
+  app/        Agent composition and startup
+  handlers/v2/ Agent HTTP adapters
+  Containerfile
+analyzer/
+  api/v1/     Analyzer HTTP contract and generated API types/routes
+  cmd/        Analyzer Cobra tree and main.go
+  app/        Analyzer composition and startup
+  handlers/v1/ Analyzer HTTP adapters
+  Containerfile
 internal/
-  app/         Product composition and startup (agent/, analyzer/)
   bootstrap/   Shared database bootstrap
-  config/      Configuration
-  handlers/    Product HTTP adapters (agent/, analyzer/)
+  config/      Existing Agent/Analyzer configuration types
+  handlers/    Shared validation helpers
   models/      Data models (including WorkUnit, WorkBuilder)
   services/    Business logic and async orchestration
   store/       Data persistence (DuckDB)
@@ -32,8 +37,8 @@ pkg/
 - `internal/` is private to this module.
 - `pkg/` holds reusable packages that can be shared outside this repository.
 - Services are long-lived, stateful components wired through `ServiceManager`.
-- Product commands call their matching `internal/app` package. Product app and handler packages may import shared services and storage; shared packages must not import product app, handler, or API packages. Express product differences through composition and injected dependencies rather than mode checks in shared services.
-- The repository decision is recorded in [`docs/adr/0001-agent-and-rvtools-analyzer.md`](docs/adr/0001-agent-and-rvtools-analyzer.md).
+- Product commands call their matching `agent/app` or `analyzer/app` package. Product app and handler packages may import shared services and storage; shared packages must not import product app, handler, or API packages. Express product differences through composition and injected dependencies rather than mode checks in shared services.
+- The current layout decision is recorded in [`tasks/multi-project-refactor/ADR-product-oriented-repository-layout.md`](tasks/multi-project-refactor/ADR-product-oriented-repository-layout.md).
 
 ## Code Style
 
@@ -118,9 +123,8 @@ Every HTTP endpoint must be defined in the OpenAPI spec. Do not add handler-only
 
 Use the versioned spec as the source of truth:
 
-- `api/v1/openapi.yaml`
-- `api/agent/v2/openapi.yaml`
-- `api/analyzer/v1/openapi.yaml`
+- `agent/api/v2/openapi.yaml`
+- `analyzer/api/v1/openapi.yaml`
 
 Those specs define:
 
@@ -496,7 +500,7 @@ The non-blocking send covers both cases:
 
 ## Quick Summary for Agents
 
-- Start API changes in `api/v1/openapi.yaml`, `api/agent/v2/openapi.yaml`, or `api/analyzer/v1/openapi.yaml`, not in handlers. Generated API files are not hand-edited. Run `make generate` after spec changes.
+- Start API changes in `agent/api/v2/openapi.yaml` or `analyzer/api/v1/openapi.yaml`, not in handlers. Generated API files are not hand-edited. Run `make generate` after spec changes.
 - Keep REST semantics strict: resource-oriented paths, correct HTTP verbs, and status codes that match the behavior.
 - Use typed errors from `pkg/errors` when callers need to branch on them. Add both a constructor and a checker.
 - Handlers validate input and return 400 on bad requests. Zero business logic — call the service and map the result to HTTP.

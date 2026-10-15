@@ -44,6 +44,8 @@ policies/
 
 # Run Local data dir
 .local-data/
+/data/
+/analyzer/data/
 
 # Editor/IDE
 # .idea/

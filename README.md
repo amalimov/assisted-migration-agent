@@ -4,8 +4,8 @@ This repository builds two products. The Assisted Migration Agent collects vSphe
 
 | Product | Command | HTTP API | Container build |
 | --- | --- | --- | --- |
-| Agent | `cmd/agent` | `/api/v2` | `make image` |
-| RVTools Analyzer | `cmd/rvtools-analyzer` | `/api/v1` | `make image.analyzer` |
+| Agent | `agent/cmd` | `/api/v2` | `make image` |
+| RVTools Analyzer | `analyzer/cmd` | `/api/v1` | `make image.analyzer` |
 
 Each command has its own flags and startup path. The Agent's temporary `--rvtools-mode` interface has been removed.
 
@@ -20,24 +20,33 @@ make build.agent build.analyzer
 `make build` and `make build.agent` produce `bin/agent`; `make build.analyzer` produces `bin/rvtools-analyzer`.
 Set `PLANNER_AGENT_VERSION` or `ANALYZER_VERSION` when building a specific product; `PLANNER_AGENT_GIT_COMMIT` and `ANALYZER_GIT_COMMIT` control their reported commits.
 
+## Start locally
+
+Run each product in its own terminal:
+
+```bash
+./start_local_appliance.sh  # Agent: http://localhost:8000/api/v2
+./start_local_analyser.sh   # RVTools Analyzer: http://localhost:8001/api/v1
+```
+
+The scripts build their respective binaries and work from any current directory. The Agent keeps its data in `./data`; the Analyzer uses `./analyzer/data` so their DuckDB files do not collide. Both use the OPA policies in `./policies`; run `make setup-opa-policies` first if those policies are missing. Extra arguments are passed to the product's `run` command, for example `./start_local_analyser.sh --data-folder ./analyser-data` to use an existing Analyzer database.
+
 ## RVTools Analyzer
 
-Prepare OPA validation policies, then start the Analyzer with a persistent data folder:
+Prepare OPA validation policies, then start the Analyzer:
 
 ```bash
 make setup-opa-policies
-bin/rvtools-analyzer run \
-  --opa-policies-folder ./policies \
-  --data-folder ./analyzer-data
+./start_local_analyser.sh
 ```
 
 The Analyzer currently serves its API without a bundled UI. Upload one or more RVTools `.xlsx` files to `POST /api/v1/collector/rvtools`:
 
 ```bash
-curl -F 'files=@/path/to/rvtools.xlsx' http://localhost:8000/api/v1/collector/rvtools
+curl -F 'files=@/path/to/rvtools.xlsx' http://localhost:8001/api/v1/collector/rvtools
 ```
 
-Use `GET /api/v1/collector` to check collection progress, `GET /api/v1/collections` to list analyses, and `GET /api/v1/virtualmachines` to query the latest analysis. `GET /api/v1/status` reports Analyzer readiness. The full Analyzer contract is in [`api/analyzer/v1/openapi.yaml`](api/analyzer/v1/openapi.yaml).
+Use `GET /api/v1/collector` to check collection progress, `GET /api/v1/collections` to list analyses, and `GET /api/v1/virtualmachines` to query the latest analysis. `GET /api/v1/status` reports Analyzer readiness. The full Analyzer contract is in [`analyzer/api/v1/openapi.yaml`](analyzer/api/v1/openapi.yaml).
 
 The Analyzer uses its own data folder and does not require Agent or source IDs or console credentials. `--server-http-port` changes the listening port. `--server-mode prod` enables HTTPS with a self-signed certificate. Native runs may need network access once to obtain DuckDB's SQLite scanner extension; the Analyzer container includes that extension.
 
@@ -132,7 +141,7 @@ When running locally, point the agent to the filler image assets:
 AGENT_ASSETS_DIR=pkg/vmware/assets make run
 ```
 
-> Both of these are handled automatically during container builds (see Containerfile).
+> Both of these are handled automatically during Agent container builds (see [`agent/Containerfile`](agent/Containerfile)).
 
 ### Tests
 
