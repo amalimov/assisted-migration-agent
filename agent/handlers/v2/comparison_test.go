@@ -15,9 +15,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	v2api "github.com/kubev2v/assisted-migration-agent/api/v2"
+	v2api "github.com/kubev2v/assisted-migration-agent/agent/api/v2"
+	handlers "github.com/kubev2v/assisted-migration-agent/agent/handlers/v2"
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
-	handlers "github.com/kubev2v/assisted-migration-agent/internal/handlers/v2"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	svc "github.com/kubev2v/assisted-migration-agent/internal/services"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"

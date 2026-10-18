@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
+	v2 "github.com/kubev2v/assisted-migration-agent/agent/api/v2"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 )
 

@@ -5,11 +5,17 @@ Thanks for contributing. This guide covers repository structure, coding conventi
 ## Project Layout
 
 ```text
-api/           OpenAPI specs and generated API types/routes
-cmd/           CLI commands
+agent/
+  main.go      Agent CLI entry point
+  cmd/         Agent CLI commands
+  app/         Agent application composition
+  api/v2/      Agent OpenAPI spec and generated API types/routes
+  handlers/v2/ Agent HTTP handlers, including RVTools mode
+  Containerfile
+  Containerfile.rvtools
 internal/
   config/      Configuration
-  handlers/    HTTP handlers (v1, v2)
+  handlers/    Shared validator registration
   models/      Data models (including WorkUnit, WorkBuilder)
   services/    Business logic and async orchestration
   store/       Data persistence (DuckDB)
@@ -110,8 +116,7 @@ Every HTTP endpoint must be defined in the OpenAPI spec. Do not add handler-only
 
 Use the versioned spec as the source of truth:
 
-- `api/v1/openapi.yaml`
-- `api/v2/openapi.yaml`
+- `agent/api/v2/openapi.yaml`
 
 Those specs define:
 
@@ -120,7 +125,7 @@ Those specs define:
 - status codes
 - validation rules, including `x-oapi-codegen-extra-tags`
 
-The generated files in `api/*/types.gen.go` and `api/*/spec.gen.go` are derived artifacts. Do not edit them by hand. Update the relevant `openapi.yaml`, then run `make generate`.
+The generated files in `agent/api/v2/types.gen.go` and `agent/api/v2/spec.gen.go` are derived artifacts. Do not edit them by hand. Update `agent/api/v2/openapi.yaml`, then run `make generate`.
 
 ### REST semantics matter
 
@@ -487,7 +492,7 @@ The non-blocking send covers both cases:
 
 ## Quick Summary for Agents
 
-- Start API changes in `api/v1/openapi.yaml` or `api/v2/openapi.yaml`, not in handlers. Generated files in `api/*/*.gen.go` are not hand-edited. Run `make generate` after spec changes.
+- Start API changes in `agent/api/v2/openapi.yaml`, not in handlers. Generated files in `agent/api/v2/*.gen.go` are not hand-edited. Run `make generate` after spec changes.
 - Keep REST semantics strict: resource-oriented paths, correct HTTP verbs, and status codes that match the behavior.
 - Use typed errors from `pkg/errors` when callers need to branch on them. Add both a constructor and a checker.
 - Handlers validate input and return 400 on bad requests. Zero business logic — call the service and map the result to HTTP.

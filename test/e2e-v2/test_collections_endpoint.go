@@ -5,7 +5,7 @@ import (
 
 	"github.com/kubev2v/assisted-migration-agent/pkg/e2e/vcsim"
 
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
+	v2 "github.com/kubev2v/assisted-migration-agent/agent/api/v2"
 	"github.com/kubev2v/assisted-migration-agent/pkg/e2e/infra"
 	"github.com/kubev2v/assisted-migration-agent/test/e2e-v2/service"
 

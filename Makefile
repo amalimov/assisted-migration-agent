@@ -10,7 +10,7 @@ FORKLIFT_POLICIES_TMP_DIR ?= /tmp/forklift-policies
 
 BINARY_NAME=agent
 BINARY_PATH=bin/$(BINARY_NAME)
-MAIN_PATH=./main.go
+MAIN_PATH=./agent/main.go
 
 IMAGE_NAME ?= assisted-migration-agent
 IMAGE_TAG ?= latest
@@ -99,7 +99,7 @@ image:
 		--build-arg AGENT_UI_IMAGE=$(AGENT_UI_IMAGE) \
 		--build-arg AGENT_UI_IMAGE_TAG=$(AGENT_UI_IMAGE_TAG) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) \
-		-f Containerfile .
+		-f agent/Containerfile .
 	@echo "✅ Image built: $(IMAGE_NAME):$(IMAGE_TAG)"
 
 # Run container image locally

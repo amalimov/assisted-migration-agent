@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	v2 "github.com/kubev2v/assisted-migration-agent/api/v2"
+	v2 "github.com/kubev2v/assisted-migration-agent/agent/api/v2"
 	services "github.com/kubev2v/assisted-migration-agent/internal/services"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 )

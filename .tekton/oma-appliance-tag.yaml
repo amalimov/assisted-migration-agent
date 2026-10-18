@@ -23,7 +23,7 @@ spec:
   - name: output-image
     value: quay.io/redhat-user-workloads/assisted-migration-tenant/oma-appliance:{{git_tag}}
   - name: dockerfile
-    value: Containerfile
+    value: agent/Containerfile
   - name: path-context
     value: .
   pipelineSpec:

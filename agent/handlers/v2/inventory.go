@@ -16,7 +16,7 @@ import (
 
 	agentAPI "github.com/kubev2v/migration-planner/api/v1alpha1/agent"
 
-	v2api "github.com/kubev2v/assisted-migration-agent/api/v2"
+	v2api "github.com/kubev2v/assisted-migration-agent/agent/api/v2"
 	services "github.com/kubev2v/assisted-migration-agent/internal/services"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 )

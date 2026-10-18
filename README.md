@@ -10,6 +10,12 @@ make build
 
 This produces the binary at `bin/agent`.
 
+Agent-specific code lives under `agent/`: `main.go` is the CLI entry point,
+`cmd/` defines its commands, and `app/` assembles the application. `api/v2/`
+defines the HTTP contract, and `handlers/v2/` implements it. Shared
+implementation remains in `internal/` and `pkg/`. The RVTools proof of
+concept is still an Agent mode and uses `agent/Containerfile.rvtools`.
+
 ## Run
 
 ### Basic Usage
@@ -99,7 +105,7 @@ When running locally, point the agent to the filler image assets:
 AGENT_ASSETS_DIR=pkg/vmware/assets make run
 ```
 
-> Both of these are handled automatically during container builds (see Containerfile).
+> Both of these are handled automatically during container builds (see `agent/Containerfile`).
 
 ### Tests
 

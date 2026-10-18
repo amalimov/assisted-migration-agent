@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/kubev2v/assisted-migration-agent/cmd"
+	"github.com/kubev2v/assisted-migration-agent/agent/cmd"
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/pkg/logger"
 )
