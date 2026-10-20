@@ -18,6 +18,7 @@ import (
 
 type ServiceManager struct {
 	cfg           *config.Configuration
+	dataFolder    string
 	consoleClient *console.Client
 	keyMgr        *crypto.KeyManager
 	pool          *store.Pool
@@ -39,6 +40,14 @@ type ServiceManagerOption func(*ServiceManager)
 func WithConfig(cfg *config.Configuration) ServiceManagerOption {
 	return func(m *ServiceManager) {
 		m.cfg = cfg
+		m.dataFolder = cfg.Agent.DataFolder
+	}
+}
+
+// WithDataFolder supplies the storage location for local RVTools collections.
+func WithDataFolder(dataFolder string) ServiceManagerOption {
+	return func(m *ServiceManager) {
+		m.dataFolder = dataFolder
 	}
 }
 
@@ -122,6 +131,18 @@ func (m *ServiceManager) Initialize() error {
 	return nil
 }
 
+// InitializeLocalCollections wires only the services needed for RVTools analysis.
+func (m *ServiceManager) InitializeLocalCollections() error {
+	if m.pool == nil {
+		return errors.New("pool is required")
+	}
+	if m.dataFolder == "" {
+		return errors.New("data folder is required")
+	}
+	m.collection = NewCollectionService(m.pool)
+	return nil
+}
+
 func (m *ServiceManager) GetCollectorStatus() models.CollectorStatus {
 	m.mu.Lock()
 	collector := m.collector
@@ -196,7 +217,7 @@ func (m *ServiceManager) StartRVToolsCollecting(rvtoolFiles []string) (models.Co
 		return models.CollectorStatus{}, srvErrors.NewCollectionInProgressError()
 	}
 
-	factory, err := newRvtoolWorkFactory(m.pool, rvtoolFiles, m.cfg.Agent.DataFolder, m.validator)
+	factory, err := newRvtoolWorkFactory(m.pool, rvtoolFiles, m.dataFolder, m.validator)
 	if err != nil {
 		return models.CollectorStatus{}, err
 	}
@@ -408,6 +429,12 @@ func (m *ServiceManager) DeleteData(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// DeleteCollections stops local work and removes all collection databases.
+func (m *ServiceManager) DeleteCollections(ctx context.Context) error {
+	m.Stop(ctx)
+	return m.collection.DeleteAll(ctx)
 }
 
 func (m *ServiceManager) vmService(db *store.Database) (*VMService, error) {
