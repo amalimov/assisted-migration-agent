@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	analyzerapp "github.com/kubev2v/assisted-migration-agent/analyzer/app"
-	"github.com/kubev2v/assisted-migration-agent/analyzer/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/config"
 )
 
 func NewRunCommand(cfg *config.Configuration) *cobra.Command {
@@ -29,8 +29,8 @@ func NewRunCommand(cfg *config.Configuration) *cobra.Command {
 		},
 	}
 	flags := cmd.Flags()
-	flags.StringVar(&cfg.DataFolder, "data-folder", cfg.DataFolder, "Folder for analyzer databases and uploads")
-	flags.StringVar(&cfg.OpaPoliciesFolder, "opa-policies-folder", cfg.OpaPoliciesFolder, "Folder containing RVTools validation policies")
+	flags.StringVar(&cfg.Agent.DataFolder, "data-folder", cfg.Agent.DataFolder, "Folder for analyzer databases and uploads")
+	flags.StringVar(&cfg.Agent.OpaPoliciesFolder, "opa-policies-folder", cfg.Agent.OpaPoliciesFolder, "Folder containing RVTools validation policies")
 	flags.IntVar(&cfg.Server.HTTPPort, "server-http-port", cfg.Server.HTTPPort, "Analyzer HTTP port")
 	flags.StringVar(&cfg.Server.ServerMode, "server-mode", cfg.Server.ServerMode, "Server mode: dev or prod")
 	flags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Optional separately built static files folder (production mode)")
@@ -39,10 +39,10 @@ func NewRunCommand(cfg *config.Configuration) *cobra.Command {
 }
 
 func validateConfiguration(cfg *config.Configuration) error {
-	if cfg.DataFolder == "" {
+	if cfg.Agent.DataFolder == "" {
 		return errors.New("data folder must be set")
 	}
-	if cfg.OpaPoliciesFolder == "" {
+	if cfg.Agent.OpaPoliciesFolder == "" {
 		return errors.New("opa policies folder must be set")
 	}
 	if cfg.Server.HTTPPort < 1 || cfg.Server.HTTPPort > 65535 {
