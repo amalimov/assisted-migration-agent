@@ -2,26 +2,19 @@ package services
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/kubev2v/migration-planner/pkg/duckdb_parser"
 	"github.com/kubev2v/migration-planner/pkg/opa"
 
-	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
-	"github.com/kubev2v/assisted-migration-agent/pkg/console"
-	"github.com/kubev2v/assisted-migration-agent/pkg/crypto"
 	srvErrors "github.com/kubev2v/assisted-migration-agent/pkg/errors"
 )
 
 type ServiceManager struct {
-	cfg           *config.Configuration
-	dataFolder    string
-	consoleClient *console.Client
-	keyMgr        *crypto.KeyManager
-	pool          *store.Pool
+	dataFolder string
+	pool       *store.Pool
 
 	console     *Console
 	collection  *CollectionService
@@ -37,14 +30,6 @@ type ServiceManager struct {
 
 type ServiceManagerOption func(*ServiceManager)
 
-func WithConfig(cfg *config.Configuration) ServiceManagerOption {
-	return func(m *ServiceManager) {
-		m.cfg = cfg
-		m.dataFolder = cfg.Agent.DataFolder
-	}
-}
-
-// WithDataFolder supplies the storage location for local RVTools collections.
 func WithDataFolder(dataFolder string) ServiceManagerOption {
 	return func(m *ServiceManager) {
 		m.dataFolder = dataFolder
@@ -54,18 +39,6 @@ func WithDataFolder(dataFolder string) ServiceManagerOption {
 func WithPool(pool *store.Pool) ServiceManagerOption {
 	return func(m *ServiceManager) {
 		m.pool = pool
-	}
-}
-
-func WithConsoleClient(c *console.Client) ServiceManagerOption {
-	return func(m *ServiceManager) {
-		m.consoleClient = c
-	}
-}
-
-func WithKeyManager(km *crypto.KeyManager) ServiceManagerOption {
-	return func(m *ServiceManager) {
-		m.keyMgr = km
 	}
 }
 
@@ -81,6 +54,22 @@ func WithCollectorWorkBuilder(fn CollectorWorkBuilder) ServiceManagerOption {
 	}
 }
 
+func WithCollectionService(s *CollectionService) ServiceManagerOption {
+	return func(m *ServiceManager) { m.collection = s }
+}
+
+func WithCredentialsService(s *CredentialsService) ServiceManagerOption {
+	return func(m *ServiceManager) { m.credentials = s }
+}
+
+func WithVddkService(s *VddkService) ServiceManagerOption {
+	return func(m *ServiceManager) { m.vddk = s }
+}
+
+func WithForecasterService(s *ForecasterService) ServiceManagerOption {
+	return func(m *ServiceManager) { m.forecaster = s }
+}
+
 func NewServiceManager(opts ...ServiceManagerOption) *ServiceManager {
 	m := &ServiceManager{}
 	for _, opt := range opts {
@@ -89,58 +78,9 @@ func NewServiceManager(opts ...ServiceManagerOption) *ServiceManager {
 	return m
 }
 
-func (m *ServiceManager) Initialize() error {
-	if m.cfg == nil {
-		return errors.New("config is required")
-	}
-	if m.pool == nil {
-		return errors.New("pool is required")
-	}
-	if m.keyMgr == nil {
-		return errors.New("key manager is required")
-	}
-
-	mainDB, err := m.pool.Get(store.MainDatabaseID)
-	if err != nil {
-		return err
-	}
-	mainStore, err := mainDB.Store()
-	if err != nil {
-		return err
-	}
-
-	m.console, err = NewConsoleService(
-		m.cfg.Agent,
-		m.consoleClient,
-		m,
-		mainStore,
-	)
-	if err != nil {
-		return err
-	}
-
-	m.collection = NewCollectionService(m.pool)
-
-	m.credentials = NewCredentialsService(mainStore)
-	m.credentials.WithKeyManager(m.keyMgr)
-
-	m.vddk = NewVddkService(m.cfg.Agent.DataFolder, m.pool)
-
-	m.forecaster = NewForecasterService(m.pool, m.credentials)
-
-	return nil
-}
-
-// InitializeLocalCollections wires only the services needed for RVTools analysis.
-func (m *ServiceManager) InitializeLocalCollections() error {
-	if m.pool == nil {
-		return errors.New("pool is required")
-	}
-	if m.dataFolder == "" {
-		return errors.New("data folder is required")
-	}
-	m.collection = NewCollectionService(m.pool)
-	return nil
+// SetConsoleService completes Agent wiring after the console receives the manager.
+func (m *ServiceManager) SetConsoleService(s *Console) {
+	m.console = s
 }
 
 func (m *ServiceManager) GetCollectorStatus() models.CollectorStatus {
@@ -176,7 +116,7 @@ func (m *ServiceManager) StartCollecting(ctx context.Context) (models.CollectorS
 	}
 
 	if m.workBuilder == nil {
-		factory, err := newVCenterCollectorWorkFactory(m.credentials, m.pool, m.cfg.Agent.DataFolder, m.validator)
+		factory, err := newVCenterCollectorWorkFactory(m.credentials, m.pool, m.dataFolder, m.validator)
 		if err != nil {
 			return models.CollectorStatus{}, err
 		}
@@ -259,7 +199,7 @@ func (m *ServiceManager) InspectorService() (*InspectorService, error) {
 		return nil, err
 	}
 
-	m.inspector = NewInspectorService(store, 10, m.cfg.Agent.DataFolder, m.credentials)
+	m.inspector = NewInspectorService(store, 10, m.dataFolder, m.credentials)
 
 	return m.inspector, nil
 }

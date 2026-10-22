@@ -26,6 +26,7 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
 	"github.com/kubev2v/assisted-migration-agent/internal/server"
 	service "github.com/kubev2v/assisted-migration-agent/internal/services"
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
 	"github.com/kubev2v/assisted-migration-agent/pkg/console"
 	"github.com/kubev2v/assisted-migration-agent/pkg/crypto"
 )
@@ -97,14 +98,8 @@ func initV2(cfg *config.Configuration) (*server.Server, func(), error) {
 		return nil, nil, err
 	}
 
-	v2SvcMgr := service.NewServiceManager(
-		service.WithConfig(cfg),
-		service.WithPool(pool),
-		service.WithConsoleClient(consoleClient),
-		service.WithKeyManager(km),
-		service.WithOpaValidator(opaValidator),
-	)
-	if err := v2SvcMgr.Initialize(); err != nil {
+	v2SvcMgr, err := NewAgentServiceManager(cfg, pool, consoleClient, km, service.WithOpaValidator(opaValidator))
+	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize v2 service: %w", err)
 	}
 
@@ -144,6 +139,49 @@ func initV2(cfg *config.Configuration) (*server.Server, func(), error) {
 	}
 
 	return srv, cleanup, nil
+}
+
+// NewAgentServiceManager assembles the services required by the Agent.
+func NewAgentServiceManager(cfg *config.Configuration, pool *store.Pool, consoleClient *console.Client, keyMgr *crypto.KeyManager, opts ...service.ServiceManagerOption) (*service.ServiceManager, error) {
+	if cfg == nil {
+		return nil, errors.New("config is required")
+	}
+	if pool == nil {
+		return nil, errors.New("pool is required")
+	}
+	if keyMgr == nil {
+		return nil, errors.New("key manager is required")
+	}
+
+	mainDB, err := pool.Get(store.MainDatabaseID)
+	if err != nil {
+		return nil, err
+	}
+	mainStore, err := mainDB.Store()
+	if err != nil {
+		return nil, err
+	}
+
+	credentials := service.NewCredentialsService(mainStore)
+	credentials.WithKeyManager(keyMgr)
+	managerOpts := append([]service.ServiceManagerOption{}, opts...)
+	managerOpts = append(managerOpts,
+		service.WithDataFolder(cfg.Agent.DataFolder),
+		service.WithPool(pool),
+		service.WithCollectionService(service.NewCollectionService(pool)),
+		service.WithCredentialsService(credentials),
+		service.WithVddkService(service.NewVddkService(cfg.Agent.DataFolder, pool)),
+		service.WithForecasterService(service.NewForecasterService(pool, credentials)),
+	)
+	manager := service.NewServiceManager(managerOpts...)
+
+	// The console needs the manager for status reporting, so it is attached last.
+	consoleService, err := service.NewConsoleService(cfg.Agent, consoleClient, manager, mainStore)
+	if err != nil {
+		return nil, err
+	}
+	manager.SetConsoleService(consoleService)
+	return manager, nil
 }
 
 func initShared(cfg *config.Configuration) (*console.Client, *crypto.KeyManager, error) {

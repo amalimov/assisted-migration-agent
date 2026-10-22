@@ -7,14 +7,17 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/kubev2v/assisted-migration-agent/analyzer/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/pkg/logger"
 )
 
 func NewRootCommand(version, gitCommit string) *cobra.Command {
-	cfg := config.NewConfiguration()
-	cfg.Version = version
-	cfg.GitCommit = gitCommit
+	cfg := config.NewConfigurationWithOptionsAndDefaults(
+		config.WithServer(config.Server{HTTPPort: 8000, ServerMode: "dev"}),
+		config.WithAgent(config.Agent{Version: version, GitCommit: gitCommit}),
+		config.WithLogFormat("console"),
+		config.WithLogLevel("debug"),
+	)
 	root := &cobra.Command{
 		Use:          "rvtools-analyzer",
 		Short:        "Standalone RVTools Analyzer",
@@ -42,7 +45,7 @@ func NewVersionCommand(cfg *config.Configuration) *cobra.Command {
 		Short: "Print analyzer version information",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Analyzer Version: %s\nGit Commit:       %s\n", cfg.Version, cfg.GitCommit)
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Analyzer Version: %s\nGit Commit:       %s\n", cfg.Agent.Version, cfg.Agent.GitCommit)
 			return err
 		},
 	}

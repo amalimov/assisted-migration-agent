@@ -15,12 +15,13 @@ import (
 	"go.uber.org/zap"
 
 	v1 "github.com/kubev2v/assisted-migration-agent/analyzer/api/v1"
-	"github.com/kubev2v/assisted-migration-agent/analyzer/config"
 	analyzerHandlers "github.com/kubev2v/assisted-migration-agent/analyzer/handlers/v1"
 	"github.com/kubev2v/assisted-migration-agent/internal/bootstrap"
+	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
 	"github.com/kubev2v/assisted-migration-agent/internal/server"
 	"github.com/kubev2v/assisted-migration-agent/internal/services"
+	"github.com/kubev2v/assisted-migration-agent/internal/store"
 )
 
 const apiV1 = "/api/v1"
@@ -49,26 +50,22 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 }
 
 func bootstrapAnalyzer(cfg *config.Configuration) (*server.Server, func(), error) {
-	if err := os.MkdirAll(cfg.DataFolder, 0750); err != nil {
+	if err := os.MkdirAll(cfg.Agent.DataFolder, 0750); err != nil {
 		return nil, nil, fmt.Errorf("create data folder: %w", err)
 	}
 
-	opaValidator, err := opa.NewValidatorFromDir(cfg.OpaPoliciesFolder)
+	opaValidator, err := opa.NewValidatorFromDir(cfg.Agent.OpaPoliciesFolder)
 	if err != nil {
 		return nil, nil, fmt.Errorf("initialize OPA validator: %w", err)
 	}
-	pool, err := bootstrap.InitPool(cfg.DataFolder)
+	pool, err := bootstrap.InitPool(cfg.Agent.DataFolder)
 	if err != nil {
 		return nil, nil, err
 	}
 	cleanupPool := func() { pool.Close() }
 
-	svc := services.NewServiceManager(
-		services.WithPool(pool),
-		services.WithDataFolder(cfg.DataFolder),
-		services.WithOpaValidator(opaValidator),
-	)
-	if err := svc.InitializeLocalCollections(); err != nil {
+	svc, err := newAnalyzerServiceManager(cfg, pool, opaValidator)
+	if err != nil {
 		cleanupPool()
 		return nil, nil, err
 	}
@@ -99,4 +96,26 @@ func bootstrapAnalyzer(cfg *config.Configuration) (*server.Server, func(), error
 		cleanupPool()
 	}
 	return srv, cleanup, nil
+}
+
+func newAnalyzerServiceManager(cfg *config.Configuration, pool *store.Pool, validator *opa.Validator) (*services.ServiceManager, error) {
+	if cfg == nil {
+		return nil, errors.New("config is required")
+	}
+	if pool == nil {
+		return nil, errors.New("pool is required")
+	}
+	if cfg.Agent.DataFolder == "" {
+		return nil, errors.New("data folder is required")
+	}
+	if validator == nil {
+		return nil, errors.New("OPA validator is required")
+	}
+
+	return services.NewServiceManager(
+		services.WithDataFolder(cfg.Agent.DataFolder),
+		services.WithPool(pool),
+		services.WithOpaValidator(validator),
+		services.WithCollectionService(services.NewCollectionService(pool)),
+	), nil
 }

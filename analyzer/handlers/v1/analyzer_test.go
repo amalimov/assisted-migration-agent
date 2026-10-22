@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	v1 "github.com/kubev2v/assisted-migration-agent/analyzer/api/v1"
-	"github.com/kubev2v/assisted-migration-agent/analyzer/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 )
 
@@ -31,7 +31,7 @@ func TestAnalyzerAPIExposesStatusAndRVToolsUpload(t *testing.T) {
 	dataDir := t.TempDir()
 	svc := &testServices{}
 	router := gin.New()
-	v1.RegisterHandlers(router.Group("/api/v1"), NewHandler(config.Configuration{DataFolder: dataDir}, svc))
+	v1.RegisterHandlers(router.Group("/api/v1"), NewHandler(config.Configuration{Agent: config.Agent{DataFolder: dataDir}}, svc))
 
 	status := httptest.NewRecorder()
 	router.ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))

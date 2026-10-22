@@ -29,7 +29,7 @@ func (h *Handler) StartRvtoolsCollector(c *gin.Context) {
 
 	var savedPaths []string
 	for _, fh := range files {
-		destPath := filepath.Join(h.cfg.DataFolder, fmt.Sprintf("rvtools_%d_%s", time.Now().UnixNano(), filepath.Base(fh.Filename)))
+		destPath := filepath.Join(h.cfg.Agent.DataFolder, fmt.Sprintf("rvtools_%d_%s", time.Now().UnixNano(), filepath.Base(fh.Filename)))
 		if err := c.SaveUploadedFile(fh, destPath); err != nil {
 			for _, p := range savedPaths {
 				_ = os.Remove(p)

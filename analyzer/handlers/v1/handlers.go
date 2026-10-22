@@ -3,7 +3,7 @@ package analyzer
 import (
 	"context"
 
-	"github.com/kubev2v/assisted-migration-agent/analyzer/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	"github.com/kubev2v/assisted-migration-agent/internal/services"
 )

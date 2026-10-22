@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kubev2v/assisted-migration-agent/analyzer/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/config"
 )
 
 func TestAnalyzerCommandHasIndependentFlags(t *testing.T) {
@@ -26,15 +26,15 @@ func TestAnalyzerCommandHasIndependentFlags(t *testing.T) {
 }
 
 func TestAnalyzerConfigurationRequiresLocalInputs(t *testing.T) {
-	cfg := config.NewConfiguration()
+	cfg := config.NewConfigurationWithOptionsAndDefaults()
 	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "data folder") {
 		t.Fatalf("missing data folder: got %v", err)
 	}
-	cfg.DataFolder = t.TempDir()
+	cfg.Agent.DataFolder = t.TempDir()
 	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "opa policies") {
 		t.Fatalf("missing policy folder: got %v", err)
 	}
-	cfg.OpaPoliciesFolder = t.TempDir()
+	cfg.Agent.OpaPoliciesFolder = t.TempDir()
 	if err := validateConfiguration(cfg); err != nil {
 		t.Fatalf("valid analyzer configuration: %v", err)
 	}
