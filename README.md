@@ -100,12 +100,12 @@ bin/agent run \
 | `--source-id` | *required* | Source identifier (UUID) for this agent |
 | `--mode` | `disconnected` | `connected` \| `disconnected` |
 | `--data-folder` | *required* | Existing directory for persistent data |
-| `--opa-policies-folder` | *required* | Path to OPA policies folder for VM validation |
+| `--opa-policies-folder` | *required* | Existing directory containing OPA policies for VM validation |
 | `--version` | `v0.0.0` | Agent version to report to console |
 | `--legacy-status-enabled` | `true` | Use legacy status like waiting-for-credentials |
 | `--server-http-port` | `8000` | HTTP server port |
 | `--server-mode` | `dev` | `dev` \| `prod` (prod enables HTTPS with self-signed certs) |
-| `--server-statics-folder` | — | Path to static files (required when `--server-mode=prod`) |
+| `--server-statics-folder` | — | Existing directory of static files (required when `--server-mode=prod`) |
 | `--console-url` | `http://localhost:7443` | Migration planner console URL |
 | `--console-update-interval` | `5s` | Status update interval |
 | `--authentication-enabled` | `true` | Enable console authentication |

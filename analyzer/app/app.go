@@ -112,8 +112,7 @@ func newAnalyzerServiceManager(cfg *config.Configuration, pool *store.Pool, vali
 		return nil, errors.New("OPA validator is required")
 	}
 
-	return services.NewServiceManager(
-		services.WithDataFolder(cfg.Agent.DataFolder),
+	return services.NewServiceManager(cfg.Agent.DataFolder,
 		services.WithPool(pool),
 		services.WithOpaValidator(validator),
 		services.WithCollectionService(services.NewCollectionService(pool)),

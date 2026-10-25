@@ -52,7 +52,7 @@ func NewServer(cfg config.Server, groups map[string]APIGroup) (*Server, error) {
 		Handler: engine,
 	}
 
-	if cfg.ServerMode == ProductionServer && cfg.StaticsFolder != "" {
+	if cfg.ServerMode == ProductionServer {
 		engine.Static("/static", cfg.StaticsFolder)
 		engine.Static("/assets", path.Join(cfg.StaticsFolder, "assets"))
 		engine.StaticFile("/", path.Join(cfg.StaticsFolder, "index.html"))
@@ -67,9 +67,7 @@ func NewServer(cfg config.Server, groups map[string]APIGroup) (*Server, error) {
 			}
 			c.File(path.Join(cfg.StaticsFolder, "index.html"))
 		})
-	}
 
-	if cfg.ServerMode == ProductionServer {
 		cert, key, err := certificates.GenerateSelfSignedCertificate(time.Now().AddDate(1, 0, 0))
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate server's certificates: %w", err)

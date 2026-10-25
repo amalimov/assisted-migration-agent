@@ -29,11 +29,11 @@ func TestAnalyzerCommandHasIndependentFlags(t *testing.T) {
 
 func TestAnalyzerConfigurationRequiresLocalInputs(t *testing.T) {
 	cfg := config.NewConfigurationWithOptionsAndDefaults()
-	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "data folder") {
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "data-folder parameter is invalid") || !strings.Contains(err.Error(), "path is empty") {
 		t.Fatalf("missing data folder: got %v", err)
 	}
 	cfg.Agent.DataFolder = t.TempDir()
-	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "opa policies") {
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "opa-policies-folder parameter is invalid") || !strings.Contains(err.Error(), "path is empty") {
 		t.Fatalf("missing policy folder: got %v", err)
 	}
 	cfg.Agent.OpaPoliciesFolder = t.TempDir()
@@ -42,12 +42,31 @@ func TestAnalyzerConfigurationRequiresLocalInputs(t *testing.T) {
 	}
 }
 
+func TestAnalyzerPoliciesFolderMustExistAndBeDirectory(t *testing.T) {
+	cfg := config.NewConfigurationWithOptionsAndDefaults()
+	cfg.Agent.DataFolder = t.TempDir()
+	parent := t.TempDir()
+	cfg.Agent.OpaPoliciesFolder = filepath.Join(parent, "missing")
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "opa-policies-folder parameter is invalid") || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("missing policies folder: got %v", err)
+	}
+
+	file := filepath.Join(parent, "policy-file")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Agent.OpaPoliciesFolder = file
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("file as policies folder: got %v", err)
+	}
+}
+
 func TestAnalyzerDataFolderMustExistAndBeDirectory(t *testing.T) {
 	cfg := config.NewConfigurationWithOptionsAndDefaults()
 	cfg.Agent.OpaPoliciesFolder = t.TempDir()
 	parent := t.TempDir()
 	cfg.Agent.DataFolder = filepath.Join(parent, "missing")
-	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "invalid data folder") {
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "data-folder parameter is invalid") || !strings.Contains(err.Error(), "does not exist") {
 		t.Fatalf("missing data folder: got %v", err)
 	}
 
@@ -67,8 +86,23 @@ func TestAnalyzerProductionRequiresStaticsFolder(t *testing.T) {
 	cfg.Agent.OpaPoliciesFolder = t.TempDir()
 	cfg.Server.ServerMode = string(config.ServerModeProd)
 
-	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "statics folder must be set") {
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "server-statics-folder parameter is invalid") || !strings.Contains(err.Error(), "path is empty") {
 		t.Fatalf("production mode without a static folder: got %v", err)
+	}
+
+	parent := t.TempDir()
+	cfg.Server.StaticsFolder = filepath.Join(parent, "missing")
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "server-statics-folder parameter is invalid") || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("production mode with missing static folder: got %v", err)
+	}
+
+	file := filepath.Join(parent, "static-file")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Server.StaticsFolder = file
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("production mode with a file as static folder: got %v", err)
 	}
 
 	cfg.Server.StaticsFolder = t.TempDir()

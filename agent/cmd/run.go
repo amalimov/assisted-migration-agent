@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/fatih/color"
 	"github.com/go-extras/cobraflags"
@@ -16,6 +15,7 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/agent/app"
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
+	"github.com/kubev2v/assisted-migration-agent/internal/util"
 )
 
 func NewRunCommand(cfg *config.Configuration) *cobra.Command {
@@ -64,19 +64,17 @@ func registerFlags(cmd *cobra.Command, config *config.Configuration) {
 }
 
 func validateConfiguration(cfg *config.Configuration) error {
-	if cfg.Agent.DataFolder == "" {
-		return errors.New("data folder must be set")
+	if valid, err := util.IsValidDirectory(cfg.Agent.DataFolder); !valid {
+		return fmt.Errorf("data-folder parameter is invalid: %w", err)
 	}
-	dataFolder, err := os.Stat(cfg.Agent.DataFolder)
-	if err != nil {
-		return fmt.Errorf("invalid data folder %q: %w", cfg.Agent.DataFolder, err)
-	}
-	if !dataFolder.IsDir() {
-		return fmt.Errorf("data folder %q is not a directory", cfg.Agent.DataFolder)
+	if valid, err := util.IsValidDirectory(cfg.Agent.OpaPoliciesFolder); !valid {
+		return fmt.Errorf("opa-policies-folder parameter is invalid: %w", err)
 	}
 
-	if config.ServerModeType(cfg.Server.ServerMode) == config.ServerModeProd && cfg.Server.StaticsFolder == "" {
-		return errors.New("statics folder must be set when server mode is production")
+	if config.ServerModeType(cfg.Server.ServerMode) == config.ServerModeProd {
+		if valid, err := util.IsValidDirectory(cfg.Server.StaticsFolder); !valid {
+			return fmt.Errorf("server-statics-folder parameter is invalid: %w", err)
+		}
 	}
 
 	if cfg.Server.HTTPPort < 1 || cfg.Server.HTTPPort > 65535 {
@@ -143,7 +141,7 @@ func validateUUID(value, name string) error {
 
 func registerServerFlags(flagSet *pflag.FlagSet, config *config.Configuration) {
 	flagSet.IntVar(&config.Server.HTTPPort, "server-http-port", config.Server.HTTPPort, "Port on which the HTTP server is listening")
-	flagSet.StringVar(&config.Server.StaticsFolder, "server-statics-folder", config.Server.StaticsFolder, "Path to statics folder")
+	flagSet.StringVar(&config.Server.StaticsFolder, "server-statics-folder", config.Server.StaticsFolder, "Existing directory for static files (required in production mode)")
 	flagSet.StringVar(&config.Server.ServerMode, "server-mode", config.Server.ServerMode, "Server mode: either prod or dev. If prod the statics folder must be set")
 }
 
@@ -154,7 +152,7 @@ func registerAuthenticationFlags(flagSet *pflag.FlagSet, config *config.Configur
 
 func registerAgentFlags(flagSet *pflag.FlagSet, config *config.Configuration) {
 	flagSet.StringVar(&config.Agent.Mode, "mode", config.Agent.Mode, "Agent mode: connected or disconnected")
-	flagSet.StringVar(&config.Agent.OpaPoliciesFolder, "opa-policies-folder", config.Agent.OpaPoliciesFolder, "Path to the OPA policies folder")
+	flagSet.StringVar(&config.Agent.OpaPoliciesFolder, "opa-policies-folder", config.Agent.OpaPoliciesFolder, "Existing directory containing OPA policies")
 	flagSet.StringVar(&config.Agent.ID, "agent-id", config.Agent.ID, "Unique identifier (UUID) for this agent")
 	flagSet.StringVar(&config.Agent.SourceID, "source-id", config.Agent.SourceID, "Source identifier (UUID) for this agent")
 	flagSet.StringVar(&config.Agent.Version, "version", config.Agent.Version, "Agent version to report to console")

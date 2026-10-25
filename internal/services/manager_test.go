@@ -51,9 +51,10 @@ var _ = Describe("ServiceManager", func() {
 
 		cfg = config.NewConfigurationWithOptionsAndDefaults(
 			config.WithAgent(config.Agent{
-				ID:       uuid.New().String(),
-				SourceID: uuid.New().String(),
-				Mode:     "disconnected",
+				ID:         uuid.New().String(),
+				SourceID:   uuid.New().String(),
+				Mode:       "disconnected",
+				DataFolder: tmpDir,
 			}),
 		)
 	})
@@ -65,9 +66,8 @@ var _ = Describe("ServiceManager", func() {
 	})
 
 	Describe("NewServiceManager", func() {
-		It("creates a service manager with all options", func() {
-			mgr := services.NewServiceManager(
-				services.WithDataFolder(cfg.Agent.DataFolder),
+		It("creates a service manager with a data folder and options", func() {
+			mgr := services.NewServiceManager(cfg.Agent.DataFolder,
 				services.WithPool(pool),
 			)
 			Expect(mgr).NotTo(BeNil())
@@ -96,7 +96,7 @@ var _ = Describe("ServiceManager", func() {
 
 	Describe("Stop", func() {
 		It("does not panic on uninitialized manager", func() {
-			mgr := services.NewServiceManager()
+			mgr := services.NewServiceManager(tmpDir)
 			Expect(func() { mgr.Stop(context.Background()) }).NotTo(Panic())
 		})
 	})

@@ -40,9 +40,9 @@
 // Production Mode (ServerMode = "prod"):
 //   - HTTPS with auto-generated self-signed certificate (1 year validity)
 //   - Gin runs in release mode
-//   - Optional static file serving from StaticsFolder
-//   - With static files, non-API routes serve index.html as an SPA fallback
-//   - With static files, API 404s return JSON error responses
+//   - Static file serving from StaticsFolder (required by product commands)
+//   - Non-API routes serve index.html as an SPA fallback
+//   - API 404s return JSON error responses
 //
 // # Server Lifecycle
 //
@@ -88,7 +88,7 @@
 //
 // # Static File Serving (Production Only)
 //
-// In production mode with StaticsFolder configured, the server serves:
+// In production mode, the server serves:
 //
 //	/static/*     → StaticsFolder/
 //	/             → StaticsFolder/index.html

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -12,6 +11,7 @@ import (
 
 	analyzerapp "github.com/kubev2v/assisted-migration-agent/analyzer/app"
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
+	"github.com/kubev2v/assisted-migration-agent/internal/util"
 )
 
 func NewRunCommand(cfg *config.Configuration) *cobra.Command {
@@ -30,30 +30,25 @@ func NewRunCommand(cfg *config.Configuration) *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.StringVar(&cfg.Agent.DataFolder, "data-folder", cfg.Agent.DataFolder, "Folder for analyzer databases and uploads")
-	flags.StringVar(&cfg.Agent.OpaPoliciesFolder, "opa-policies-folder", cfg.Agent.OpaPoliciesFolder, "Folder containing RVTools validation policies")
+	flags.StringVar(&cfg.Agent.OpaPoliciesFolder, "opa-policies-folder", cfg.Agent.OpaPoliciesFolder, "Existing directory containing RVTools validation policies")
 	flags.IntVar(&cfg.Server.HTTPPort, "server-http-port", cfg.Server.HTTPPort, "Analyzer HTTP port")
 	flags.StringVar(&cfg.Server.ServerMode, "server-mode", cfg.Server.ServerMode, "Server mode: dev or prod")
-	flags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Path to static files (required in production mode)")
+	flags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Existing directory for static files (required in production mode)")
 	cobraflags.CobraOnInitialize("ANALYZER", cmd)
 	return cmd
 }
 
 func validateConfiguration(cfg *config.Configuration) error {
-	if cfg.Agent.DataFolder == "" {
-		return errors.New("data folder must be set")
+	if valid, err := util.IsValidDirectory(cfg.Agent.DataFolder); !valid {
+		return fmt.Errorf("data-folder parameter is invalid: %w", err)
 	}
-	dataFolder, err := os.Stat(cfg.Agent.DataFolder)
-	if err != nil {
-		return fmt.Errorf("invalid data folder %q: %w", cfg.Agent.DataFolder, err)
+	if valid, err := util.IsValidDirectory(cfg.Agent.OpaPoliciesFolder); !valid {
+		return fmt.Errorf("opa-policies-folder parameter is invalid: %w", err)
 	}
-	if !dataFolder.IsDir() {
-		return fmt.Errorf("data folder %q is not a directory", cfg.Agent.DataFolder)
-	}
-	if cfg.Agent.OpaPoliciesFolder == "" {
-		return errors.New("opa policies folder must be set")
-	}
-	if config.ServerModeType(cfg.Server.ServerMode) == config.ServerModeProd && cfg.Server.StaticsFolder == "" {
-		return errors.New("statics folder must be set when server mode is production")
+	if config.ServerModeType(cfg.Server.ServerMode) == config.ServerModeProd {
+		if valid, err := util.IsValidDirectory(cfg.Server.StaticsFolder); !valid {
+			return fmt.Errorf("server-statics-folder parameter is invalid: %w", err)
+		}
 	}
 	if cfg.Server.HTTPPort < 1 || cfg.Server.HTTPPort > 65535 {
 		return fmt.Errorf("invalid http-port %d: must be between 1 and 65535", cfg.Server.HTTPPort)

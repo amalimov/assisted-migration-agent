@@ -49,7 +49,7 @@ var _ = Describe("Console Service", func() {
 
 		// mgr has no collector or collection DB registered; GetCollector/LatestEventService
 		// resolve to "not found", which the console pipeline treats as "nothing to send".
-		mgr = services.NewServiceManager(services.WithPool(pool))
+		mgr = services.NewServiceManager(tmpDir, services.WithPool(pool))
 
 		cfg = config.Agent{
 			ID:             uuid.New().String(),

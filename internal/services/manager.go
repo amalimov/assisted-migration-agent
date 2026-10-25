@@ -30,12 +30,6 @@ type ServiceManager struct {
 
 type ServiceManagerOption func(*ServiceManager)
 
-func WithDataFolder(dataFolder string) ServiceManagerOption {
-	return func(m *ServiceManager) {
-		m.dataFolder = dataFolder
-	}
-}
-
 func WithPool(pool *store.Pool) ServiceManagerOption {
 	return func(m *ServiceManager) {
 		m.pool = pool
@@ -70,8 +64,8 @@ func WithForecasterService(s *ForecasterService) ServiceManagerOption {
 	return func(m *ServiceManager) { m.forecaster = s }
 }
 
-func NewServiceManager(opts ...ServiceManagerOption) *ServiceManager {
-	m := &ServiceManager{}
+func NewServiceManager(dataFolder string, opts ...ServiceManagerOption) *ServiceManager {
+	m := &ServiceManager{dataFolder: dataFolder}
 	for _, opt := range opts {
 		opt(m)
 	}

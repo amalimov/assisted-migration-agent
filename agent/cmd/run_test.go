@@ -299,6 +299,7 @@ var _ = Describe("Run Command", func() {
 			cfg.Agent.SourceID = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 			cfg.Agent.Mode = "disconnected"
 			cfg.Agent.DataFolder = GinkgoT().TempDir()
+			cfg.Agent.OpaPoliciesFolder = GinkgoT().TempDir()
 			cfg.Server.ServerMode = "dev"
 			cfg.Server.HTTPPort = 8000
 			cfg.Auth.Enabled = false
@@ -309,13 +310,41 @@ var _ = Describe("Run Command", func() {
 				cfg.Agent.DataFolder = filepath.Join(GinkgoT().TempDir(), "missing")
 				err := validateConfiguration(cfg)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid data folder"))
+				Expect(err.Error()).To(ContainSubstring("data-folder parameter is invalid"))
+				Expect(err.Error()).To(ContainSubstring("does not exist"))
 			})
 
 			It("should reject a file as the data folder", func() {
 				path := filepath.Join(GinkgoT().TempDir(), "data-file")
 				Expect(os.WriteFile(path, nil, 0600)).To(Succeed())
 				cfg.Agent.DataFolder = path
+				err := validateConfiguration(cfg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("not a directory"))
+			})
+		})
+
+		Context("opa-policies-folder validation", func() {
+			It("should reject an empty policies folder", func() {
+				cfg.Agent.OpaPoliciesFolder = ""
+				err := validateConfiguration(cfg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("opa-policies-folder parameter is invalid"))
+				Expect(err.Error()).To(ContainSubstring("path is empty"))
+			})
+
+			It("should reject a missing policies folder", func() {
+				cfg.Agent.OpaPoliciesFolder = filepath.Join(GinkgoT().TempDir(), "missing")
+				err := validateConfiguration(cfg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("opa-policies-folder parameter is invalid"))
+				Expect(err.Error()).To(ContainSubstring("does not exist"))
+			})
+
+			It("should reject a file as the policies folder", func() {
+				path := filepath.Join(GinkgoT().TempDir(), "policy-file")
+				Expect(os.WriteFile(path, nil, 0600)).To(Succeed())
+				cfg.Agent.OpaPoliciesFolder = path
 				err := validateConfiguration(cfg)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("not a directory"))
@@ -449,7 +478,7 @@ var _ = Describe("Run Command", func() {
 			It("should accept 'prod' server mode with statics folder", func() {
 				// Arrange
 				cfg.Server.ServerMode = "prod"
-				cfg.Server.StaticsFolder = "/var/www/statics"
+				cfg.Server.StaticsFolder = GinkgoT().TempDir()
 
 				// Act
 				err := validateConfiguration(cfg)
@@ -500,7 +529,27 @@ var _ = Describe("Run Command", func() {
 
 				// Assert
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("statics folder must be set"))
+				Expect(err.Error()).To(ContainSubstring("server-statics-folder parameter is invalid"))
+				Expect(err.Error()).To(ContainSubstring("path is empty"))
+			})
+
+			It("should reject a missing statics folder in prod mode", func() {
+				cfg.Server.ServerMode = "prod"
+				cfg.Server.StaticsFolder = filepath.Join(GinkgoT().TempDir(), "missing")
+				err := validateConfiguration(cfg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("server-statics-folder parameter is invalid"))
+				Expect(err.Error()).To(ContainSubstring("does not exist"))
+			})
+
+			It("should reject a file as the statics folder in prod mode", func() {
+				path := filepath.Join(GinkgoT().TempDir(), "static-file")
+				Expect(os.WriteFile(path, nil, 0600)).To(Succeed())
+				cfg.Server.ServerMode = "prod"
+				cfg.Server.StaticsFolder = path
+				err := validateConfiguration(cfg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("not a directory"))
 			})
 		})
 

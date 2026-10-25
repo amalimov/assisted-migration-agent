@@ -166,14 +166,13 @@ func NewAgentServiceManager(cfg *config.Configuration, pool *store.Pool, console
 	credentials.WithKeyManager(keyMgr)
 	managerOpts := append([]service.ServiceManagerOption{}, opts...)
 	managerOpts = append(managerOpts,
-		service.WithDataFolder(cfg.Agent.DataFolder),
 		service.WithPool(pool),
 		service.WithCollectionService(service.NewCollectionService(pool)),
 		service.WithCredentialsService(credentials),
 		service.WithVddkService(service.NewVddkService(cfg.Agent.DataFolder, pool)),
 		service.WithForecasterService(service.NewForecasterService(pool, credentials)),
 	)
-	manager := service.NewServiceManager(managerOpts...)
+	manager := service.NewServiceManager(cfg.Agent.DataFolder, managerOpts...)
 
 	// The console needs the manager for status reporting, so it is attached last.
 	consoleService, err := service.NewConsoleService(cfg.Agent, consoleClient, manager, mainStore)
