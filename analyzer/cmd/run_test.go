@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -37,6 +39,25 @@ func TestAnalyzerConfigurationRequiresLocalInputs(t *testing.T) {
 	cfg.Agent.OpaPoliciesFolder = t.TempDir()
 	if err := validateConfiguration(cfg); err != nil {
 		t.Fatalf("valid analyzer configuration: %v", err)
+	}
+}
+
+func TestAnalyzerDataFolderMustExistAndBeDirectory(t *testing.T) {
+	cfg := config.NewConfigurationWithOptionsAndDefaults()
+	cfg.Agent.OpaPoliciesFolder = t.TempDir()
+	parent := t.TempDir()
+	cfg.Agent.DataFolder = filepath.Join(parent, "missing")
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "invalid data folder") {
+		t.Fatalf("missing data folder: got %v", err)
+	}
+
+	file := filepath.Join(parent, "data-file")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Agent.DataFolder = file
+	if err := validateConfiguration(cfg); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("file as data folder: got %v", err)
 	}
 }
 

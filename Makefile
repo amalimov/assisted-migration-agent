@@ -184,6 +184,7 @@ run:
 	$(BINARY_PATH) run --opa-policies-folder $(OPA_POLICIES_FOLDER) --agent-id $(AGENT_ID) --source-id $(SOURCE_ID) --data-folder $(CURDIR)
 
 run.analyzer: build.analyzer
+	@mkdir -p "$(ANALYZER_DATA_FOLDER)"
 	$(ANALYZER_BINARY_PATH) run --opa-policies-folder $(OPA_POLICIES_FOLDER) --data-folder $(ANALYZER_DATA_FOLDER)
 
 AGENT_LOCAL_DATA_DIR ?= $(CURDIR)/.local-data

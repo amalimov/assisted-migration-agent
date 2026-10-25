@@ -42,6 +42,13 @@ func validateConfiguration(cfg *config.Configuration) error {
 	if cfg.Agent.DataFolder == "" {
 		return errors.New("data folder must be set")
 	}
+	dataFolder, err := os.Stat(cfg.Agent.DataFolder)
+	if err != nil {
+		return fmt.Errorf("invalid data folder %q: %w", cfg.Agent.DataFolder, err)
+	}
+	if !dataFolder.IsDir() {
+		return fmt.Errorf("data folder %q is not a directory", cfg.Agent.DataFolder)
+	}
 	if cfg.Agent.OpaPoliciesFolder == "" {
 		return errors.New("opa policies folder must be set")
 	}

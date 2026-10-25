@@ -24,6 +24,7 @@ Build and run it locally with separate data and policy folders:
 
 ```bash
 make build.analyzer
+mkdir -p ./analyzer/data
 bin/rvtools-analyzer run --data-folder ./analyzer/data --opa-policies-folder ./policies --server-http-port 8001
 ```
 
@@ -46,12 +47,13 @@ The current Agent UI bundle calls `/api/v2`, while Analyzer exposes `/api/v1`. I
 ### Basic Usage
 
 ```bash
-bin/agent run --agent-id <uuid> --source-id <uuid> --opa-policies-folder <path>
+bin/agent run --agent-id <uuid> --source-id <uuid> --opa-policies-folder <path> --data-folder <existing-directory>
 ```
 
 Required flags:
 - `--agent-id` and `--source-id` must be valid UUIDs
 - `--opa-policies-folder` must point to a directory containing OPA policy files for VM validation
+- `--data-folder` must point to an existing directory
 
 ### Examples
 
@@ -61,7 +63,8 @@ Run in disconnected mode (default):
 bin/agent run \
   --agent-id 550e8400-e29b-41d4-a716-446655440000 \
   --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8 \
-  --opa-policies-folder /path/to/policies
+  --opa-policies-folder /path/to/policies \
+  --data-folder /path/to/data
 ```
 
 Run in connected mode with authentication:
@@ -71,6 +74,7 @@ bin/agent run \
   --agent-id 550e8400-e29b-41d4-a716-446655440000 \
   --source-id 6ba7b810-9dad-11d1-80b4-00c04fd430c8 \
   --opa-policies-folder /path/to/policies \
+  --data-folder /path/to/data \
   --mode connected \
   --authentication-enabled \
   --authentication-jwt-filepath /path/to/jwt
@@ -95,7 +99,7 @@ bin/agent run \
 | `--agent-id` | *required* | Unique identifier (UUID) for this agent |
 | `--source-id` | *required* | Source identifier (UUID) for this agent |
 | `--mode` | `disconnected` | `connected` \| `disconnected` |
-| `--data-folder` | — | Path to persistent data folder (uses in-memory if not set) |
+| `--data-folder` | *required* | Existing directory for persistent data |
 | `--opa-policies-folder` | *required* | Path to OPA policies folder for VM validation |
 | `--version` | `v0.0.0` | Agent version to report to console |
 | `--legacy-status-enabled` | `true` | Use legacy status like waiting-for-credentials |

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -297,10 +298,28 @@ var _ = Describe("Run Command", func() {
 			cfg.Agent.ID = "550e8400-e29b-41d4-a716-446655440000"
 			cfg.Agent.SourceID = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 			cfg.Agent.Mode = "disconnected"
-			cfg.Agent.DataFolder = "/tmp/test-data"
+			cfg.Agent.DataFolder = GinkgoT().TempDir()
 			cfg.Server.ServerMode = "dev"
 			cfg.Server.HTTPPort = 8000
 			cfg.Auth.Enabled = false
+		})
+
+		Context("data-folder validation", func() {
+			It("should reject a missing data folder", func() {
+				cfg.Agent.DataFolder = filepath.Join(GinkgoT().TempDir(), "missing")
+				err := validateConfiguration(cfg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid data folder"))
+			})
+
+			It("should reject a file as the data folder", func() {
+				path := filepath.Join(GinkgoT().TempDir(), "data-file")
+				Expect(os.WriteFile(path, nil, 0600)).To(Succeed())
+				cfg.Agent.DataFolder = path
+				err := validateConfiguration(cfg)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("not a directory"))
+			})
 		})
 
 		// Given a valid configuration
