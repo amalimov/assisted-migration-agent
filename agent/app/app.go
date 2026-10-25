@@ -120,7 +120,7 @@ func initV2(cfg *config.Configuration) (*server.Server, func(), error) {
 		return nil, nil, fmt.Errorf("failed to load v2 swagger spec: %w", err)
 	}
 
-	srv, err := server.NewServer(cfg, map[string]server.APIGroup{
+	srv, err := server.NewServer(cfg.Server, map[string]server.APIGroup{
 		apiV2: {
 			Swagger: swagger,
 			RegisterFn: func(router *gin.RouterGroup) {

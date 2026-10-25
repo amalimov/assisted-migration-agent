@@ -40,30 +40,34 @@
 // Production Mode (ServerMode = "prod"):
 //   - HTTPS with auto-generated self-signed certificate (1 year validity)
 //   - Gin runs in release mode
-//   - Static file serving from StaticsFolder
-//   - SPA fallback: non-API routes serve index.html
-//   - API 404s return JSON error response
+//   - Optional static file serving from StaticsFolder
+//   - With static files, non-API routes serve index.html as an SPA fallback
+//   - With static files, API 404s return JSON error responses
 //
 // # Server Lifecycle
 //
 // Creation:
 //
-//	server, err := server.NewServer(cfg, func(router *gin.RouterGroup) {
-//	    v1.RegisterHandlers(router, handler)
+//	srv, err := server.NewServer(cfg.Server, map[string]server.APIGroup{
+//	    "/api/v2": {
+//	        RegisterFn: func(router *gin.RouterGroup) {
+//	            v2.RegisterHandlers(router, handler)
+//	        },
+//	    },
 //	})
 //
-// The registerHandlerFn callback receives a RouterGroup prefixed with /api/v2.
+// Each RegisterFn callback receives a RouterGroup with its configured prefix.
 //
 // Starting:
 //
 //	// Blocks until error or shutdown
-//	err := server.Start(ctx)
+//	err := srv.Start(ctx)
 //
 // Start automatically chooses HTTP or HTTPS based on TLS configuration.
 //
 // Stopping:
 //
-//	server.Stop(ctx)
+//	srv.Stop(ctx)
 //
 // Performs graceful shutdown, waiting for in-flight requests to complete.
 //
@@ -84,7 +88,7 @@
 //
 // # Static File Serving (Production Only)
 //
-// In production mode, the server serves:
+// In production mode with StaticsFolder configured, the server serves:
 //
 //	/static/*     → StaticsFolder/
 //	/             → StaticsFolder/index.html
@@ -102,16 +106,18 @@
 //
 // # Usage Example
 //
-//	cfg := &config.Configuration{
-//	    Server: config.Server{
-//	        ServerMode:    "prod",
-//	        HTTPPort:      8443,
-//	        StaticsFolder: "/app/static",
-//	    },
+//	cfg := config.Server{
+//	    ServerMode:    "prod",
+//	    HTTPPort:      8443,
+//	    StaticsFolder: "/app/static",
 //	}
 //
-//	srv, err := server.NewServer(cfg, func(router *gin.RouterGroup) {
-//	    v2.RegisterHandlers(router, myHandler)
+//	srv, err := server.NewServer(cfg, map[string]server.APIGroup{
+//	    "/api/v2": {
+//	        RegisterFn: func(router *gin.RouterGroup) {
+//	            v2.RegisterHandlers(router, myHandler)
+//	        },
+//	    },
 //	})
 //	if err != nil {
 //	    log.Fatal(err)

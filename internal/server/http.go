@@ -39,12 +39,7 @@ type APIGroup struct {
 	RegisterFn func(router *gin.RouterGroup)
 }
 
-func NewServer(cfg *config.Configuration, groups map[string]APIGroup) (*Server, error) {
-	return NewServerWithConfig(cfg.Server, groups)
-}
-
-// NewServerWithConfig constructs an API server from product-neutral server settings.
-func NewServerWithConfig(cfg config.Server, groups map[string]APIGroup) (*Server, error) {
+func NewServer(cfg config.Server, groups map[string]APIGroup) (*Server, error) {
 	gin.SetMode(gin.DebugMode)
 	if cfg.ServerMode == ProductionServer {
 		gin.SetMode(gin.ReleaseMode)

@@ -22,6 +22,8 @@ IMAGE_NAME ?= assisted-migration-agent
 IMAGE_TAG ?= latest
 AGENT_UI_IMAGE ?= quay.io/redhat-user-workloads/assisted-migration-tenant/migration-planner-agent-ui
 AGENT_UI_IMAGE_TAG ?= latest
+ANALYZER_UI_IMAGE ?= $(AGENT_UI_IMAGE)
+ANALYZER_UI_IMAGE_TAG ?= $(AGENT_UI_IMAGE_TAG)
 
 GOBASE=$(shell pwd)
 GOBIN=$(GOBASE)/bin
@@ -118,9 +120,12 @@ image:
 
 image.analyzer:
 	@echo "Building RVTools Analyzer image $(ANALYZER_IMAGE_NAME):$(ANALYZER_IMAGE_TAG)..."
+	@echo "   Using UI image: $(ANALYZER_UI_IMAGE):$(ANALYZER_UI_IMAGE_TAG)"
 	$(PODMAN) build \
 		--build-arg ANALYZER_GIT_COMMIT=$(ANALYZER_GIT_COMMIT) \
 		--build-arg ANALYZER_VERSION=$(ANALYZER_VERSION) \
+		--build-arg ANALYZER_UI_IMAGE=$(ANALYZER_UI_IMAGE) \
+		--build-arg ANALYZER_UI_IMAGE_TAG=$(ANALYZER_UI_IMAGE_TAG) \
 		-t $(ANALYZER_IMAGE_NAME):$(ANALYZER_IMAGE_TAG) \
 		-f analyzer/Containerfile .
 

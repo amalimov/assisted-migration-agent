@@ -19,7 +19,7 @@ import (
 
 var _ = Describe("HTTP Server", func() {
 	var (
-		cfg     *config.Configuration
+		cfg     config.Server
 		groups  map[string]server.APIGroup
 		tempDir string
 		srv     *server.Server
@@ -59,12 +59,10 @@ var _ = Describe("HTTP Server", func() {
 
 	Context("dev server mode", func() {
 		BeforeEach(func() {
-			cfg = &config.Configuration{
-				Server: config.Server{
-					ServerMode:    server.DevServer,
-					HTTPPort:      18080,
-					StaticsFolder: tempDir,
-				},
+			cfg = config.Server{
+				ServerMode:    server.DevServer,
+				HTTPPort:      18080,
+				StaticsFolder: tempDir,
 			}
 		})
 
@@ -84,7 +82,7 @@ var _ = Describe("HTTP Server", func() {
 			}()
 			time.Sleep(100 * time.Millisecond)
 
-			resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/v1/vms", cfg.Server.HTTPPort))
+			resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/v1/vms", cfg.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -93,12 +91,10 @@ var _ = Describe("HTTP Server", func() {
 
 	Context("production server mode", func() {
 		BeforeEach(func() {
-			cfg = &config.Configuration{
-				Server: config.Server{
-					ServerMode:    server.ProductionServer,
-					HTTPPort:      18443,
-					StaticsFolder: tempDir,
-				},
+			cfg = config.Server{
+				ServerMode:    server.ProductionServer,
+				HTTPPort:      18443,
+				StaticsFolder: tempDir,
 			}
 		})
 
@@ -124,7 +120,7 @@ var _ = Describe("HTTP Server", func() {
 				},
 			}
 
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/api/v1/vms", cfg.Server.HTTPPort))
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/api/v1/vms", cfg.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -149,7 +145,7 @@ var _ = Describe("HTTP Server", func() {
 				},
 			}
 
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/", cfg.Server.HTTPPort))
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/", cfg.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -174,7 +170,7 @@ var _ = Describe("HTTP Server", func() {
 				},
 			}
 
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/api/v1/nonexistent", cfg.Server.HTTPPort))
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/api/v1/nonexistent", cfg.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(404))
 			_ = resp.Body.Close()
@@ -199,7 +195,7 @@ var _ = Describe("HTTP Server", func() {
 				},
 			}
 
-			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/some/spa/route", cfg.Server.HTTPPort))
+			resp, err := client.Get(fmt.Sprintf("https://localhost:%d/some/spa/route", cfg.HTTPPort))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(200))
 			_ = resp.Body.Close()
@@ -228,7 +224,7 @@ var _ = Describe("HTTP Server", func() {
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 				},
 			}
-			_, err = client.Get(fmt.Sprintf("https://localhost:%d/api/v1/vms", cfg.Server.HTTPPort))
+			_, err = client.Get(fmt.Sprintf("https://localhost:%d/api/v1/vms", cfg.HTTPPort))
 			Expect(err).To(HaveOccurred())
 		})
 	})

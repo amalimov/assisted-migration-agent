@@ -37,7 +37,9 @@ curl http://localhost:8001/api/v1/virtualmachines
 
 `GET /api/v1/collector` reports when analysis is `collected`. The full API contract is in [analyzer/api/v1/openapi.yaml](analyzer/api/v1/openapi.yaml). Native runs need DuckDB's SQLite scanner extension available in the data folder or downloadable on first use.
 
-Build the Analyzer image with `make image.analyzer`. It includes OPA policies and the DuckDB extension and uses `/var/lib/analyzer` for persistent data. The Agent image remains `make image`.
+Build the Analyzer image with `make image.analyzer`. It bundles the same UI image used by the Agent RVTools image for now, along with OPA policies and the DuckDB extension. The image serves UI files from `/app/static` and uses `/var/lib/analyzer` for persistent data. Set `ANALYZER_UI_IMAGE` and `ANALYZER_UI_IMAGE_TAG` to select a different UI image. The Agent image remains `make image`.
+
+The current Agent UI bundle calls `/api/v2`, while Analyzer exposes `/api/v1`. Its page and assets load in the Analyzer image, but its data views need an Analyzer-compatible UI build.
 
 ## Run
 

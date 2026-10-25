@@ -79,7 +79,7 @@ func bootstrapAnalyzer(cfg *config.Configuration) (*server.Server, func(), error
 		return nil, nil, fmt.Errorf("load analyzer API spec: %w", err)
 	}
 	h := analyzerHandlers.NewHandler(*cfg, svc)
-	srv, err := server.NewServerWithConfig(cfg.Server, map[string]server.APIGroup{
+	srv, err := server.NewServer(cfg.Server, map[string]server.APIGroup{
 		apiV1: {
 			Swagger: swagger,
 			RegisterFn: func(router *gin.RouterGroup) {

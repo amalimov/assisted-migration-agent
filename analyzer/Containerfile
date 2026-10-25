@@ -1,3 +1,7 @@
+ARG ANALYZER_UI_IMAGE=quay.io/redhat-user-workloads/assisted-migration-tenant/migration-planner-agent-ui
+ARG ANALYZER_UI_IMAGE_TAG=latest
+FROM --platform=linux/amd64 ${ANALYZER_UI_IMAGE}:${ANALYZER_UI_IMAGE_TAG} AS ui-builder
+
 FROM registry.access.redhat.com/ubi9/go-toolset AS backend-builder
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -8,7 +12,6 @@ COPY analyzer/main.go ./analyzer/main.go
 COPY analyzer/api ./analyzer/api
 COPY analyzer/app ./analyzer/app
 COPY analyzer/cmd ./analyzer/cmd
-COPY analyzer/config ./analyzer/config
 COPY analyzer/handlers ./analyzer/handlers
 COPY internal ./internal
 COPY pkg ./pkg
@@ -47,14 +50,15 @@ FROM registry.access.redhat.com/ubi9/ubi
 RUN dnf install -y ca-certificates tzdata && dnf clean all
 WORKDIR /app
 COPY --from=backend-builder /tmp/rvtools-analyzer /app/rvtools-analyzer
+COPY --from=ui-builder /apps/agent-ui/dist /app/static
 COPY --from=opa-builder /app/policies /app/policies
 COPY --from=duckdb-extensions /extensions /app/extensions
 RUN mkdir -p /var/lib/analyzer && \
-    chown -R 1001:0 /app/policies /app/extensions /var/lib/analyzer
+    chown -R 1001:0 /app/static /app/policies /app/extensions /var/lib/analyzer
 RUN printf '#!/bin/sh\n\
 cp --remove-destination /app/extensions/*.duckdb_extension /var/lib/analyzer/ || exit 1\n\
 exec /app/rvtools-analyzer "$@"\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 USER 1001
 EXPOSE 8000
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["run", "--server-mode", "prod", "--opa-policies-folder", "/app/policies", "--data-folder", "/var/lib/analyzer"]
+CMD ["run", "--server-mode", "prod", "--server-statics-folder", "/app/static", "--opa-policies-folder", "/app/policies", "--data-folder", "/var/lib/analyzer"]

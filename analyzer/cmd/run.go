@@ -33,7 +33,7 @@ func NewRunCommand(cfg *config.Configuration) *cobra.Command {
 	flags.StringVar(&cfg.Agent.OpaPoliciesFolder, "opa-policies-folder", cfg.Agent.OpaPoliciesFolder, "Folder containing RVTools validation policies")
 	flags.IntVar(&cfg.Server.HTTPPort, "server-http-port", cfg.Server.HTTPPort, "Analyzer HTTP port")
 	flags.StringVar(&cfg.Server.ServerMode, "server-mode", cfg.Server.ServerMode, "Server mode: dev or prod")
-	flags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Optional separately built static files folder (production mode)")
+	flags.StringVar(&cfg.Server.StaticsFolder, "server-statics-folder", cfg.Server.StaticsFolder, "Path to static files (required in production mode)")
 	cobraflags.CobraOnInitialize("ANALYZER", cmd)
 	return cmd
 }
@@ -44,6 +44,9 @@ func validateConfiguration(cfg *config.Configuration) error {
 	}
 	if cfg.Agent.OpaPoliciesFolder == "" {
 		return errors.New("opa policies folder must be set")
+	}
+	if config.ServerModeType(cfg.Server.ServerMode) == config.ServerModeProd && cfg.Server.StaticsFolder == "" {
+		return errors.New("statics folder must be set when server mode is production")
 	}
 	if cfg.Server.HTTPPort < 1 || cfg.Server.HTTPPort > 65535 {
 		return fmt.Errorf("invalid http-port %d: must be between 1 and 65535", cfg.Server.HTTPPort)
