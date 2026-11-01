@@ -21,7 +21,9 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
 	"github.com/kubev2v/assisted-migration-agent/internal/server"
 	"github.com/kubev2v/assisted-migration-agent/internal/services"
+	"github.com/kubev2v/assisted-migration-agent/internal/services/estimations"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/assisted-migration-agent/internal/vmselection"
 )
 
 const apiV1 = "/api/v1"
@@ -78,7 +80,10 @@ func bootstrapAnalyzer(cfg *config.Configuration) (*server.Server, func(), error
 		cleanupPool()
 		return nil, nil, fmt.Errorf("load analyzer API spec: %w", err)
 	}
-	h := analyzerHandlers.NewHandler(*cfg, svc)
+	h := analyzerHandlers.NewHandler(*cfg, svc, analyzerHandlers.EstimationDependencies{
+		Resolver: vmselection.NewResolver(pool),
+		Service:  estimations.NewService(),
+	})
 	srv, err := server.NewServer(cfg.Server, map[string]server.APIGroup{
 		apiV1: {
 			Swagger: swagger,

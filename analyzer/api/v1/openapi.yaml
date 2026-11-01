@@ -26,6 +26,9 @@ tags:
 - name: Rightsizing
   description: Rightsizing reports and cluster/VM utilization
 
+- name: Estimations
+  description: Migration complexity and time estimates
+
 - name: Version
   description: Analyzer version information
 
@@ -994,8 +997,465 @@ paths:
               schema:
                 $ref: '#/components/schemas/AnalyzerStatus'
 
+  # ── Estimations ──────────────────────────────────────────────────────────
+  /collections/{id}/complexity-estimation:
+    post:
+      tags: [Estimations]
+      summary: Estimate migration complexity for selected VMs in a collection
+      operationId: calculateMigrationComplexity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrationComplexitySelectionRequest'
+      responses:
+        '200':
+          description: Planner-compatible complexity estimation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationComplexityResponse'
+        '400':
+          description: Invalid selection or no eligible VMs
+        '404':
+          description: Collection or selected resource not found
+        '500':
+          description: Internal server error
+
+  /complexity-estimation:
+    post:
+      tags: [Estimations]
+      summary: Estimate migration complexity in the latest collection
+      operationId: calculateLatestMigrationComplexity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrationComplexitySelectionRequest'
+      responses:
+        '200':
+          description: Planner-compatible complexity estimation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationComplexityResponse'
+        '400':
+          description: Invalid selection or no eligible VMs
+        '404':
+          description: No collection or selected resource found
+        '500':
+          description: Internal server error
+
+  /collections/{id}/migration-estimation:
+    post:
+      tags: [Estimations]
+      summary: Estimate migration time for selected VMs in a collection
+      operationId: calculateMigrationEstimation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrationTimeSelectionRequest'
+      responses:
+        '200':
+          description: Planner-compatible migration time estimation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationEstimationResponse'
+        '400':
+          description: Invalid selection, options, or no eligible VMs
+        '404':
+          description: Collection or selected resource not found
+        '500':
+          description: Internal server error
+
+  /migration-estimation:
+    post:
+      tags: [Estimations]
+      summary: Estimate migration time in the latest collection
+      operationId: calculateLatestMigrationEstimation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrationTimeSelectionRequest'
+      responses:
+        '200':
+          description: Planner-compatible migration time estimation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationEstimationResponse'
+        '400':
+          description: Invalid selection, options, or no eligible VMs
+        '404':
+          description: No collection or selected resource found
+        '500':
+          description: Internal server error
+
+  /collections/{id}/migration-estimation/by-complexity:
+    post:
+      tags: [Estimations]
+      summary: Estimate migration time by complexity for selected VMs in a collection
+      operationId: calculateMigrationEstimationByComplexity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrationTimeSelectionRequest'
+      responses:
+        '200':
+          description: Planner-compatible migration time by complexity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationEstimationByComplexityResponse'
+        '400':
+          description: Invalid selection, options, or no eligible VMs
+        '404':
+          description: Collection or selected resource not found
+        '500':
+          description: Internal server error
+
+  /migration-estimation/by-complexity:
+    post:
+      tags: [Estimations]
+      summary: Estimate migration time by complexity in the latest collection
+      operationId: calculateLatestMigrationEstimationByComplexity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrationTimeSelectionRequest'
+      responses:
+        '200':
+          description: Planner-compatible migration time by complexity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationEstimationByComplexityResponse'
+        '400':
+          description: Invalid selection, options, or no eligible VMs
+        '404':
+          description: No collection or selected resource found
+        '500':
+          description: Internal server error
 components:
   schemas:
+    # ── Estimations ───────────────────────────────────────────────────────
+    VMEstimationSelection:
+      type: object
+      required: [include]
+      additionalProperties: false
+      properties:
+        include:
+          $ref: '#/components/schemas/VMEstimationSelectors'
+
+    VMEstimationSelectors:
+      type: object
+      additionalProperties: false
+      properties:
+        all:
+          type: boolean
+          description: Select all VMs in the requested collection; cannot be combined with other selectors.
+        vms:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        groups:
+          type: array
+          items:
+            type: string
+            format: uuid
+        clusters:
+          type: array
+          description: Existing VM.Cluster values in the requested collection.
+          items:
+            type: string
+            minLength: 1
+
+    MigrationComplexitySelectionRequest:
+      type: object
+      required: [selection]
+      additionalProperties: false
+      properties:
+        selection:
+          $ref: '#/components/schemas/VMEstimationSelection'
+
+    MigrationTimeSelectionRequest:
+      type: object
+      required: [selection]
+      additionalProperties: false
+      properties:
+        selection:
+          $ref: '#/components/schemas/VMEstimationSelection'
+        estimationSchema:
+          type: array
+          description: Planner schemas to run; omitted or empty runs both.
+          items:
+            type: string
+            enum: [network-based, storage-offload]
+        params:
+          type: object
+          description: Planner calculator parameter overrides.
+          additionalProperties: true
+
+    MigrationComplexityResponse:
+      type: object
+      description: Migration complexity estimation results
+      properties:
+        complexityByDisk:
+          type: array
+          description: >
+            Disk-size complexity scores, one entry per score level (1-4).
+            Score 1 is the least complex disk footprint; score 4 is the most complex.
+            Scores correspond to provisioned disk size: 1 (<=10 TB), 2 (<=20 TB),
+            3 (<=50 TB), 4 (>50 TB). All four score levels are always present.
+          items:
+            $ref: "#/components/schemas/ComplexityDiskScoreEntry"
+        complexityByOS:
+          type: array
+          description: >
+            OS complexity scores, one entry per score level (0-4).
+            Score 1 indicates the least complex OS to migrate; score 0 indicates an
+            OS with unknown complexity. All five score levels are always present.
+          items:
+            $ref: "#/components/schemas/ComplexityOSScoreEntry"
+        diskSizeRatings:
+          type: object
+          description: >
+            Static lookup table mapping each disk-size tier label to its numeric complexity
+            score. The content is identical for every selection and reflects the DiskSizeScores
+            configuration in the complexity package.
+          additionalProperties:
+            type: integer
+        osRatings:
+          type: object
+          description: >
+            Per-OS-name score for every OS found in the selected VMs. Keys are the
+            OS name strings exactly as they appear in vms.osInfo; values are the numeric
+            complexity score assigned by ClassifyOS (0 = unknown, 1-4 = increasing
+            complexity). The map contains one entry per distinct selected OS name,
+            regardless of how many VMs run it.
+          additionalProperties:
+            type: integer
+        complexityByOSName:
+          type: array
+          description: >
+            Per-OS-name complexity breakdown. One entry per distinct OS name found in the
+            selected VMs. Each entry carries the OS name string, its numeric
+            complexity score (0–4), and the number of VMs running it.
+          items:
+            $ref: "#/components/schemas/ComplexityOSNameEntry"
+      required:
+        - complexityByDisk
+        - complexityByOS
+        - diskSizeRatings
+        - osRatings
+        - complexityByOSName
+
+    ComplexityDiskScoreEntry:
+      type: object
+      description: One entry in the disk complexity breakdown
+      properties:
+        score:
+          type: integer
+          description: >
+            Complexity score from 1 to 4, where 1 is the least complex disk footprint
+            and 4 is the most complex. Score 1: <=10 TB provisioned; score 2: <=20 TB;
+            score 3: <=50 TB; score 4: >50 TB.
+        vmCount:
+          type: integer
+          description: Number of VMs at this complexity score
+        totalSizeTB:
+          type: number
+          format: double
+          description: Total provisioned storage in TB for VMs at this score
+      required:
+        - score
+        - vmCount
+        - totalSizeTB
+
+    ComplexityOSScoreEntry:
+      type: object
+      description: One entry in the OS complexity breakdown
+      properties:
+        score:
+          type: integer
+          description: >
+            Complexity score from 0 to 4, where 1 indicates the least complex OS
+            to migrate and 0 indicates an OS with unknown complexity.
+        vmCount:
+          type: integer
+          description: Number of VMs at this complexity score
+      required:
+        - score
+        - vmCount
+
+    ComplexityOSNameEntry:
+      type: object
+      description: One entry in the per-OS-name complexity breakdown.
+      properties:
+        osName:
+          type: string
+          description: >
+            The OS name exactly as it appears in vms.osInfo (e.g.
+            "Red Hat Enterprise Linux 9 (64-bit)").
+        score:
+          type: integer
+          description: >
+            Complexity score assigned by ClassifyOS. 0 = unknown, 1 = least
+            complex, 4 = most complex.
+        vmCount:
+          type: integer
+          description: Number of VMs running this OS.
+      required:
+        - osName
+        - score
+        - vmCount
+
+    MigrationEstimationResponse:
+      type: object
+      description: >
+        Migration estimation result, including per-schema results and the parameters used.
+      required:
+        - estimation
+        - estimationContext
+      properties:
+        estimation:
+          type: object
+          description: Estimation results keyed by schema name (e.g. "network-based", "storage-offload").
+          additionalProperties:
+            $ref: "#/components/schemas/SchemaEstimationResult"
+        estimationContext:
+          $ref: "#/components/schemas/EstimationContext"
+          description: Parameters used to compute the estimates.
+
+    SchemaEstimationResult:
+      type: object
+      description: Estimation results for a single schema
+      properties:
+        minTotalDuration:
+          type: string
+          description: Minimum total estimated duration across all calculators
+          example: "1h20m0s"
+        maxTotalDuration:
+          type: string
+          description: Maximum total estimated duration across all calculators
+          example: "5h20m0s"
+        breakdown:
+          type: object
+          description: Per-calculator results
+          additionalProperties:
+            $ref: "#/components/schemas/EstimationDetail"
+      required:
+        - minTotalDuration
+        - maxTotalDuration
+        - breakdown
+
+    EstimationDetail:
+      type: object
+      description: Detailed estimation result from a single calculator
+      properties:
+        duration:
+          type: string
+          description: Estimated duration for this component (point calculators only)
+          example: "3h40m0s"
+        minDuration:
+          type: string
+          description: Minimum estimated duration (ranged calculators only)
+          example: "8m20s"
+        maxDuration:
+          type: string
+          description: Maximum estimated duration (ranged calculators only)
+          example: "33m20s"
+        reason:
+          type: string
+          description: Explanation of how the estimation was calculated
+      required:
+        - reason
+
+    EstimationContext:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        params:
+          type: object
+          additionalProperties:
+            type: number
+
+    OsDiskEstimationEntry:
+      type: object
+      required:
+        - score
+        - vmCount
+        - totalDiskSizeTB
+      properties:
+        score:
+          type: integer
+          description: "Combined OS+Disk complexity score (0-4)."
+        vmCount:
+          type: integer
+          description: "Number of VMs at this complexity level."
+        totalDiskSizeTB:
+          type: number
+          description: "Total provisioned disk across VMs in this bucket (decimal TB). 0.0 when ComplexityDistribution is absent from the inventory."
+        estimation:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SchemaEstimationResult'
+          description: "Full estimation breakdown keyed by schema name. Absent for empty buckets (vmCount == 0)."
+
+    MigrationEstimationByComplexityResponse:
+      type: object
+      required:
+        - complexityByOsDisk
+        - complexityMatrix
+      properties:
+        complexityByOsDisk:
+          type: array
+          items:
+            $ref: '#/components/schemas/OsDiskEstimationEntry'
+          description: "Combined OS+Disk complexity distribution with per-bucket estimation. All 5 score levels (0-4) always present."
+        complexityMatrix:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+          description: "Decision matrix: outer keys are OS scores (0-4), inner keys are disk scores (1-4), values are combined scores."
+        estimationContext:
+          $ref: '#/components/schemas/EstimationContext'
+          description: "Parameters used to compute the estimates."
 
     InventoryResponse:
       type: object

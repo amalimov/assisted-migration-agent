@@ -46,12 +46,17 @@ type VM struct {
 	MemoryMB       int32
 
 	GuestName string
-	GuestID   string
-	HostName  string
-	IPAddress string
+	// EffectiveOS prefers the VMware Tools OS name over the configured OS name.
+	// It is populated by the estimation VM projection to match Planner inventory.
+	EffectiveOS string
+	GuestID     string
+	HostName    string
+	IPAddress   string
 
-	DiskSize    int64 // total disk size in MB (for list view)
+	DiskSize    int64 // total disk size in MiB
 	StorageUsed int64
+	// OsDiskComplexity is the Planner-computed combined OS/disk score (0-4).
+	OsDiskComplexity int
 
 	IsTemplate            bool
 	IsMigratable          bool

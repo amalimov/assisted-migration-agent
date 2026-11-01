@@ -77,6 +77,12 @@ const (
 	InspectorStatusStateRunning InspectorStatusState = "running"
 )
 
+// Defines values for MigrationTimeSelectionRequestEstimationSchema.
+const (
+	NetworkBased   MigrationTimeSelectionRequestEstimationSchema = "network-based"
+	StorageOffload MigrationTimeSelectionRequestEstimationSchema = "storage-offload"
+)
+
 // Defines values for VirtualMachineIssueCategory.
 const (
 	VirtualMachineIssueCategoryAdvisory    VirtualMachineIssueCategory = "Advisory"
@@ -299,6 +305,39 @@ type ComparisonDiffPage struct {
 	VmIds []string `json:"vmIds"`
 }
 
+// ComplexityDiskScoreEntry One entry in the disk complexity breakdown
+type ComplexityDiskScoreEntry struct {
+	// Score Complexity score from 1 to 4, where 1 is the least complex disk footprint and 4 is the most complex. Score 1: <=10 TB provisioned; score 2: <=20 TB; score 3: <=50 TB; score 4: >50 TB.
+	Score int `json:"score"`
+
+	// TotalSizeTB Total provisioned storage in TB for VMs at this score
+	TotalSizeTB float64 `json:"totalSizeTB"`
+
+	// VmCount Number of VMs at this complexity score
+	VmCount int `json:"vmCount"`
+}
+
+// ComplexityOSNameEntry One entry in the per-OS-name complexity breakdown.
+type ComplexityOSNameEntry struct {
+	// OsName The OS name exactly as it appears in vms.osInfo (e.g. "Red Hat Enterprise Linux 9 (64-bit)").
+	OsName string `json:"osName"`
+
+	// Score Complexity score assigned by ClassifyOS. 0 = unknown, 1 = least complex, 4 = most complex.
+	Score int `json:"score"`
+
+	// VmCount Number of VMs running this OS.
+	VmCount int `json:"vmCount"`
+}
+
+// ComplexityOSScoreEntry One entry in the OS complexity breakdown
+type ComplexityOSScoreEntry struct {
+	// Score Complexity score from 0 to 4, where 1 indicates the least complex OS to migrate and 0 indicates an OS with unknown complexity.
+	Score int `json:"score"`
+
+	// VmCount Number of VMs at this complexity score
+	VmCount int `json:"vmCount"`
+}
+
 // CreateGroupRequest defines model for CreateGroupRequest.
 type CreateGroupRequest struct {
 	Description *string `binding:"omitempty,max=500" json:"description,omitempty"`
@@ -360,6 +399,27 @@ type EstimateRange struct {
 
 	// WorstCase Duration string (e.g. "3h45m")
 	WorstCase string `json:"worstCase"`
+}
+
+// EstimationContext defines model for EstimationContext.
+type EstimationContext struct {
+	Params  *map[string]float32 `json:"params,omitempty"`
+	Schemas *[]string           `json:"schemas,omitempty"`
+}
+
+// EstimationDetail Detailed estimation result from a single calculator
+type EstimationDetail struct {
+	// Duration Estimated duration for this component (point calculators only)
+	Duration *string `json:"duration,omitempty"`
+
+	// MaxDuration Maximum estimated duration (ranged calculators only)
+	MaxDuration *string `json:"maxDuration,omitempty"`
+
+	// MinDuration Minimum estimated duration (ranged calculators only)
+	MinDuration *string `json:"minDuration,omitempty"`
+
+	// Reason Explanation of how the estimation was calculated
+	Reason string `json:"reason"`
 }
 
 // ForecastPairStatus defines model for ForecastPairStatus.
@@ -489,6 +549,59 @@ type Inventory struct {
 	Inventory externalRef0.UpdateInventory `json:"inventory"`
 }
 
+// MigrationComplexityResponse Migration complexity estimation results
+type MigrationComplexityResponse struct {
+	// ComplexityByDisk Disk-size complexity scores, one entry per score level (1-4). Score 1 is the least complex disk footprint; score 4 is the most complex. Scores correspond to provisioned disk size: 1 (<=10 TB), 2 (<=20 TB), 3 (<=50 TB), 4 (>50 TB). All four score levels are always present.
+	ComplexityByDisk []ComplexityDiskScoreEntry `json:"complexityByDisk"`
+
+	// ComplexityByOS OS complexity scores, one entry per score level (0-4). Score 1 indicates the least complex OS to migrate; score 0 indicates an OS with unknown complexity. All five score levels are always present.
+	ComplexityByOS []ComplexityOSScoreEntry `json:"complexityByOS"`
+
+	// ComplexityByOSName Per-OS-name complexity breakdown. One entry per distinct OS name found in the selected VMs. Each entry carries the OS name string, its numeric complexity score (0–4), and the number of VMs running it.
+	ComplexityByOSName []ComplexityOSNameEntry `json:"complexityByOSName"`
+
+	// DiskSizeRatings Static lookup table mapping each disk-size tier label to its numeric complexity score. The content is identical for every selection and reflects the DiskSizeScores configuration in the complexity package.
+	DiskSizeRatings map[string]int `json:"diskSizeRatings"`
+
+	// OsRatings Per-OS-name score for every OS found in the selected VMs. Keys are the OS name strings exactly as they appear in vms.osInfo; values are the numeric complexity score assigned by ClassifyOS (0 = unknown, 1-4 = increasing complexity). The map contains one entry per distinct selected OS name, regardless of how many VMs run it.
+	OsRatings map[string]int `json:"osRatings"`
+}
+
+// MigrationComplexitySelectionRequest defines model for MigrationComplexitySelectionRequest.
+type MigrationComplexitySelectionRequest struct {
+	Selection VMEstimationSelection `json:"selection"`
+}
+
+// MigrationEstimationByComplexityResponse defines model for MigrationEstimationByComplexityResponse.
+type MigrationEstimationByComplexityResponse struct {
+	// ComplexityByOsDisk Combined OS+Disk complexity distribution with per-bucket estimation. All 5 score levels (0-4) always present.
+	ComplexityByOsDisk []OsDiskEstimationEntry `json:"complexityByOsDisk"`
+
+	// ComplexityMatrix Decision matrix: outer keys are OS scores (0-4), inner keys are disk scores (1-4), values are combined scores.
+	ComplexityMatrix  map[string]map[string]int `json:"complexityMatrix"`
+	EstimationContext *EstimationContext        `json:"estimationContext,omitempty"`
+}
+
+// MigrationEstimationResponse Migration estimation result, including per-schema results and the parameters used.
+type MigrationEstimationResponse struct {
+	// Estimation Estimation results keyed by schema name (e.g. "network-based", "storage-offload").
+	Estimation        map[string]SchemaEstimationResult `json:"estimation"`
+	EstimationContext EstimationContext                 `json:"estimationContext"`
+}
+
+// MigrationTimeSelectionRequest defines model for MigrationTimeSelectionRequest.
+type MigrationTimeSelectionRequest struct {
+	// EstimationSchema Planner schemas to run; omitted or empty runs both.
+	EstimationSchema *[]MigrationTimeSelectionRequestEstimationSchema `json:"estimationSchema,omitempty"`
+
+	// Params Planner calculator parameter overrides.
+	Params    *map[string]interface{} `json:"params,omitempty"`
+	Selection VMEstimationSelection   `json:"selection"`
+}
+
+// MigrationTimeSelectionRequestEstimationSchema defines model for MigrationTimeSelectionRequest.EstimationSchema.
+type MigrationTimeSelectionRequestEstimationSchema string
+
 // OperationCapability defines model for OperationCapability.
 type OperationCapability struct {
 	// Enabled Whether stored credentials have sufficient privileges
@@ -496,6 +609,21 @@ type OperationCapability struct {
 
 	// MissingPrivileges Specific vSphere privileges that are missing
 	MissingPrivileges *[]string `json:"missingPrivileges,omitempty"`
+}
+
+// OsDiskEstimationEntry defines model for OsDiskEstimationEntry.
+type OsDiskEstimationEntry struct {
+	// Estimation Full estimation breakdown keyed by schema name. Absent for empty buckets (vmCount == 0).
+	Estimation *map[string]SchemaEstimationResult `json:"estimation,omitempty"`
+
+	// Score Combined OS+Disk complexity score (0-4).
+	Score int `json:"score"`
+
+	// TotalDiskSizeTB Total provisioned disk across VMs in this bucket (decimal TB). 0.0 when ComplexityDistribution is absent from the inventory.
+	TotalDiskSizeTB float32 `json:"totalDiskSizeTB"`
+
+	// VmCount Number of VMs at this complexity level.
+	VmCount int `json:"vmCount"`
 }
 
 // PairCapability defines model for PairCapability.
@@ -544,6 +672,18 @@ type RightsizingClusterUtilization struct {
 	VmCount                  int     `json:"vm_count"`
 }
 
+// SchemaEstimationResult Estimation results for a single schema
+type SchemaEstimationResult struct {
+	// Breakdown Per-calculator results
+	Breakdown map[string]EstimationDetail `json:"breakdown"`
+
+	// MaxTotalDuration Maximum total estimated duration across all calculators
+	MaxTotalDuration string `json:"maxTotalDuration"`
+
+	// MinTotalDuration Minimum total estimated duration across all calculators
+	MinTotalDuration string `json:"minTotalDuration"`
+}
+
 // StartForecasterRequest defines model for StartForecasterRequest.
 type StartForecasterRequest struct {
 	Concurrency *int                   `json:"concurrency,omitempty"`
@@ -572,6 +712,22 @@ type UpdateLabelVMsRequest struct {
 
 	// Remove VMs to remove the label from
 	Remove *[]string `binding:"omitempty,dive,required" json:"remove,omitempty"`
+}
+
+// VMEstimationSelection defines model for VMEstimationSelection.
+type VMEstimationSelection struct {
+	Include VMEstimationSelectors `json:"include"`
+}
+
+// VMEstimationSelectors defines model for VMEstimationSelectors.
+type VMEstimationSelectors struct {
+	// All Select all VMs in the requested collection; cannot be combined with other selectors.
+	All *bool `json:"all,omitempty"`
+
+	// Clusters Existing VM.Cluster values in the requested collection.
+	Clusters *[]string             `json:"clusters,omitempty"`
+	Groups   *[]openapi_types.UUID `json:"groups,omitempty"`
+	Vms      *[]string             `json:"vms,omitempty"`
 }
 
 // VMFilterOptionsResponse defines model for VMFilterOptionsResponse.
@@ -1064,8 +1220,20 @@ type ListLatestVirtualMachinesParams struct {
 // SetAgentModeJSONRequestBody defines body for SetAgentMode for application/json ContentType.
 type SetAgentModeJSONRequestBody = AgentModeRequest
 
+// CalculateMigrationComplexityJSONRequestBody defines body for CalculateMigrationComplexity for application/json ContentType.
+type CalculateMigrationComplexityJSONRequestBody = MigrationComplexitySelectionRequest
+
+// CalculateMigrationEstimationJSONRequestBody defines body for CalculateMigrationEstimation for application/json ContentType.
+type CalculateMigrationEstimationJSONRequestBody = MigrationTimeSelectionRequest
+
+// CalculateMigrationEstimationByComplexityJSONRequestBody defines body for CalculateMigrationEstimationByComplexity for application/json ContentType.
+type CalculateMigrationEstimationByComplexityJSONRequestBody = MigrationTimeSelectionRequest
+
 // StartRvtoolsCollectorMultipartRequestBody defines body for StartRvtoolsCollector for multipart/form-data ContentType.
 type StartRvtoolsCollectorMultipartRequestBody StartRvtoolsCollectorMultipartBody
+
+// CalculateLatestMigrationComplexityJSONRequestBody defines body for CalculateLatestMigrationComplexity for application/json ContentType.
+type CalculateLatestMigrationComplexityJSONRequestBody = MigrationComplexitySelectionRequest
 
 // PutCredentialsJSONRequestBody defines body for PutCredentials for application/json ContentType.
 type PutCredentialsJSONRequestBody = VcenterCredentials
@@ -1087,6 +1255,12 @@ type StartInspectionJSONRequestBody = StartInspectionRequest
 
 // PutInspectorVddkMultipartRequestBody defines body for PutInspectorVddk for multipart/form-data ContentType.
 type PutInspectorVddkMultipartRequestBody PutInspectorVddkMultipartBody
+
+// CalculateLatestMigrationEstimationJSONRequestBody defines body for CalculateLatestMigrationEstimation for application/json ContentType.
+type CalculateLatestMigrationEstimationJSONRequestBody = MigrationTimeSelectionRequest
+
+// CalculateLatestMigrationEstimationByComplexityJSONRequestBody defines body for CalculateLatestMigrationEstimationByComplexity for application/json ContentType.
+type CalculateLatestMigrationEstimationByComplexityJSONRequestBody = MigrationTimeSelectionRequest
 
 // BatchUpdateLatestVMExclusionJSONRequestBody defines body for BatchUpdateLatestVMExclusion for application/json ContentType.
 type BatchUpdateLatestVMExclusionJSONRequestBody = BatchUpdateExclusionRequest

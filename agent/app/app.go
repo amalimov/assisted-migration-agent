@@ -26,7 +26,9 @@ import (
 	"github.com/kubev2v/assisted-migration-agent/internal/handlers"
 	"github.com/kubev2v/assisted-migration-agent/internal/server"
 	service "github.com/kubev2v/assisted-migration-agent/internal/services"
+	"github.com/kubev2v/assisted-migration-agent/internal/services/estimations"
 	"github.com/kubev2v/assisted-migration-agent/internal/store"
+	"github.com/kubev2v/assisted-migration-agent/internal/vmselection"
 	"github.com/kubev2v/assisted-migration-agent/pkg/console"
 	"github.com/kubev2v/assisted-migration-agent/pkg/crypto"
 )
@@ -107,12 +109,16 @@ func initV2(cfg *config.Configuration) (*server.Server, func(), error) {
 		handlers.RegisterValidators(v)
 	}
 
+	estimationDeps := v2Handlers.EstimationDependencies{
+		Resolver: vmselection.NewResolver(pool),
+		Service:  estimations.NewService(),
+	}
 	var v2H v2.ServerInterface
 	if cfg.Agent.RVToolsMode {
 		zap.S().Info("rvtools mode enabled: credentials, inspector, and vCenter collector endpoints are disabled")
-		v2H = v2Handlers.NewRVToolsHandler(*cfg, v2SvcMgr)
+		v2H = v2Handlers.NewRVToolsHandler(*cfg, v2SvcMgr, estimationDeps)
 	} else {
-		v2H = v2Handlers.NewHandler(*cfg, v2SvcMgr)
+		v2H = v2Handlers.NewHandler(*cfg, v2SvcMgr, estimationDeps)
 	}
 
 	swagger, err := v2.GetSwagger()

@@ -21,8 +21,8 @@ type RVToolsHandler struct {
 	*Handler
 }
 
-func NewRVToolsHandler(cfg config.Configuration, svc ServiceProvider) *RVToolsHandler {
-	return &RVToolsHandler{Handler: NewHandler(cfg, svc)}
+func NewRVToolsHandler(cfg config.Configuration, svc ServiceProvider, estimation ...EstimationDependencies) *RVToolsHandler {
+	return &RVToolsHandler{Handler: NewHandler(cfg, svc, estimation...)}
 }
 
 func rvtoolsNotAvailable(c *gin.Context) {

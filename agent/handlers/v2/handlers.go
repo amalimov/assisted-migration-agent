@@ -4,8 +4,11 @@ import (
 	"context"
 
 	"github.com/kubev2v/assisted-migration-agent/internal/config"
+	estimationhttp "github.com/kubev2v/assisted-migration-agent/internal/handlers/estimation"
 	"github.com/kubev2v/assisted-migration-agent/internal/models"
 	svc "github.com/kubev2v/assisted-migration-agent/internal/services"
+	"github.com/kubev2v/assisted-migration-agent/internal/services/estimations"
+	"github.com/kubev2v/assisted-migration-agent/internal/vmselection"
 )
 
 type ServiceProvider interface {
@@ -40,10 +43,20 @@ type ServiceProvider interface {
 }
 
 type Handler struct {
-	cfg config.Configuration
-	svc ServiceProvider
+	cfg        config.Configuration
+	svc        ServiceProvider
+	estimation *estimationhttp.Handler
 }
 
-func NewHandler(cfg config.Configuration, svc ServiceProvider) *Handler {
-	return &Handler{cfg: cfg, svc: svc}
+type EstimationDependencies struct {
+	Resolver *vmselection.Resolver
+	Service  *estimations.Service
+}
+
+func NewHandler(cfg config.Configuration, svc ServiceProvider, estimation ...EstimationDependencies) *Handler {
+	h := &Handler{cfg: cfg, svc: svc}
+	if len(estimation) > 0 {
+		h.estimation = estimationhttp.New(estimation[0].Resolver, estimation[0].Service)
+	}
+	return h
 }
